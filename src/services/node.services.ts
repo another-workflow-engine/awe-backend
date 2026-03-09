@@ -1,6 +1,18 @@
 import type { Transaction } from "kysely";
-import type { ActorModel, WorkflowVersionModel } from "../types/models.js";
-import type { Node } from "../types/workflow.js";
+import type {
+  ActorModel,
+  NodeModel,
+  WorkflowVersionModel,
+} from "../types/models.js";
+import type {
+  Node,
+  StartNodeConfiguration,
+  UserNodeConfiguration,
+  ServiceNodeConfiguration,
+  ScriptNodeConfiguration,
+  EndNodeConfiguration,
+  DecisionNodeConfiguration,
+} from "../types/workflow.js";
 import type { DB } from "../types/database.js";
 import { nodeRepository } from "../repositories/node.repository.js";
 import { NodeTypes } from "../types/enums.js";
@@ -37,5 +49,69 @@ export const nodeService = {
     });
 
     return await nodeRepository.insertMany(nodes, transaction);
+  },
+
+  toNodeSchema: (node: NodeModel): Node => {
+    const base = {
+      id: node.client_id,
+      label: node.name,
+      description: node.description,
+      position:
+        node.x_coordinate && node.y_coordinate
+          ? { x: node.x_coordinate, y: node.y_coordinate }
+          : null,
+      type: node.type,
+      configuration: node.configuration,
+    };
+
+    switch (node.type) {
+      case NodeTypes.START:
+        return {
+          ...base,
+          type: NodeTypes.START,
+          configuration: node.configuration as StartNodeConfiguration,
+        };
+
+      case NodeTypes.USER:
+        return {
+          ...base,
+          type: NodeTypes.USER,
+          configuration: node.configuration as UserNodeConfiguration,
+        };
+
+      case NodeTypes.SERVICE:
+        return {
+          ...base,
+          type: NodeTypes.SERVICE,
+          configuration: node.configuration as ServiceNodeConfiguration,
+        };
+
+      case NodeTypes.SCRIPT:
+        return {
+          ...base,
+          type: NodeTypes.SCRIPT,
+          configuration: node.configuration as ScriptNodeConfiguration,
+        };
+
+      case NodeTypes.DECISION:
+        return {
+          ...base,
+          type: NodeTypes.DECISION,
+          configuration: node.configuration as DecisionNodeConfiguration,
+        };
+
+      case NodeTypes.END:
+        return {
+          ...base,
+          type: NodeTypes.END,
+          configuration: node.configuration as EndNodeConfiguration,
+        };
+    }
+  },
+
+  getByWorkflowVersion: async (
+    workflowVersion: WorkflowVersionModel,
+  ): Promise<NodeModel[]> => {
+    return await nodeRepository.findByWorkflowVersionId(workflowVersion.id);
   },
 };

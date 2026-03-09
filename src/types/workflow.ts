@@ -146,17 +146,17 @@ export type Node = (
   | { type: "end"; configuration: EndNodeConfiguration }
 ) & {
   id: string;
-  label?: string;
-  description?: string;
-  position?: { x: number; y: number };
+  label?: string | null;
+  description?: string | null;
+  position?: { x: number; y: number } | null;
 };
 
 export type Edge = {
   id: string;
-  label?: string;
+  label?: string | null;
   sourceNodeId: string;
-  targetNodeId: string;
-  ruleId?: string | "default";
+  targetNodeId?: string | null;
+  ruleId?: string | "default" | null;
 };
 
 export type StartNode = Extract<Node, { type: "start" }>;

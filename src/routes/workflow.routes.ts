@@ -41,13 +41,9 @@ workflowRouter.post(
 );
 
 workflowRouter.get(
-  "/:workflowId/versions",
-  workflowVersionController.listVersions,
-);
-
-workflowRouter.get(
-  "/:workflowId/versions/:versionNumber",
-  workflowVersionController.getVersion,
+  "/:workflowId/versions/:version",
+  authenticateRequest,
+  workflowVersionController.get,
 );
 
 workflowRouter.post(

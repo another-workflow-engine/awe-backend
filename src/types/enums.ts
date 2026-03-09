@@ -26,10 +26,10 @@ export const NodeTypes = {
 } as const satisfies Record<string, NodeType>;
 
 export const WorkflowVersionStatuses = {
-  ACTIVE: "active",
   DRAFT: "draft",
-  PUBLISHED: "published",
   VALID: "valid",
+  PUBLISHED: "published",
+  ACTIVE: "active",
 } as const satisfies Record<string, WorkflowVersionStatus>;
 
 export enum FeelDataType {

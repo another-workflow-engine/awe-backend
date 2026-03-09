@@ -399,7 +399,7 @@ export interface Edge {
   modified_by: string;
   modified_on: Generated<Timestamp>;
   name: string | null;
-  source_node_id: string | null;
+  source_node_id: string;
 }
 
 export interface Environment {
@@ -493,7 +493,7 @@ export interface InstanceTransitionLog {
 
 export interface Node {
   client_id: string;
-  configuration: Json | null;
+  configuration: Json;
   created_by: string;
   created_on: Generated<Timestamp>;
   deleted_by: string | null;

@@ -15,7 +15,31 @@ export const workflowVersionRepository = {
         .where("is_deleted", "=", false)
         .execute();
     } catch (err) {
-      throw new RepositoryError(`Workflow search for id=${id} failed`, err);
+      throw new RepositoryError(
+        `Workflow versions search for workflowId=${id} failed`,
+        err,
+      );
+    }
+  },
+
+  findByWorkflowIdAndVersion: async (
+    workflowId: string,
+    version: number,
+    transaction?: Transaction<DB>,
+  ) => {
+    try {
+      return await (transaction ?? db)
+        .selectFrom("workflow_version")
+        .selectAll()
+        .where("workflow_id", "=", workflowId)
+        .where("version", "=", version)
+        .where("is_deleted", "=", false)
+        .executeTakeFirstOrThrow();
+    } catch (err) {
+      throw new RepositoryError(
+        `Workflow version search for workflowId=${workflowId} and version=${version} failed`,
+        err,
+      );
     }
   },
 

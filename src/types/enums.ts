@@ -43,3 +43,8 @@ export enum FeelDataType {
   OBJECT = "object",
   NULL = "null",
 }
+
+export enum ContextVariableScopeType {
+  GLOBAL = "global",
+  NEXT = "next"
+}

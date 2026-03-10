@@ -1,29 +1,33 @@
 import type { Request, Response } from "express";
 import { workflowVersionService } from "../services/workflowVersion.service.js";
 import {
-  WorkflowVersionDetailRequest,
-  WorkflowVersionUpdateStatusRequest,
-  WorkflowVersionValidateRequest,
+  WorkflowVersionCreateRequestSchema,
+  WorkflowVersionDetailRequestSchema,
+  WorkflowVersionUpdateStatusRequestSchema,
+  WorkflowVersionValidateRequestSchema,
 } from "../schemas/workflowVersion.schema.js";
 
 export const workflowVersionController = {
   create: async (req: Request, res: Response) => {
-    const workflowVersion = await workflowVersionService.createNew(
-      { ...req.body, workflowId: req.params.workflowId },
-      req.actor,
-    );
+
+    const data = WorkflowVersionCreateRequestSchema.parse({
+      ...req.body,
+      workflowId: req.params.workflowId, 
+      actor: req.actor
+    })
+    const workflowVersion = await workflowVersionService.createNew(data);
 
     return res.status(201).json({
       id: workflowVersion.id,
       workflowId: workflowVersion.workflow_id,
-      versionNumber: workflowVersion.version,
+      version: workflowVersion.version,
       status: workflowVersion.status,
       createdAt: workflowVersion.created_on,
     });
   },
 
   validate: async (req: Request, res: Response) => {
-    const data = WorkflowVersionValidateRequest.parse({
+    const data = WorkflowVersionValidateRequestSchema.parse({
       ...req.params,
       actor: req.actor,
     });
@@ -35,13 +39,13 @@ export const workflowVersionController = {
       valid: result.valid,
       errors: result.errors,
       versionId: workflowVersion.id,
-      versionNumber: workflowVersion.version,
+      version: workflowVersion.version,
       status: workflowVersion.status,
     });
   },
 
   get: async (req: Request, res: Response) => {
-    const data = WorkflowVersionDetailRequest.parse({
+    const data = WorkflowVersionDetailRequestSchema.parse({
       ...req.params,
       actor: req.actor,
     });
@@ -52,7 +56,7 @@ export const workflowVersionController = {
     return res.status(200).json({
       id: workflowVersion.id,
       workflowId: workflowVersion.workflow_id,
-      versionNumber: workflowVersion.version,
+      version: workflowVersion.version,
       status: workflowVersion.status,
       publishedAt: "2025-01-15T10:30:00.000Z",
       createdAt: workflowVersion.created_on,
@@ -63,7 +67,7 @@ export const workflowVersionController = {
   },
 
   updateStatus: async (req: Request, res: Response) => {
-    const data = WorkflowVersionUpdateStatusRequest.parse({
+    const data = WorkflowVersionUpdateStatusRequestSchema.parse({
       ...req.params,
       ...req.body,
       actor: req.actor,
@@ -74,7 +78,7 @@ export const workflowVersionController = {
     res.status(200).json({
       version: {
         id: workflowVersion.id,
-        versionNumber: workflowVersion.version,
+        version: workflowVersion.version,
         status: workflowVersion.status,
         publishedAt: workflowVersion.published_on,
       },

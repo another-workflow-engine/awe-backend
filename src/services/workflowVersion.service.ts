@@ -12,7 +12,7 @@ import {
 } from "../schemas/workflowVersion.schema.js";
 import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
-import { validateWorkflow } from "../utils.js";
+import { workflowValidatorService } from "./workflowValidator.service.js";
 
 type DetailInput = z.infer<typeof WorkflowVersionDetailRequest>;
 type StatusPartialUpdateInput = z.infer<
@@ -44,6 +44,14 @@ export const workflowVersionService = {
     );
 
     return { workflowVersion, nodes, edges };
+  },
+
+  update: async (sub: DetailInput, data: CreateVersionInput) => {
+    const workflowVersion =
+      await workflowVersionRepository.findByWorkflowIdAndVersion(
+        sub.workflowId,
+        sub.version,
+      );
   },
 
   createNew: async (
@@ -88,7 +96,7 @@ export const workflowVersionService = {
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
     const edges = await edgeService.getByNodes(nodes);
 
-    const result = validateWorkflow(nodes, edges);
+    const result = workflowValidatorService.validate(nodes, edges);
 
     if (result.valid) {
       workflowVersion = await workflowVersionRepository.updateById(

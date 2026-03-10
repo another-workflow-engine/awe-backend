@@ -1,11 +1,12 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../errors/AppError.js";
+import { ZodError } from "zod";
 
 export const errorHandler = (
   err: Error,
   req: Request,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   console.error(err);
 
@@ -16,6 +17,14 @@ export const errorHandler = (
     });
   }
 
+  if (err instanceof ZodError) {
+    return res.status(400).json({
+      success: false,
+      error: "Validation failed",
+      details: err.issues,
+    });
+  }
+  
   return res.status(500).json({
     success: false,
     error: "Internal server error",

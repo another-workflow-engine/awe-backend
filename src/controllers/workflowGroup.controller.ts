@@ -1,31 +1,17 @@
 import type { Request, Response } from "express";
-import { z } from "zod";
 import { workflowService } from "../services/workflow.service.js";
-
-const CreateGroupInput = z.object({
-  name: z.string().max(255),
-  description: z
-    .string()
-    .optional()
-    .transform((val) => val ?? null),
-});
-
-const UpdateGroupInput = z.object({
-  workflowId: z.uuidv4(),
-  name: z.string().max(255).optional(),
-  description: z.string().optional().nullable(),
-});
-
-const workflowIdInput = z.object({
-  workflowId: z.uuidv4(),
-});
+import {
+  WorkflowGroupCreateSchema,
+  WorkflowGroupUpdateSchema,
+  WorkflowIdSchema,
+} from "../schemas/workflow.schema.js";
 
 export const workflowGroupController = {
   create: async (req: Request, res: Response) => {
-    const { name, description } = CreateGroupInput.parse(req.body);
+    const { name, description } = WorkflowGroupCreateSchema.parse(req.body);
     const workflow = await workflowService.create(
       { name, description },
-      req.actor,
+      req.actor
     );
 
     return res.status(201).json({
@@ -58,7 +44,7 @@ export const workflowGroupController = {
           createdAt: workflow.created_on,
           updatedAt: workflow.modified_on,
         };
-      },
+      }
     );
 
     res.status(200).json({
@@ -73,7 +59,7 @@ export const workflowGroupController = {
   },
 
   update: async (req: Request, res: Response) => {
-    const data = UpdateGroupInput.parse({ ...req.params, ...req.body });
+    const data = WorkflowGroupUpdateSchema.parse({ ...req.params, ...req.body });
     const workflow = await workflowService.update(data, req.actor);
 
     res.status(200).json({
@@ -85,10 +71,10 @@ export const workflowGroupController = {
   },
 
   get: async (req: Request, res: Response) => {
-    const { workflowId } = workflowIdInput.parse({ ...req.params });
+    const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
     const { workflow, versions } = await workflowService.get(
       workflowId,
-      req.actor,
+      req.actor
     );
     return res.status(200).json({
       id: workflow.id,
@@ -111,7 +97,7 @@ export const workflowGroupController = {
   },
 
   delete: async (req: Request, res: Response) => {
-    const { workflowId } = workflowIdInput.parse({ ...req.params });
+    const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
     await workflowService.delete(workflowId, req.actor);
     res.status(200).json({});
   },

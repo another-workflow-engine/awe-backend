@@ -97,7 +97,7 @@ export const workflowGroupController = {
   },
 
   delete: async (req: Request, res: Response) => {
-    const { workflowId } = workflowIdInput.parse({ ...req.params });
+    const { workflowId } = WorkflowIdInputSchema.parse({ ...req.params });
     await workflowService.delete(workflowId, req.actor);
     res.status(200).json({});
   },

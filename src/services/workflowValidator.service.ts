@@ -66,7 +66,7 @@ export const workflowValidatorService = {
     if (errors.length === 0) {
       errors.push(
         ...workflowValidatorService.validateDecisionEdges(nodes, edges),
-        ...workflowValidatorService.validateGraph(nodes, edges)
+        ...workflowValidatorService.validateGraph(nodes, edges),
       );
     }
 
@@ -227,7 +227,7 @@ export const workflowValidatorService = {
   validateServiceNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<ServiceNodeConfiguration>(
-      node.configuration
+      node.configuration,
     );
 
     if (!config.urlExpression.trim()) {
@@ -248,7 +248,7 @@ export const workflowValidatorService = {
   validateScriptNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<ScriptNodeConfiguration>(
-      node.configuration
+      node.configuration,
     );
 
     if (!config.sourceCode.trim()) {
@@ -277,7 +277,7 @@ export const workflowValidatorService = {
   validateDecisionNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<DecisionNodeConfiguration>(
-      node.configuration
+      node.configuration,
     );
 
     if (config.rules.length === 0) {
@@ -313,7 +313,7 @@ export const workflowValidatorService = {
    */
   validateAllEdges: (
     nodes: NodeModel[],
-    edges: EdgeModel[]
+    edges: EdgeModel[],
   ): ValidationError[] => {
     const errors: ValidationError[] = [];
 
@@ -333,7 +333,7 @@ export const workflowValidatorService = {
 
       if (!targetNode) {
         throw new DataIntegrityError(
-          `Target node id=${edge.destination_node_id} does not exist`
+          `Target node id=${edge.destination_node_id} does not exist`,
         );
       }
 
@@ -357,7 +357,7 @@ export const workflowValidatorService = {
       const sourceNode = nodeMap.get(edge.source_node_id);
       if (!sourceNode) {
         throw new DataIntegrityError(
-          `Source node id=${edge.source_node_id} does not exist`
+          `Source node id=${edge.source_node_id} does not exist`,
         );
       }
 
@@ -386,7 +386,7 @@ export const workflowValidatorService = {
    */
   validateDecisionEdges: (
     nodes: NodeModel[],
-    edges: EdgeModel[]
+    edges: EdgeModel[],
   ): ValidationError[] => {
     const errors: ValidationError[] = [];
 
@@ -402,12 +402,12 @@ export const workflowValidatorService = {
       if (node.type !== NodeTypes.DECISION) continue;
 
       const config = getConfiguration<DecisionNodeConfiguration>(
-        node.configuration
+        node.configuration,
       );
       const nodeOutgoingEdges = outgoingEdges.get(node.id) ?? [];
 
       const defaultEdgeCount = nodeOutgoingEdges.filter(
-        (e) => e.condition_expression === null
+        (e) => e.condition_expression === null,
       ).length;
 
       if (defaultEdgeCount !== 1) {
@@ -422,7 +422,7 @@ export const workflowValidatorService = {
       }
 
       const conditionalEdgeCount = nodeOutgoingEdges.filter(
-        (e) => e.condition_expression !== null
+        (e) => e.condition_expression !== null,
       ).length;
 
       if (conditionalEdgeCount !== config.rules.length) {
@@ -446,7 +446,7 @@ export const workflowValidatorService = {
 
   validateGraph: (
     nodes: NodeModel[],
-    edges: EdgeModel[]
+    edges: EdgeModel[],
   ): ValidationError[] => {
     const errors: ValidationError[] = [];
 

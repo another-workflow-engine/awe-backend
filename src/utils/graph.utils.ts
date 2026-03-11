@@ -24,7 +24,7 @@ export const graphUtils = {
 
       incoming.set(
         edge.destination_node_id,
-        (incoming.get(edge.destination_node_id) ?? 0) + 1
+        (incoming.get(edge.destination_node_id) ?? 0) + 1,
       );
     }
 

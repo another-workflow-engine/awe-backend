@@ -19,7 +19,7 @@ export const workflowRepository = {
 
   insert: async (
     data: NewWorkflow,
-    transaction?: Transaction<DB>
+    transaction?: Transaction<DB>,
   ): Promise<WorkflowModel> => {
     try {
       return await (transaction ?? db)
@@ -35,7 +35,7 @@ export const workflowRepository = {
   updateById: async (
     id: string,
     data: UpdateWorkflow,
-    transaction?: Transaction<DB>
+    transaction?: Transaction<DB>,
   ) => {
     try {
       return await (transaction ?? db)
@@ -52,7 +52,7 @@ export const workflowRepository = {
 
   findByEnvironmentIdWithLatestVersion: async (
     environemntId: string,
-    transaction?: Transaction<DB>
+    transaction?: Transaction<DB>,
   ): Promise<
     {
       workflow: WorkflowModel;
@@ -74,20 +74,20 @@ export const workflowRepository = {
       .leftJoin("workflow_version", (join) =>
         join
           .onRef("workflow_version.workflow_id", "=", "workflow.id")
-          .on("workflow_version.is_deleted", "=", false)
+          .on("workflow_version.is_deleted", "=", false),
       )
       .leftJoin(latestVersions, (join) =>
         join
           .onRef(
             "latest_workflow_version.workflow_id",
             "=",
-            "workflow_version.workflow_id"
+            "workflow_version.workflow_id",
           )
           .onRef(
             "latest_workflow_version.max_version",
             "=",
-            "workflow_version.version"
-          )
+            "workflow_version.version",
+          ),
       )
       .select((eb) => [
         eb.ref("workflow.id").as("workflow_id"),

@@ -125,7 +125,9 @@ export const workflowRepository = {
         eb
           .ref("workflow_version.modified_by")
           .as("workflow_version_modified_by"),
-
+        eb
+          .ref("workflow_version.published_on")
+          .as("workflow_version_published_on"),
         eb.ref("workflow_version.is_deleted").as("workflow_version_is_deleted"),
         eb.ref("workflow_version.deleted_on").as("workflow_version_deleted_on"),
         eb.ref("workflow_version.deleted_by").as("workflow_version_deleted_by"),
@@ -163,6 +165,7 @@ export const workflowRepository = {
               is_deleted: row.workflow_version_is_deleted!,
               deleted_on: row.workflow_version_deleted_on,
               deleted_by: row.workflow_version_deleted_by,
+              published_on: row.workflow_version_published_on,
             }
           : null,
       };

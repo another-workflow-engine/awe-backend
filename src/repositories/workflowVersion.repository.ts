@@ -33,6 +33,27 @@ export const workflowVersionRepository = {
     }
   },
 
+  findLatestByWorkflowId: async (
+  workflowId: string,
+  transaction?: Transaction<DB>,
+): Promise<WorkflowVersionModel | undefined> => {
+  try {
+    return await (transaction ?? db)
+      .selectFrom("workflow_version")
+      .selectAll()
+      .where("workflow_id", "=", workflowId)
+      .where("is_deleted", "=", false)
+      .orderBy("version", "desc")
+      .limit(1)
+      .executeTakeFirst();
+  } catch (err) {
+    throw new RepositoryError(
+      `Latest workflow version fetch failed for workflowId=${workflowId}`,
+      err,
+    );
+  }
+}, 
+
   findByWorkflowIdAndVersion: async (
     workflowId: string,
     version: number,

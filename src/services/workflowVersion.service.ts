@@ -152,4 +152,7 @@ export const workflowVersionService = {
       return workflowVersion;
     });
   },
+  getLatestVersion: async (workflowId: string) => {
+  return await workflowVersionRepository.findLatestByWorkflowId(workflowId);
+},
 };

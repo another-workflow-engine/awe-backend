@@ -47,7 +47,7 @@ export const workflowVersionController = {
   get: async (req: Request, res: Response) => {
     const data = WorkflowVersionDetailSchema.parse({
       ...req.params,
-      actor: req.actor,
+      actor: req.actor || { id: "system" }
     });
 
     const { workflowVersion, nodes, edges } =
@@ -82,6 +82,26 @@ export const workflowVersionController = {
         status: workflowVersion.status,
         publishedAt: workflowVersion.published_on,
       },
+    });
+  },
+  getLatest: async (req: Request, res: Response) => {
+    const workflowId = req.params.workflowId as string;
+
+    const latestVersion =
+      await workflowVersionService.getLatestVersion(workflowId);
+
+    if (!latestVersion) {
+      return res.status(404).json({
+        message: "No workflow version found",
+      });
+    }
+
+    return res.status(200).json({
+      id: latestVersion.id,
+      workflowId: latestVersion.workflow_id,
+      version: latestVersion.version,
+      status: latestVersion.status,
+      createdAt: latestVersion.created_on,
     });
   },
 };

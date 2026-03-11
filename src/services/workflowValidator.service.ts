@@ -130,7 +130,7 @@ export const workflowValidatorService = {
           nodeId: node.client_id,
         });
       }
-      if (!entry.contextVariable.name.trim()) {
+      if (!entry.contextVariableName.trim()) {
         errors.push({
           code: ValidationErrorCode.NODE_MISSING_REQUIRED_CONFIGURATION,
           message: `Start node input ${

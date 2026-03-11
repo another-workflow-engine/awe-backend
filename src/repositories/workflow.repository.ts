@@ -56,119 +56,37 @@ export const workflowRepository = {
   ): Promise<
     {
       workflow: WorkflowModel;
-      latestWorkflowVersion: WorkflowVersionModel | null;
+      latestWorkflowVersion: number | null;
     }[]
   > => {
-    const latestVersions = (transaction ?? db)
-      .selectFrom("workflow_version")
-      .select([
-        "workflow_id",
-        (transaction ?? db).fn.max("version").as("max_version"),
-      ])
-      .where("is_deleted", "=", false)
-      .groupBy("workflow_id")
-      .as("latest_workflow_version");
-
-    const results = await (transaction ?? db)
+    const dbConn = transaction ?? db;
+    const workflows = await dbConn
       .selectFrom("workflow")
-      .leftJoin("workflow_version", (join) =>
-        join
-          .onRef("workflow_version.workflow_id", "=", "workflow.id")
-          .on("workflow_version.is_deleted", "=", false),
-      )
-      .leftJoin(latestVersions, (join) =>
-        join
-          .onRef(
-            "latest_workflow_version.workflow_id",
-            "=",
-            "workflow_version.workflow_id",
-          )
-          .onRef(
-            "latest_workflow_version.max_version",
-            "=",
-            "workflow_version.version",
-          ),
-      )
-      .select((eb) => [
-        eb.ref("workflow.id").as("workflow_id"),
-        eb.ref("workflow.environment_id").as("workflow_environment_id"),
-        eb.ref("workflow.name").as("workflow_name"),
-        eb.ref("workflow.description").as("workflow_description"),
-
-        eb.ref("workflow.created_on").as("workflow_created_on"),
-        eb.ref("workflow.created_by").as("workflow_created_by"),
-
-        eb.ref("workflow.modified_on").as("workflow_modified_on"),
-        eb.ref("workflow.modified_by").as("workflow_modified_by"),
-
-        eb.ref("workflow.is_deleted").as("workflow_is_deleted"),
-        eb.ref("workflow.deleted_on").as("workflow_deleted_on"),
-        eb.ref("workflow.deleted_by").as("workflow_deleted_by"),
-
-        eb.ref("workflow_version.id").as("workflow_version_id"),
-        eb
-          .ref("workflow_version.workflow_id")
-          .as("workflow_version_workflow_id"),
-
-        eb.ref("workflow_version.version").as("workflow_version_version"),
-        eb
-          .ref("workflow_version.description")
-          .as("workflow_version_description"),
-        eb.ref("workflow_version.status").as("workflow_version_status"),
-
-        eb.ref("workflow_version.created_on").as("workflow_version_created_on"),
-        eb.ref("workflow_version.created_by").as("workflow_version_created_by"),
-
-        eb
-          .ref("workflow_version.modified_on")
-          .as("workflow_version_modified_on"),
-        eb
-          .ref("workflow_version.modified_by")
-          .as("workflow_version_modified_by"),
-        eb
-          .ref("workflow_version.published_on")
-          .as("workflow_version_published_on"),
-        eb.ref("workflow_version.is_deleted").as("workflow_version_is_deleted"),
-        eb.ref("workflow_version.deleted_on").as("workflow_version_deleted_on"),
-        eb.ref("workflow_version.deleted_by").as("workflow_version_deleted_by"),
-      ])
-      .where("workflow.environment_id", "=", environemntId)
-      .where("workflow.is_deleted", "=", false)
+      .selectAll()
+      .where("environment_id", "=", environemntId)
+      .where("is_deleted", "=", false)
       .execute();
 
-    return results.map((row) => {
-      return {
-        workflow: {
-          id: row.workflow_id,
-          environment_id: row.workflow_environment_id,
-          name: row.workflow_name,
-          description: row.workflow_description,
-          created_on: row.workflow_created_on,
-          created_by: row.workflow_created_by,
-          modified_on: row.workflow_modified_on,
-          modified_by: row.workflow_modified_by,
-          is_deleted: row.workflow_is_deleted,
-          deleted_on: row.workflow_deleted_on,
-          deleted_by: row.workflow_deleted_by,
-        },
-        latestWorkflowVersion: row.workflow_version_id
-          ? {
-              id: row.workflow_version_id,
-              workflow_id: row.workflow_version_workflow_id!,
-              version: row.workflow_version_version!,
-              description: row.workflow_version_description,
-              status: row.workflow_version_status!,
-              created_on: row.workflow_version_created_on!,
-              created_by: row.workflow_version_created_by!,
-              modified_on: row.workflow_version_modified_on!,
-              modified_by: row.workflow_version_modified_by!,
-              is_deleted: row.workflow_version_is_deleted!,
-              deleted_on: row.workflow_version_deleted_on,
-              deleted_by: row.workflow_version_deleted_by,
-              published_on: row.workflow_version_published_on,
-            }
-          : null,
-      };
-    });
+    const workflowIds = workflows.map((w) => w.id);
+
+    const versions = await dbConn
+      .selectFrom("workflow_version")
+      .select(["workflow_id", dbConn.fn.max("version").as("max_version")])
+      .where("workflow_id", "in", workflowIds)
+      .where("is_deleted", "=", false)
+      .groupBy("workflow_id")
+      .execute();
+
+    const versionMap = new Map(
+      versions.map((v) => [
+        v.workflow_id,
+        v.max_version !== null ? Number(v.max_version) : null,
+      ]),
+    );
+
+    return workflows.map((wf) => ({
+      workflow: wf,
+      latestWorkflowVersion: versionMap.get(wf.id) ?? null,
+    }));
   },
 };

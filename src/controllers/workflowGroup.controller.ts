@@ -11,7 +11,7 @@ export const workflowGroupController = {
     const { name, description } = WorkflowGroupCreateSchema.parse(req.body);
     const workflow = await workflowService.create(
       { name, description },
-      req.actor
+      req.actor,
     );
 
     return res.status(201).json({
@@ -32,19 +32,11 @@ export const workflowGroupController = {
           id: workflow.id,
           name: workflow.name,
           description: workflow.description,
-          latestVersion: latestWorkflowVersion
-            ? {
-                id: latestWorkflowVersion.id,
-                version: latestWorkflowVersion.version,
-                status: latestWorkflowVersion.status,
-                createdAt: latestWorkflowVersion.created_on,
-                updatedAt: latestWorkflowVersion.modified_on,
-              }
-            : null,
+          latestVersion: latestWorkflowVersion,
           createdAt: workflow.created_on,
           updatedAt: workflow.modified_on,
         };
-      }
+      },
     );
 
     res.status(200).json({
@@ -59,7 +51,10 @@ export const workflowGroupController = {
   },
 
   update: async (req: Request, res: Response) => {
-    const data = WorkflowGroupUpdateSchema.parse({ ...req.params, ...req.body });
+    const data = WorkflowGroupUpdateSchema.parse({
+      ...req.params,
+      ...req.body,
+    });
     const workflow = await workflowService.update(data, req.actor);
 
     res.status(200).json({
@@ -74,7 +69,7 @@ export const workflowGroupController = {
     const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
     const { workflow, versions } = await workflowService.get(
       workflowId,
-      req.actor
+      req.actor,
     );
     return res.status(200).json({
       id: workflow.id,

@@ -17,21 +17,36 @@ export const ContextVariableSchema = z.object({
   name: z.string(),
   scope: z.enum([
     ContextVariableScopeType.GLOBAL,
-    ContextVariableScopeType.NEXT
+    ContextVariableScopeType.NEXT,
   ]),
+});
+
+const HttpHeaderSchema = z.object({
+  key: z.string(),
+  valueExpression: z.string(),
 });
 
 export const StartNodeConfigurationSchema = z.object({
   inputDataMap: z.array(
     z.object({
-      label: z.string().optional(),
       jsonPath: z.string(),
-      type: FeelDataTypeSchema,
-      contextVariable: ContextVariableSchema,
-      required: z.boolean().optional(),
+      dataType: FeelDataTypeSchema,
+      contextVariableName: z.string(),
+      fetchableId: z.string().optional(),
+      persist: z.boolean().default(false),
       default: z.unknown().optional(),
-      validationExpression: z.string().optional(),
-    })
+      required: z.boolean().optional(),
+    }),
+  ),
+
+  fetchables: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string().optional(),
+      method: z.enum(["GET"]),
+      headers: HttpHeaderSchema.optional(),
+      urlExpression: z.string(),
+    }),
   ),
 });
 
@@ -42,7 +57,7 @@ export const EndNodeConfigurationSchema = z.object({
       contextVariable: ContextVariableSchema,
       valueExpression: z.string(),
       validationExpression: z.string().optional(),
-    })
+    }),
   ),
   message: z.string().optional(),
 });
@@ -57,7 +72,7 @@ export const UserNodeConfigurationSchema = z.object({
     z.object({
       label: z.string(),
       valueExpression: z.string(),
-    })
+    }),
   ),
 
   responseMap: z.array(
@@ -85,22 +100,17 @@ export const UserNodeConfigurationSchema = z.object({
           z.object({
             label: z.string().optional(),
             valueExpression: z.string(),
-          })
+          }),
         )
         .optional(),
 
       validationExpression: z.string().optional(),
-    })
+    }),
   ),
 });
 
 const ServiceBodySchema = z.object({
   jsonPath: z.string(),
-  valueExpression: z.string(),
-});
-
-const ServiceHeaderSchema = z.object({
-  key: z.string(),
   valueExpression: z.string(),
 });
 
@@ -124,7 +134,7 @@ const ServiceErrorMapItemSchema = z
   .and(
     z.object({
       contextVariable: ContextVariableSchema,
-    })
+    }),
   );
 
 export const ServiceNodeConfigurationSchema = z.object({
@@ -136,7 +146,7 @@ export const ServiceNodeConfigurationSchema = z.object({
   retryDelayMs: z.number().optional(),
 
   body: z.array(ServiceBodySchema).optional(),
-  headers: z.array(ServiceHeaderSchema).optional(),
+  headers: z.array(HttpHeaderSchema).optional(),
 
   responseMap: z.array(ServiceResponseSchema),
 
@@ -160,7 +170,7 @@ export const ScriptNodeConfigurationSchema = z.object({
     z.object({
       name: z.string(),
       valueExpression: z.string(),
-    })
+    }),
   ),
 
   responseMap: z.array(
@@ -169,7 +179,7 @@ export const ScriptNodeConfigurationSchema = z.object({
       type: FeelDataTypeSchema,
       contextVariable: ContextVariableSchema.optional(),
       validationExpression: z.string().optional(),
-    })
+    }),
   ),
 
   onError: z
@@ -180,7 +190,7 @@ export const ScriptNodeConfigurationSchema = z.object({
           z.object({
             valueExpression: z.string(),
             contextVariable: ContextVariableSchema,
-          })
+          }),
         ),
       }),
     ])
@@ -193,7 +203,7 @@ export const DecisionNodeConfigurationSchema = z.object({
       id: z.string(),
       label: z.string().optional(),
       conditionExpression: z.string(),
-    })
+    }),
   ),
   defaultRule: z.object({
     id: z.literal("default"),
@@ -240,7 +250,7 @@ export const NodeSchema = z
         })
         .nullable()
         .optional(),
-    })
+    }),
   );
 
 export const EdgeSchema = z.object({

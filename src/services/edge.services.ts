@@ -167,4 +167,13 @@ export const edgeService = {
     const ids = nodes.map((node) => node.id);
     return await edgeRepository.findByNodeIds(ids);
   },
+
+  deleteByNodes: async (
+    nodes: NodeModel[],
+    transaction?: Transaction<DB>,
+  ): Promise<void> => {
+    if (nodes.length === 0) return;
+    const ids = nodes.map((node) => node.id);
+    await edgeRepository.deleteByNodeIds(ids, transaction);
+  },
 };

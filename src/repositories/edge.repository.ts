@@ -32,6 +32,7 @@ export const edgeRepository = {
     data: NewEdge[],
     transaction?: Transaction<DB>,
   ): Promise<EdgeModel[]> => {
+    if (data.length === 0) return [];
     try {
       return await (transaction ?? db)
         .insertInto("edge")
@@ -40,28 +41,6 @@ export const edgeRepository = {
         .execute();
     } catch (err) {
       throw new RepositoryError("Insert edges failed", err);
-    }
-  },
-
-  softDeleteByNodeIds: async (
-    nodeIds: string[],
-    transaction?: Transaction<DB>,
-  ): Promise<void> => {
-    if (nodeIds.length === 0) return;
-    try {
-      await (transaction ?? db)
-        .updateTable("edge")
-        .set({ is_deleted: true })
-        .where((eb) =>
-          eb.or([
-            eb("source_node_id", "in", nodeIds),
-            eb("destination_node_id", "in", nodeIds),
-          ]),
-        )
-        .where("is_deleted", "=", false)
-        .execute();
-    } catch (err) {
-      throw new RepositoryError(`Soft delete edges for nodeIds failed`, err);
     }
   },
 

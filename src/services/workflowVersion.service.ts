@@ -5,8 +5,6 @@ import type { ActorModel, WorkflowVersionModel } from "../types/models.js";
 import type { Node, Edge } from "../types/workflow.js";
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
-import { nodeRepository } from "../repositories/node.repository.js";
-import { edgeRepository } from "../repositories/edge.repository.js";
 import {
   WorkflowVersionCreateSchema,
   WorkflowVersionDetailSchema,
@@ -55,23 +53,21 @@ export const workflowVersionService = {
           transaction,
         );
 
-      if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
+      if (
+        workflowVersion.status !== WorkflowVersionStatuses.DRAFT &&
+        workflowVersion.status !== WorkflowVersionStatuses.VALID
+      ) {
         throw new StateTransitionError(
-          `Workflow version ${data.version} cannot be updated because it is not in DRAFT status`,
+          `Workflow version ${data.version} cannot be updated because it is in ${workflowVersion.status} status`,
         );
       }
 
-      const existingNodes = await nodeRepository.findByWorkflowVersionId(
-        workflowVersion.id,
+      const existingNodes = await nodeService.getByWorkflowVersion(
+        workflowVersion,
         transaction,
       );
-
-      const existingNodeIds = existingNodes.map((n) => n.id);
-      await edgeRepository.deleteByNodeIds(existingNodeIds, transaction);
-      await nodeRepository.deleteByWorkflowVersionId(
-        workflowVersion.id,
-        transaction,
-      );
+      await edgeService.deleteByNodes(existingNodes, transaction);
+      await nodeService.deleteByWorkflowVersion(workflowVersion, transaction);
 
       const newNodes = await nodeService.createMany(
         data.nodes,
@@ -136,10 +132,7 @@ export const workflowVersionService = {
         data.version,
       );
 
-    if (
-      workflowVersion.status === WorkflowVersionStatuses.PUBLISHED ||
-      workflowVersion.status === WorkflowVersionStatuses.ACTIVE
-    ) {
+    if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
       return { result: { valid: true, errors: [] }, workflowVersion };
     }
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
@@ -151,11 +144,6 @@ export const workflowVersionService = {
       workflowVersion = await workflowVersionRepository.updateById(
         workflowVersion.id,
         { status: WorkflowVersionStatuses.VALID },
-      );
-    } else {
-      workflowVersion = await workflowVersionRepository.updateById(
-        workflowVersion.id,
-        { status: WorkflowVersionStatuses.DRAFT },
       );
     }
 

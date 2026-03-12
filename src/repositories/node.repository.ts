@@ -56,26 +56,6 @@ export const nodeRepository = {
     }
   },
 
-  softDeleteByWorkflowVersionId: async (
-    workflowVersionId: string,
-    transaction?: Transaction<DB>,
-  ): Promise<NodeModel[]> => {
-    try {
-      return await (transaction ?? db)
-        .updateTable("node")
-        .set({ is_deleted: true })
-        .where("workflow_version_id", "=", workflowVersionId)
-        .where("is_deleted", "=", false)
-        .returningAll()
-        .execute();
-    } catch (err) {
-      throw new RepositoryError(
-        `Soft delete nodes for workflowVersionId=${workflowVersionId} failed`,
-        err,
-      );
-    }
-  },
-
   deleteByWorkflowVersionId: async (
     workflowVersionId: string,
     transaction?: Transaction<DB>,

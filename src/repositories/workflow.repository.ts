@@ -69,6 +69,10 @@ export const workflowRepository = {
 
     const workflowIds = workflows.map((w) => w.id);
 
+    if (workflowIds.length === 0) {
+      return [];
+    }
+
     const versions = await dbConn
       .selectFrom("workflow_version")
       .select(["workflow_id", dbConn.fn.max("version").as("max_version")])

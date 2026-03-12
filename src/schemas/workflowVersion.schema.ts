@@ -33,3 +33,12 @@ export const WorkflowVersionValidateSchema = z.object({
   version: z.coerce.number().min(1),
   actor: ActorSchema,
 });
+
+export const WorkflowVersionUpdateSchema = z.object({
+  workflowId: z.uuidv4(),
+  version: z.coerce.number().min(1),
+  actor: ActorSchema,
+  description: z.string().nullable().optional(),
+  nodes: z.array(NodeSchema),
+  edges: z.array(EdgeSchema),
+});

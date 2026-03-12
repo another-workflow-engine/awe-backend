@@ -3,18 +3,18 @@ import { workflowVersionService } from "../services/workflowVersion.service.js";
 import {
   WorkflowVersionCreateSchema,
   WorkflowVersionDetailSchema,
+  WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
 } from "../schemas/workflowVersion.schema.js";
 
 export const workflowVersionController = {
   create: async (req: Request, res: Response) => {
-
     const data = WorkflowVersionCreateSchema.parse({
       ...req.body,
-      workflowId: req.params.workflowId, 
-      actor: req.actor
-    })
+      workflowId: req.params.workflowId,
+      actor: req.actor,
+    });
     const workflowVersion = await workflowVersionService.createNew(data);
 
     return res.status(201).json({
@@ -32,8 +32,9 @@ export const workflowVersionController = {
       actor: req.actor,
     });
 
-    const { result, workflowVersion } =
-      await workflowVersionService.validate(data);
+    const { result, workflowVersion } = await workflowVersionService.validate(
+      data,
+    );
 
     res.status(200).json({
       valid: result.valid,
@@ -82,6 +83,23 @@ export const workflowVersionController = {
         status: workflowVersion.status,
         publishedAt: workflowVersion.published_on,
       },
+    });
+  },
+
+  update: async (req: Request, res: Response) => {
+    const data = WorkflowVersionUpdateSchema.parse({
+      ...req.params,
+      ...req.body,
+      actor: req.actor,
+    });
+    const workflowVersion = await workflowVersionService.update(data);
+    return res.status(200).json({
+      id: workflowVersion.id,
+      workflowId: workflowVersion.workflow_id,
+      version: workflowVersion.version,
+      status: workflowVersion.status,
+      description: workflowVersion.description,
+      updatedAt: workflowVersion.modified_on,
     });
   },
 };

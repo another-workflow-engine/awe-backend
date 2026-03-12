@@ -5,9 +5,12 @@ import type { ActorModel, WorkflowVersionModel } from "../types/models.js";
 import type { Node, Edge } from "../types/workflow.js";
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
+import { nodeRepository } from "../repositories/node.repository.js";
+import { edgeRepository } from "../repositories/edge.repository.js";
 import {
   WorkflowVersionCreateSchema,
   WorkflowVersionDetailSchema,
+  WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
 } from "../schemas/workflowVersion.schema.js";
@@ -22,6 +25,8 @@ type StatusPartialUpdateInput = z.infer<
 type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
+
+export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 
 export const workflowVersionService = {
   getDetail: async (data: DetailInput) => {
@@ -41,12 +46,59 @@ export const workflowVersionService = {
     return { workflowVersion, nodes, edges };
   },
 
-  update: async (sub: DetailInput, data: CreateVersionInput) => {
-    const workflowVersion =
-      await workflowVersionRepository.findByWorkflowIdAndVersion(
-        sub.workflowId,
-        sub.version,
+  update: async (data: UpdateVersionInput): Promise<WorkflowVersionModel> => {
+    return db.transaction().execute(async (transaction) => {
+      const workflowVersion =
+        await workflowVersionRepository.findByWorkflowIdAndVersion(
+          data.workflowId,
+          data.version,
+          transaction,
+        );
+
+      if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
+        throw new StateTransitionError(
+          `Workflow version ${data.version} cannot be updated because it is not in DRAFT status`,
+        );
+      }
+
+      const existingNodes = await nodeRepository.findByWorkflowVersionId(
+        workflowVersion.id,
+        transaction,
       );
+
+      const existingNodeIds = existingNodes.map((n) => n.id);
+      await edgeRepository.deleteByNodeIds(existingNodeIds, transaction);
+      await nodeRepository.deleteByWorkflowVersionId(
+        workflowVersion.id,
+        transaction,
+      );
+
+      const newNodes = await nodeService.createMany(
+        data.nodes,
+        data.actor,
+        workflowVersion,
+        transaction,
+      );
+      await edgeService.createMany(
+        data.edges,
+        newNodes,
+        data.actor,
+        transaction,
+      );
+
+      return await workflowVersionRepository.updateById(
+        workflowVersion.id,
+        {
+          ...(data.description !== undefined && {
+            description: data.description,
+          }),
+          modified_by: data.actor.id,
+          modified_on: new Date(),
+          status: WorkflowVersionStatuses.DRAFT,
+        },
+        transaction,
+      );
+    });
   },
 
   createNew: async (
@@ -84,7 +136,10 @@ export const workflowVersionService = {
         data.version,
       );
 
-    if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
+    if (
+      workflowVersion.status === WorkflowVersionStatuses.PUBLISHED ||
+      workflowVersion.status === WorkflowVersionStatuses.ACTIVE
+    ) {
       return { result: { valid: true, errors: [] }, workflowVersion };
     }
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
@@ -92,12 +147,12 @@ export const workflowVersionService = {
 
     const result = workflowValidatorService.validate(nodes, edges);
 
-    if (result.valid) {
-      workflowVersion = await workflowVersionRepository.updateById(
-        workflowVersion.id,
-        { status: WorkflowVersionStatuses.VALID },
-      );
-    }
+    // if (result.valid) {
+    //   workflowVersion = await workflowVersionRepository.updateById(
+    //     workflowVersion.id,
+    //     { status: WorkflowVersionStatuses.VALID },
+    //   );
+    // }
 
     return { result, workflowVersion };
   },

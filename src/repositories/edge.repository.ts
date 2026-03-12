@@ -42,4 +42,46 @@ export const edgeRepository = {
       throw new RepositoryError("Insert edges failed", err);
     }
   },
+
+  softDeleteByNodeIds: async (
+    nodeIds: string[],
+    transaction?: Transaction<DB>,
+  ): Promise<void> => {
+    if (nodeIds.length === 0) return;
+    try {
+      await (transaction ?? db)
+        .updateTable("edge")
+        .set({ is_deleted: true })
+        .where((eb) =>
+          eb.or([
+            eb("source_node_id", "in", nodeIds),
+            eb("destination_node_id", "in", nodeIds),
+          ]),
+        )
+        .where("is_deleted", "=", false)
+        .execute();
+    } catch (err) {
+      throw new RepositoryError(`Soft delete edges for nodeIds failed`, err);
+    }
+  },
+
+  deleteByNodeIds: async (
+    nodeIds: string[],
+    transaction?: Transaction<DB>,
+  ): Promise<void> => {
+    if (nodeIds.length === 0) return;
+    try {
+      await (transaction ?? db)
+        .deleteFrom("edge")
+        .where((eb) =>
+          eb.or([
+            eb("source_node_id", "in", nodeIds),
+            eb("destination_node_id", "in", nodeIds),
+          ]),
+        )
+        .execute();
+    } catch (err) {
+      throw new RepositoryError(`Delete edges for nodeIds failed`, err);
+    }
+  },
 };

@@ -57,3 +57,9 @@ workflowRouter.patch(
   authenticateRequest,
   workflowVersionController.updateStatus,
 );
+
+workflowRouter.patch(
+  "/:workflowId/versions/:version",
+  authenticateRequest,
+  workflowVersionController.update,
+);

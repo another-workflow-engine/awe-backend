@@ -55,4 +55,41 @@ export const nodeRepository = {
       throw new RepositoryError("Insert node failed", err);
     }
   },
+
+  softDeleteByWorkflowVersionId: async (
+    workflowVersionId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<NodeModel[]> => {
+    try {
+      return await (transaction ?? db)
+        .updateTable("node")
+        .set({ is_deleted: true })
+        .where("workflow_version_id", "=", workflowVersionId)
+        .where("is_deleted", "=", false)
+        .returningAll()
+        .execute();
+    } catch (err) {
+      throw new RepositoryError(
+        `Soft delete nodes for workflowVersionId=${workflowVersionId} failed`,
+        err,
+      );
+    }
+  },
+
+  deleteByWorkflowVersionId: async (
+    workflowVersionId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<void> => {
+    try {
+      await (transaction ?? db)
+        .deleteFrom("node")
+        .where("workflow_version_id", "=", workflowVersionId)
+        .execute();
+    } catch (err) {
+      throw new RepositoryError(
+        `Delete nodes for workflowVersionId=${workflowVersionId} failed`,
+        err,
+      );
+    }
+  },
 };

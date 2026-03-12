@@ -147,12 +147,17 @@ export const workflowVersionService = {
 
     const result = workflowValidatorService.validate(nodes, edges);
 
-    // if (result.valid) {
-    //   workflowVersion = await workflowVersionRepository.updateById(
-    //     workflowVersion.id,
-    //     { status: WorkflowVersionStatuses.VALID },
-    //   );
-    // }
+    if (result.valid) {
+      workflowVersion = await workflowVersionRepository.updateById(
+        workflowVersion.id,
+        { status: WorkflowVersionStatuses.VALID },
+      );
+    } else {
+      workflowVersion = await workflowVersionRepository.updateById(
+        workflowVersion.id,
+        { status: WorkflowVersionStatuses.DRAFT },
+      );
+    }
 
     return { result, workflowVersion };
   },

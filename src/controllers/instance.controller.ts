@@ -8,9 +8,6 @@ export const instanceController = {
 
     const instance = await instanceService.createNew(data, req.actor);
 
-    return res.status(201).json({
-      success: true,
-      data: { instance },
-    });
+    return res.status(201).json({ instance });
   },
 };

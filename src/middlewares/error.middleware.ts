@@ -6,7 +6,7 @@ export const errorHandler = (
   err: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   console.error(err);
 
@@ -24,7 +24,7 @@ export const errorHandler = (
       details: err.issues,
     });
   }
-  
+
   return res.status(500).json({
     success: false,
     error: "Internal server error",

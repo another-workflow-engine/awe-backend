@@ -4,12 +4,10 @@ import type { ActorModel } from "../types/models.js";
 import { z } from "zod";
 import { workflowVersionService } from "./workflowVersion.service.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
-import { InstanceStatuses } from "../types/enums.js";
+import { InstanceStatuses, TaskStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { taskService } from "./task.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
-import type { Transaction } from "kysely";
-import type { DB } from "../types/database.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -23,7 +21,7 @@ export const instanceService = {
       throw new NotFoundError("No active workflow version found");
     }
 
-    db.transaction().execute(async (transaction) => {
+    return db.transaction().execute(async (transaction) => {
       const instance = await instanceRepository.insert(
         {
           workflow_version_id: workflowVersion.id,
@@ -37,29 +35,25 @@ export const instanceService = {
         transaction,
       );
 
-      const currentVaribles = await taskService.executeStartNode(
+      const taskExecution = await taskService.executeStartNode(
         instance,
         transaction,
       );
-      await instanceService.updateContextVariables(
+
+      return await instanceRepository.updateById(
         instance.id,
-        currentVaribles,
+        {
+          current_variables: converterUtils.objectToJsonValue(
+            taskExecution.output_variables as object,
+          ),
+
+          ...(taskExecution.status !== TaskStatuses.COMPLETED && {
+            status: InstanceStatuses.FAILED,
+            ended_on: new Date(),
+          }),
+        },
         transaction,
       );
     });
-  },
-
-  updateContextVariables: async (
-    instanceId: string,
-    data: object,
-    transaction?: Transaction<DB>,
-  ) => {
-    instanceRepository.updateById(
-      instanceId,
-      {
-        current_variables: converterUtils.objectToJsonValue(data),
-      },
-      transaction,
-    );
   },
 };

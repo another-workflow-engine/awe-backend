@@ -1,8 +1,7 @@
 import { db } from "../database.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import { WorkflowVersionStatuses } from "../types/enums.js";
-import type { ActorModel, WorkflowVersionModel } from "../types/models.js";
-import type { Node, Edge } from "../types/workflow.js";
+import type { WorkflowVersionModel } from "../types/models.js";
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
 import {
@@ -15,24 +14,39 @@ import {
 import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { workflowValidatorService } from "./workflowValidator.service.js";
+import { Transaction } from "kysely";
+import type { DB } from "../types/database.js";
 
-type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
-type StatusPartialUpdateInput = z.infer<
+export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
+
+export type StatusPartialUpdateInput = z.infer<
   typeof WorkflowVersionUpdateStatusSchema
 >;
-type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
+
+export type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
 
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 
 export const workflowVersionService = {
+  getActiveVersionByWorkflowId: async (
+    workflowId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<WorkflowVersionModel | undefined> => {
+    return await workflowVersionRepository.findActiveVersionByWorkflowId(
+      workflowId,
+      transaction,
+    );
+  },
+
   getDetail: async (data: DetailInput) => {
     const workflowVersion =
       await workflowVersionRepository.findByWorkflowIdAndVersion(
         data.workflowId,
         data.version,
       );
+
     const nodeModels = await nodeService.getByWorkflowVersion(workflowVersion);
     const edgeModels = await edgeService.getByNodes(nodeModels);
 

@@ -1,5 +1,5 @@
 import type { Insertable, Transaction } from "kysely";
-import type { DB, Node } from "../types/database.js";
+import type { DB, Node, NodeType } from "../types/database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { db } from "../database.js";
 import type { NodeModel } from "../types/models.js";
@@ -24,6 +24,20 @@ export const nodeRepository = {
         err,
       );
     }
+  },
+
+  findByWorkflowVersionIdAndNodeType: async (
+    id: string,
+    nodeType: NodeType,
+    transaction?: Transaction<DB>,
+  ): Promise<NodeModel[]> => {
+    return await (transaction ?? db)
+      .selectFrom("node")
+      .selectAll()
+      .where("workflow_version_id", "=", id)
+      .where("type", "=", nodeType)
+      .where("is_deleted", "=", false)
+      .execute();
   },
 
   insert: async (

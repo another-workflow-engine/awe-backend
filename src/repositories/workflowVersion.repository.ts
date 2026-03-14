@@ -54,6 +54,19 @@ export const workflowVersionRepository = {
     }
   },
 
+  findActiveVersionByWorkflowId: async (
+    workflowId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<WorkflowVersionModel | undefined> => {
+    return await (transaction ?? db)
+      .selectFrom("workflow_version")
+      .selectAll()
+      .where("workflow_id", "=", workflowId)
+      .where("status", "=", WorkflowVersionStatuses.ACTIVE)
+      .where("is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
   insertNextVersion: async (
     data: NewWorkflowVersion,
     transaction?: Transaction<DB>,
@@ -99,10 +112,10 @@ export const workflowVersionRepository = {
     }
   },
 
-  async demoteActiveVersionToPublished(
+  demoteActiveVersionToPublished: async (
     workflowId: string,
     transaction?: Transaction<DB>,
-  ) {
+  ) => {
     return await (transaction ?? db)
       .updateTable("workflow_version")
       .set({ status: WorkflowVersionStatuses.PUBLISHED })

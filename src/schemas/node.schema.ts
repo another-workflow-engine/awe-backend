@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { FeelDataType, ContextVariableScopeType } from "../types/enums.js";
+import {
+  FeelDataType,
+  ContextVariableScopeType,
+  NodeTypes,
+} from "../types/enums.js";
 
 export const FeelDataTypeSchema = z.enum([
   FeelDataType.NUMBER,
@@ -44,7 +48,7 @@ export const StartNodeConfigurationSchema = z.object({
       id: z.string(),
       label: z.string().optional(),
       method: z.enum(["GET"]),
-      headers: HttpHeaderSchema.optional(),
+      headers: z.array(HttpHeaderSchema).optional(),
       urlExpression: z.string(),
     }),
   ),
@@ -214,27 +218,27 @@ export const DecisionNodeConfigurationSchema = z.object({
 export const NodeSchema = z
   .discriminatedUnion("type", [
     z.object({
-      type: z.literal("start"),
+      type: z.literal(NodeTypes.START),
       configuration: StartNodeConfigurationSchema,
     }),
     z.object({
-      type: z.literal("user"),
+      type: z.literal(NodeTypes.USER),
       configuration: UserNodeConfigurationSchema,
     }),
     z.object({
-      type: z.literal("service"),
+      type: z.literal(NodeTypes.SERVICE),
       configuration: ServiceNodeConfigurationSchema,
     }),
     z.object({
-      type: z.literal("script"),
+      type: z.literal(NodeTypes.SCRIPT),
       configuration: ScriptNodeConfigurationSchema,
     }),
     z.object({
-      type: z.literal("decision"),
+      type: z.literal(NodeTypes.DECISION),
       configuration: DecisionNodeConfigurationSchema,
     }),
     z.object({
-      type: z.literal("end"),
+      type: z.literal(NodeTypes.END),
       configuration: EndNodeConfigurationSchema,
     }),
   ])

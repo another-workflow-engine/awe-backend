@@ -1,7 +1,9 @@
 import type {
   ActorType,
   EnvironmentType,
+  InstanceStatus,
   NodeType,
+  TaskStatus,
   WorkflowVersionStatus,
 } from "./database.js";
 
@@ -32,6 +34,21 @@ export const WorkflowVersionStatuses = {
   ACTIVE: "active",
 } as const satisfies Record<string, WorkflowVersionStatus>;
 
+export const InstanceStatuses = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  IN_PROGRESS: "in_progress",
+  PAUSED: "paused",
+  TERMINATED: "terminated",
+} as const satisfies Record<string, InstanceStatus>;
+
+export const TaskStatuses = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  IN_PROGRESS: "in_progress",
+  TERMINATED: "terminated",
+} as const satisfies Record<string, TaskStatus>;
+
 export enum FeelDataType {
   NUMBER = "number",
   STRING = "string",
@@ -46,5 +63,5 @@ export enum FeelDataType {
 
 export enum ContextVariableScopeType {
   GLOBAL = "global",
-  NEXT = "next"
+  NEXT = "next",
 }

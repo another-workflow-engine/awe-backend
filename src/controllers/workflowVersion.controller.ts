@@ -32,9 +32,8 @@ export const workflowVersionController = {
       actor: req.actor,
     });
 
-    const { result, workflowVersion } = await workflowVersionService.validate(
-      data,
-    );
+    const { result, workflowVersion } =
+      await workflowVersionService.validate(data);
 
     res.status(200).json({
       valid: result.valid,
@@ -59,7 +58,7 @@ export const workflowVersionController = {
       workflowId: workflowVersion.workflow_id,
       version: workflowVersion.version,
       status: workflowVersion.status,
-      publishedAt: "2025-01-15T10:30:00.000Z",
+      publishedAt: workflowVersion.published_on,
       createdAt: workflowVersion.created_on,
       modifiedAt: workflowVersion.modified_on,
       nodes,

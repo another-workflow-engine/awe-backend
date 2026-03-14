@@ -4,18 +4,19 @@ import type {
   NodeModel,
   WorkflowVersionModel,
 } from "../types/models.js";
-import type {
-  Node,
-  StartNodeConfiguration,
-  UserNodeConfiguration,
-  ServiceNodeConfiguration,
-  ScriptNodeConfiguration,
-  EndNodeConfiguration,
-  DecisionNodeConfiguration,
-} from "../types/workflow.js";
+import type { Node } from "../types/workflow.js";
 import type { DB } from "../types/database.js";
 import { nodeRepository } from "../repositories/node.repository.js";
 import { NodeTypes } from "../types/enums.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import {
+  DecisionNodeConfigurationSchema,
+  EndNodeConfigurationSchema,
+  ScriptNodeConfigurationSchema,
+  ServiceNodeConfigurationSchema,
+  StartNodeConfigurationSchema,
+  UserNodeConfigurationSchema,
+} from "../schemas/node.schema.js";
 
 export const nodeService = {
   createMany: async (
@@ -29,7 +30,7 @@ export const nodeService = {
         node.type === NodeTypes.START ||
         node.type === NodeTypes.END ||
         node.type === NodeTypes.DECISION
-          ? null
+          ? 1
           : node.configuration.maxAttempts;
 
       return {
@@ -38,7 +39,7 @@ export const nodeService = {
         created_by: actor.id,
         description: node.description ?? null,
         is_deleted: false,
-        max_attempts: maxAttempts ?? 1,
+        max_attempts: maxAttempts,
         modified_by: actor.id,
         name: node.label ?? null,
         type: node.type,
@@ -60,8 +61,6 @@ export const nodeService = {
         node.x_coordinate && node.y_coordinate
           ? { x: node.x_coordinate, y: node.y_coordinate }
           : null,
-      type: node.type,
-      configuration: node.configuration,
     };
 
     switch (node.type) {
@@ -69,42 +68,48 @@ export const nodeService = {
         return {
           ...base,
           type: NodeTypes.START,
-          configuration: node.configuration as StartNodeConfiguration,
+          configuration: StartNodeConfigurationSchema.parse(node.configuration),
         };
 
       case NodeTypes.USER:
         return {
           ...base,
           type: NodeTypes.USER,
-          configuration: node.configuration as UserNodeConfiguration,
+          configuration: UserNodeConfigurationSchema.parse(node.configuration),
         };
 
       case NodeTypes.SERVICE:
         return {
           ...base,
           type: NodeTypes.SERVICE,
-          configuration: node.configuration as ServiceNodeConfiguration,
+          configuration: ServiceNodeConfigurationSchema.parse(
+            node.configuration,
+          ),
         };
 
       case NodeTypes.SCRIPT:
         return {
           ...base,
           type: NodeTypes.SCRIPT,
-          configuration: node.configuration as ScriptNodeConfiguration,
+          configuration: ScriptNodeConfigurationSchema.parse(
+            node.configuration,
+          ),
         };
 
       case NodeTypes.DECISION:
         return {
           ...base,
           type: NodeTypes.DECISION,
-          configuration: node.configuration as DecisionNodeConfiguration,
+          configuration: DecisionNodeConfigurationSchema.parse(
+            node.configuration,
+          ),
         };
 
       case NodeTypes.END:
         return {
           ...base,
           type: NodeTypes.END,
-          configuration: node.configuration as EndNodeConfiguration,
+          configuration: EndNodeConfigurationSchema.parse(node.configuration),
         };
     }
   },
@@ -121,5 +126,24 @@ export const nodeService = {
     transaction?: Transaction<DB>,
   ): Promise<void> => {
     await nodeRepository.deleteByWorkflowVersionId(workflowVersion.id, transaction);
+  },
+
+  getByStartNodeByWorkflowVersionIdOrThrow: async (
+    workflowVersionId: string,
+    transaction?: Transaction<DB>,
+  ) => {
+    const nodes = await nodeRepository.findByWorkflowVersionIdAndNodeType(
+      workflowVersionId,
+      NodeTypes.START,
+      transaction,
+    );
+
+    if (nodes.length === 0 || !nodes[0]) {
+      throw new DataIntegrityError(
+        `No start node for workflow version id=${workflowVersionId}`,
+      );
+    }
+
+    return nodes[0];
   },
 };

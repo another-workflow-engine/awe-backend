@@ -4,10 +4,13 @@ import type {
   ApiKey,
   Edge,
   Environment,
+  Instance,
   Node,
   Organization,
   RefreshToken,
   System,
+  Task,
+  TaskExecution,
   Workflow,
   WorkflowVersion,
 } from "./database.js";
@@ -32,3 +35,9 @@ export type WorkflowVersionModel = Selectable<WorkflowVersion>;
 export type NodeModel = Selectable<Node>;
 
 export type EdgeModel = Selectable<Edge>;
+
+export type InstanceModel = Selectable<Instance>;
+
+export type TaskModel = Selectable<Task>;
+
+export type TaskExecutionModel = Selectable<TaskExecution>;

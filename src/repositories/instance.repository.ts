@@ -25,10 +25,6 @@ export const instanceRepository = {
     transaction?: Transaction<DB>,
   ) => {
     try {
-      if (!Object.keys(data).length) {
-        return null;
-      }
-
       return await (transaction ?? db)
         .updateTable("instance")
         .set(data)

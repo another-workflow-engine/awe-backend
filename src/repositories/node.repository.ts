@@ -7,6 +7,18 @@ import type { NodeModel } from "../types/models.js";
 export type NewNode = Insertable<Node>;
 
 export const nodeRepository = {
+  findById: async (
+    id: string,
+    transaction?: Transaction<DB>,
+  ): Promise<NodeModel | undefined> => {
+    return await (transaction ?? db)
+      .selectFrom("node")
+      .selectAll()
+      .where("id", "=", id)
+      .where("is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
   findByWorkflowVersionId: async (
     id: string,
     transaction?: Transaction<DB>,

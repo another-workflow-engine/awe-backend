@@ -7,6 +7,15 @@ import type { EdgeModel } from "../types/models.js";
 export type NewEdge = Insertable<Edge>;
 
 export const edgeRepository = {
+  findBySourceNodeId: async (id: string, transaction?: Transaction<DB>) => {
+    return await (transaction ?? db)
+      .selectFrom("edge")
+      .selectAll()
+      .where("source_node_id", "=", id)
+      .where("is_deleted", "=", false)
+      .execute();
+  },
+
   findByNodeIds: async (
     ids: string[],
     transaction?: Transaction<DB>,

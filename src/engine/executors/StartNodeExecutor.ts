@@ -22,8 +22,8 @@ export class StartNodeExecutor extends BaseExecutor {
   async execute(
     instance: InstanceModel,
     node: NodeModel,
-    _context: WorkflowContext,
-    _transaction: Transaction<DB>,
+    context: WorkflowContext,
+    transaction: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = StartNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.data) {
@@ -60,14 +60,25 @@ export class StartNodeExecutor extends BaseExecutor {
           `Invalid FEEL expression in start node fetchables nodeId=${node.id}`,
         );
       }
+
       urls[f.id] = result.value;
     });
 
     const fetchedResponses: Record<string, unknown> = {};
     for (const [varName, { urlId, jsonPath }] of Object.entries(fetchables)) {
       const url = urls[urlId];
-      if (!url) continue;
-      if (!(urlId in fetchedResponses)) {
+      if (!url) {
+        continue;
+      }
+
+      const inputData = configuration.inputDataMap.find(
+        (data) => data.contextVariableName === varName,
+      );
+      if (!inputData) {
+        continue;
+      }
+
+      if (!(urlId in fetchedResponses) && inputData.persist) {
         const fetchableConfig = configuration.fetchables.find(
           (f) => f.id === urlId,
         );

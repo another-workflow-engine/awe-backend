@@ -17,12 +17,13 @@ import { InstanceStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
+import { executionLogger } from "../utils/executionLogger.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
 export const instanceService = {
-  listAll: async (): Promise<InstanceListItem[]> => {
-    return instanceRepository.findAll();
+  listAll: async (actorId: string): Promise<InstanceListItem[]> => {
+    return instanceRepository.findAll(actorId);
   },
 
   createNew: async (data: CreateVersionInput, actor: ActorModel): Promise<InstanceModel> => {
@@ -53,15 +54,27 @@ export const instanceService = {
     });
 
     await queueService.enqueue({ instanceId: instance.id, nodeId: startNodeId, context: contextManager.create() });
+
+    executionLogger.instanceCreated({
+      instanceId:        instance.id,
+      workflowId:        data.workflowId,
+      workflowVersionId: workflowVersion.id,
+      workflowName:      String((workflowVersion as Record<string, unknown>).name ?? data.workflowId),
+      actorId:           actor.id,
+      autoAdvance:       data.autoAdvance,
+      createdAt:         new Date(instance.started_on as unknown as string),
+      inputVariables:    data.context as Record<string, unknown>,
+    });
+
     return instance;
   },
 
-  getById: async (instanceId: string): Promise<InstanceModel | undefined> => {
-    return instanceRepository.findById(instanceId);
+  getById: async (instanceId: string, actorId: string): Promise<InstanceModel | undefined> => {
+    return instanceRepository.findByIdForActor(instanceId, actorId);
   },
 
-  resumeInstance: async (instanceId: string): Promise<InstanceModel> => {
-    const instance = await instanceRepository.findById(instanceId);
+  resumeInstance: async (instanceId: string, actorId: string): Promise<InstanceModel> => {
+    const instance = await instanceRepository.findByIdForActor(instanceId, actorId);
     if (!instance) throw new NotFoundError(`Instance id=${instanceId} not found`);
     if (instance.status !== InstanceStatuses.PAUSED) {
       throw new StateTransitionError(`Instance id=${instanceId} is not paused`);

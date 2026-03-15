@@ -11,11 +11,13 @@ import { converterUtils } from "../utils/converter.utils.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
-import { TaskStatuses, InstanceStatuses, ContextVariableScopeType } from "../types/enums.js";
+import { TaskStatuses, InstanceStatuses } from "../types/enums.js";
+import { executionLogger } from "../utils/executionLogger.js";
 
 export async function resumeUserTask(
   taskId: string,
   userInput: Record<string, unknown>,
+  actorId: string,
 ): Promise<void> {
   const task = await taskRepository.findById(taskId);
   if (!task) throw new NotFoundError(`Task id=${taskId}`);
@@ -23,8 +25,8 @@ export async function resumeUserTask(
     throw new StateTransitionError(`Task id=${taskId} is not awaiting user input`);
   }
 
-  const instance = await instanceRepository.findById(task.instance_id);
-  if (!instance) throw new DataIntegrityError(`Instance not found for task id=${taskId}`);
+  const instance = await instanceRepository.findByIdForActor(task.instance_id, actorId);
+  if (!instance) throw new NotFoundError(`Instance not found for task id=${taskId}`);
   if (instance.status !== InstanceStatuses.PAUSED) {
     throw new StateTransitionError(`Instance id=${instance.id} is not paused`);
   }
@@ -45,7 +47,7 @@ export async function resumeUserTask(
 
   const edges = await edgeRepository.findByNodeIds(nodes.map((n) => n.id));
   const context = contextManager.fromJson(instance.current_variables);
-  const updatedContext = contextManager.merge(context, outputVariables, ContextVariableScopeType.GLOBAL);
+  const updatedContext = contextManager.merge(context, outputVariables);
   const nextNodeIds = edgeResolver.resolveNextNodeIds(task.node_id, updatedContext, edges, nodes);
 
   await db.transaction().execute(async (tx) => {
@@ -54,6 +56,15 @@ export async function resumeUserTask(
       status: InstanceStatuses.IN_PROGRESS,
       current_variables: converterUtils.objectToJsonValue(updatedContext),
     }, tx);
+  });
+
+  executionLogger.userTaskCompleted({
+    taskId,
+    instanceId:     instance.id,
+    actorId,
+    completedAt:    new Date(),
+    userInput,
+    contextUpdates: outputVariables,
   });
 
   for (const nodeId of nextNodeIds) {

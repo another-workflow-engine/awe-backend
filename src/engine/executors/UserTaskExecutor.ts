@@ -7,7 +7,7 @@ import { UserNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { TaskStatuses } from "../../types/enums.js";
-import { contextManager } from "../ContextManager.js";
+import { buildFeelContext } from "../../utils/contextResolver.js";
 
 export class UserTaskExecutor extends BaseExecutor {
   async execute(
@@ -24,11 +24,11 @@ export class UserTaskExecutor extends BaseExecutor {
     }
 
     const configuration = parsed.data;
-    const flatContext = contextManager.resolveForNode(context);
+    const feelContext = await buildFeelContext(context);
     const requestData: Record<string, unknown> = {};
 
     for (const field of configuration.requestMap) {
-      const result = evaluate(field.valueExpression, flatContext);
+      const result = evaluate(field.valueExpression, feelContext);
       requestData[field.label] = result.value;
     }
 

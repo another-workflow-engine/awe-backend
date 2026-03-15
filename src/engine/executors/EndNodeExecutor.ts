@@ -7,7 +7,7 @@ import { EndNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { TaskStatuses } from "../../types/enums.js";
-import { contextManager } from "../ContextManager.js";
+import { buildFeelContext } from "../../utils/contextResolver.js";
 
 export class EndNodeExecutor extends BaseExecutor {
   async execute(
@@ -24,11 +24,11 @@ export class EndNodeExecutor extends BaseExecutor {
     }
 
     const configuration = parsed.data;
-    const flatContext = contextManager.resolveForNode(context);
+    const feelContext = await buildFeelContext(context);
     const outputVariables: Record<string, unknown> = {};
 
     for (const mapping of configuration.resultMap) {
-      const result = evaluate(mapping.valueExpression, flatContext);
+      const result = evaluate(mapping.valueExpression, feelContext);
       if (result.warnings.length > 0) {
         return {
           status: TaskStatuses.FAILED,
@@ -39,7 +39,7 @@ export class EndNodeExecutor extends BaseExecutor {
 
       if (mapping.validationExpression) {
         const validation = evaluate(mapping.validationExpression, {
-          ...flatContext,
+          ...feelContext,
           value: result.value,
         });
         if (validation.value !== true) {

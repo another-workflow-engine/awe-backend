@@ -8,3 +8,7 @@ process.env.JWT_ACCESS_EXPIRES_MINS = "15";
 process.env.JWT_REFRESH_EXPIRES_DAYS = "7";
 
 process.env.API_KEY_PREFIX = "awe_test";
+
+process.env.REDIS_HOST = "localhost";
+process.env.REDIS_PORT = "6379";
+process.env.REDIS_PASSWORD = "test-password";

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import {
   FeelDataType,
-  ContextVariableScopeType,
   NodeTypes,
 } from "../types/enums.js";
 
@@ -19,11 +18,8 @@ export const FeelDataTypeSchema = z.enum([
 
 export const ContextVariableSchema = z.object({
   name: z.string(),
-  scope: z.enum([
-    ContextVariableScopeType.GLOBAL,
-    ContextVariableScopeType.NEXT,
-  ]),
-});
+  scope: z.literal("global"),
+  });
 
 const HttpHeaderSchema = z.object({
   key: z.string(),

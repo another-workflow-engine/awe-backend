@@ -63,5 +63,4 @@ export enum FeelDataType {
 
 export enum ContextVariableScopeType {
   GLOBAL = "global",
-  NEXT = "next",
 }

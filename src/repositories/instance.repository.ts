@@ -13,7 +13,7 @@ export type InstanceListItem = InstanceModel & {
 };
 
 export const instanceRepository = {
-  findAll: async (): Promise<InstanceListItem[]> => {
+  findAll: async (actorId: string): Promise<InstanceListItem[]> => {
     try {
       return await db
         .selectFrom("instance")
@@ -28,6 +28,7 @@ export const instanceRepository = {
           eb.ref("workflow_version.version").as("version_number"),
           eb.ref("workflow.name").as("workflow_name"),
         ])
+        .where("workflow.created_by", "=", actorId)
         .orderBy("instance.created_on", "desc")
         .execute() as unknown as InstanceListItem[];
     } catch (err) {
@@ -44,6 +45,28 @@ export const instanceRepository = {
         .selectFrom("instance")
         .selectAll()
         .where("id", "=", id)
+        .executeTakeFirst();
+    } catch (err) {
+      throw new RepositoryError(`Find instance by id=${id} failed`, err);
+    }
+  },
+
+  findByIdForActor: async (
+    id: string,
+    actorId: string,
+  ): Promise<InstanceModel | undefined> => {
+    try {
+      return await db
+        .selectFrom("instance")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .selectAll("instance")
+        .where("instance.id", "=", id)
+        .where("workflow.created_by", "=", actorId)
         .executeTakeFirst();
     } catch (err) {
       throw new RepositoryError(`Find instance by id=${id} failed`, err);

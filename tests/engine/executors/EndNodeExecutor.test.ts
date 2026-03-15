@@ -44,13 +44,13 @@ const makeNode = (configuration: unknown): NodeModel => ({
 
 describe("EndNodeExecutor", () => {
   it("evaluates resultMap FEEL expressions and returns COMPLETED with correct outputVariables", async () => {
-    const ctx = { global: { amount: 500 }, next: {} };
+const ctx = { global: { amount: 500 } };
     const node = makeNode({
       success: true,
       resultMap: [
         {
           contextVariable: { name: "result", scope: "global" },
-          valueExpression: "amount",
+          valueExpression: "context.amount",
         },
       ],
     });
@@ -61,18 +61,18 @@ describe("EndNodeExecutor", () => {
 
   it("returns FAILED when configuration.success is false even when FEEL evaluation succeeds", async () => {
     const node = makeNode({ success: false, resultMap: [] });
-    const result = await executor.execute(mockInstance, node, { global: {}, next: {} }, tx);
+    const result = await executor.execute(mockInstance, node, { global: {} }, tx);
     expect(result.status).toBe(TaskStatuses.FAILED);
   });
 
   it("returns FAILED when FEEL expression produces evaluation warnings", async () => {
-    const ctx = { global: { amount: 500 }, next: {} };
+const ctx = { global: { amount: 500 } };
     const node = makeNode({
       success: true,
       resultMap: [
         {
           contextVariable: { name: "result", scope: "global" },
-          valueExpression: "amount()",
+          valueExpression: "context.amount()",
         },
       ],
     });
@@ -82,13 +82,13 @@ describe("EndNodeExecutor", () => {
   });
 
   it("returns COMPLETED when validationExpression evaluates to true", async () => {
-    const ctx = { global: { amount: 500 }, next: {} };
+const ctx = { global: { amount: 500 } };
     const node = makeNode({
       success: true,
       resultMap: [
         {
           contextVariable: { name: "result", scope: "global" },
-          valueExpression: "amount",
+          valueExpression: "context.amount",
           validationExpression: "value > 100",
         },
       ],
@@ -104,7 +104,7 @@ describe("EndNodeExecutor", () => {
       resultMap: [
         {
           contextVariable: { name: "result", scope: "global" },
-          valueExpression: "amount",
+          valueExpression: "context.amount",
           validationExpression: "value > 100",
         },
       ],
@@ -115,7 +115,7 @@ describe("EndNodeExecutor", () => {
 
   it("returns COMPLETED with empty outputVariables when resultMap is empty", async () => {
     const node = makeNode({ success: true, resultMap: [] });
-    const result = await executor.execute(mockInstance, node, { global: {}, next: {} }, tx);
+    const result = await executor.execute(mockInstance, node, { global: {} }, tx);
     expect(result.status).toBe(TaskStatuses.COMPLETED);
     expect(result.outputVariables).toEqual({});
   });
@@ -123,13 +123,13 @@ describe("EndNodeExecutor", () => {
   it("throws DataIntegrityError when node configuration is invalid", async () => {
     const node = makeNode("not-an-object");
     await expect(
-      executor.execute(mockInstance, node, { global: {}, next: {} }, tx),
+      executor.execute(mockInstance, node, { global: {} }, tx),
     ).rejects.toThrow(DataIntegrityError);
   });
 
   it("includes message in outputVariables when end node has a message configured", async () => {
     const node = makeNode({ success: true, resultMap: [], message: "Workflow completed successfully!" });
-    const result = await executor.execute(mockInstance, node, { global: {}, next: {} }, tx);
+    const result = await executor.execute(mockInstance, node, { global: {} }, tx);
     expect(result.status).toBe(TaskStatuses.COMPLETED);
     expect(result.outputVariables._message).toBe("Workflow completed successfully!");
   });

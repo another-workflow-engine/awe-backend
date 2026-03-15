@@ -14,6 +14,6 @@ router.use(
     .use("/auth", authRouter)
     .use("/workflows", workflowRouter)
     .use("/instances", instanceRouter)
-    .use("/task", taskRouter)
+    .use("/tasks", taskRouter)
     .use("/audit", auditRouter),
 );

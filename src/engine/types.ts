@@ -2,7 +2,6 @@ import type { TaskStatus } from "../types/database.js";
 
 export interface WorkflowContext {
   global: Record<string, unknown>;
-  next: Record<string, unknown>;
 }
 
 export interface ExecutorResult {

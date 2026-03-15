@@ -56,7 +56,7 @@ describe("instanceController", () => {
   describe("getById()", () => {
     it("returns instance when found", async () => {
       jest.mocked(instanceService.getById).mockResolvedValueOnce(mockInstance);
-      const req = mockRequest({ params: { instanceId: VALID_UUID } });
+      const req = mockRequest({ params: { instanceId: VALID_UUID }, actor: mockActor });
       const res = mockResponse();
       await instanceController.getById(req as any, res as any);
       expect(res.json).toHaveBeenCalledWith({ instance: mockInstance });
@@ -64,13 +64,13 @@ describe("instanceController", () => {
 
     it("throws NotFoundError when instance not found", async () => {
       jest.mocked(instanceService.getById).mockResolvedValueOnce(undefined);
-      const req = mockRequest({ params: { instanceId: VALID_UUID } });
+      const req = mockRequest({ params: { instanceId: VALID_UUID }, actor: mockActor });
       const res = mockResponse();
       await expect(instanceController.getById(req as any, res as any)).rejects.toThrow(NotFoundError);
     });
 
     it("throws ZodError when instanceId is not a valid UUID", async () => {
-      const req = mockRequest({ params: { instanceId: "bad-uuid" } });
+      const req = mockRequest({ params: { instanceId: "bad-uuid" }, actor: mockActor });
       const res = mockResponse();
       await expect(instanceController.getById(req as any, res as any)).rejects.toThrow(ZodError);
     });
@@ -79,28 +79,28 @@ describe("instanceController", () => {
   describe("resumeInstance()", () => {
     it("returns updated instance when resume succeeds", async () => {
       jest.mocked(instanceService.resumeInstance).mockResolvedValueOnce({ ...mockPausedInstance, status: InstanceStatuses.IN_PROGRESS });
-      const req = mockRequest({ params: { instanceId: VALID_UUID } });
+      const req = mockRequest({ params: { instanceId: VALID_UUID }, actor: mockActor });
       const res = mockResponse();
       await instanceController.resumeInstance(req as any, res as any);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ instance: expect.objectContaining({ status: InstanceStatuses.IN_PROGRESS }) }));
     });
 
     it("throws ZodError when instanceId is not a valid UUID", async () => {
-      const req = mockRequest({ params: { instanceId: "bad-id" } });
+      const req = mockRequest({ params: { instanceId: "bad-id" }, actor: mockActor });
       const res = mockResponse();
       await expect(instanceController.resumeInstance(req as any, res as any)).rejects.toThrow(ZodError);
     });
 
     it("propagates StateTransitionError when instance is not paused", async () => {
       jest.mocked(instanceService.resumeInstance).mockRejectedValueOnce(new StateTransitionError("not paused"));
-      const req = mockRequest({ params: { instanceId: VALID_UUID } });
+      const req = mockRequest({ params: { instanceId: VALID_UUID }, actor: mockActor });
       const res = mockResponse();
       await expect(instanceController.resumeInstance(req as any, res as any)).rejects.toThrow(StateTransitionError);
     });
 
     it("propagates NotFoundError when instance does not exist", async () => {
       jest.mocked(instanceService.resumeInstance).mockRejectedValueOnce(new NotFoundError("not found"));
-      const req = mockRequest({ params: { instanceId: VALID_UUID } });
+      const req = mockRequest({ params: { instanceId: VALID_UUID }, actor: mockActor });
       const res = mockResponse();
       await expect(instanceController.resumeInstance(req as any, res as any)).rejects.toThrow(NotFoundError);
     });

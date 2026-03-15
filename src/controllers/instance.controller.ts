@@ -4,8 +4,8 @@ import { InstanceCreateSchema, InstanceParamsSchema } from "../schemas/instance.
 import { NotFoundError } from "../errors/NotFoundError.js";
 
 export const instanceController = {
-  list: async (_req: Request, res: Response) => {
-    const instances = await instanceService.listAll();
+  list: async (req: Request, res: Response) => {
+    const instances = await instanceService.listAll(req.actor.id);
     return res.json({ instances });
   },
 
@@ -17,14 +17,14 @@ export const instanceController = {
 
   getById: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.getById(instanceId);
+    const instance = await instanceService.getById(instanceId, req.actor.id);
     if (!instance) throw new NotFoundError(`Instance id=${instanceId} not found`);
     return res.json({ instance });
   },
 
   resumeInstance: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.resumeInstance(instanceId);
+    const instance = await instanceService.resumeInstance(instanceId, req.actor.id);
     return res.json({ instance });
   },
 };

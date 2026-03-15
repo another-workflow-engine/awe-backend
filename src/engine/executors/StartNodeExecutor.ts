@@ -8,22 +8,14 @@ import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { TaskStatuses } from "../../types/enums.js";
 import { converterUtils } from "../../utils/converter.utils.js";
-import { fetchService } from "../../services/fetch.service.js";
-
-function getByPath(data: unknown, path: string): unknown {
-  const parts = path.split(".").filter(Boolean);
-  return parts.reduce<unknown>((acc, key) => {
-    if (acc === null || acc === undefined) return undefined;
-    return (acc as Record<string, unknown>)[key];
-  }, data);
-}
+import type { FetchableUrlConfig } from "../../utils/contextResolver.js";
 
 export class StartNodeExecutor extends BaseExecutor {
   async execute(
     instance: InstanceModel,
     node: NodeModel,
-    context: WorkflowContext,
-    transaction: Transaction<DB>,
+    _context: WorkflowContext,
+    _transaction: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = StartNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.data) {
@@ -38,8 +30,8 @@ export class StartNodeExecutor extends BaseExecutor {
     );
 
     const constants: Record<string, unknown> = {};
+
     const fetchables: Record<string, { urlId: string; jsonPath: string }> = {};
-    const urls: Record<string, string> = {};
 
     configuration.inputDataMap.forEach((dataMap) => {
       if (dataMap.fetchableId) {
@@ -47,51 +39,34 @@ export class StartNodeExecutor extends BaseExecutor {
           urlId: dataMap.fetchableId,
           jsonPath: dataMap.jsonPath,
         };
-        return;
+      } else {
+        constants[dataMap.contextVariableName] =
+          instanceInputVariables[dataMap.jsonPath];
       }
-      constants[dataMap.contextVariableName] =
-        instanceInputVariables[dataMap.jsonPath];
     });
 
-    configuration.fetchables.forEach((f) => {
-      const result = evaluate(f.urlExpression, constants);
-      if (result.warnings.length > 0 || typeof result.value !== "string") {
+    const urls: Record<string, FetchableUrlConfig> = {};
+
+    for (const f of configuration.fetchables) {
+      const urlResult = evaluate(f.urlExpression, constants);
+      if (
+        urlResult.warnings.length > 0 ||
+        typeof urlResult.value !== "string"
+      ) {
         throw new DataIntegrityError(
-          `Invalid FEEL expression in start node fetchables nodeId=${node.id}`,
+          `Invalid FEEL URL expression in start node fetchables nodeId=${node.id}`,
         );
       }
 
-      urls[f.id] = result.value;
-    });
-
-    const fetchedResponses: Record<string, unknown> = {};
-    for (const [varName, { urlId, jsonPath }] of Object.entries(fetchables)) {
-      const url = urls[urlId];
-      if (!url) {
-        continue;
-      }
-
-      const inputData = configuration.inputDataMap.find(
-        (data) => data.contextVariableName === varName,
-      );
-      if (!inputData) {
-        continue;
-      }
-
-      if (!(urlId in fetchedResponses) && inputData.persist) {
-        const fetchableConfig = configuration.fetchables.find(
-          (f) => f.id === urlId,
-        );
-        const headers: Record<string, string> = {};
-        for (const h of fetchableConfig?.headers ?? []) {
-          const headerVal = evaluate(h.valueExpression, constants);
-          if (typeof headerVal.value === "string") {
-            headers[h.key] = headerVal.value;
-          }
+      const headers: Record<string, string> = {};
+      for (const h of f.headers ?? []) {
+        const headerVal = evaluate(h.valueExpression, constants);
+        if (typeof headerVal.value === "string") {
+          headers[h.key] = headerVal.value;
         }
-        fetchedResponses[urlId] = await fetchService.get(url, headers);
       }
-      constants[varName] = getByPath(fetchedResponses[urlId], jsonPath);
+
+      urls[f.id] = { url: urlResult.value, headers };
     }
 
     return {

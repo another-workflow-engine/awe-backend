@@ -54,8 +54,8 @@ describe("UserTaskExecutor", () => {
     const ctx = { global: { orderId: "ord-123", amount: 999 }, next: {} };
     const node = makeNode({
       requestMap: [
-        { label: "Order ID", valueExpression: "orderId" },
-        { label: "Amount", valueExpression: "amount" },
+        { label: "Order ID", valueExpression: "context.orderId" },
+        { label: "Amount", valueExpression: "context.amount" },
       ],
       responseMap: [],
     });

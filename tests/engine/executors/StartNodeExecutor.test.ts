@@ -3,14 +3,8 @@ import { TaskStatuses } from "../../../src/types/enums.js";
 import { DataIntegrityError } from "../../../src/errors/DataIntegrity.js";
 import type { NodeModel, InstanceModel } from "../../../src/types/models.js";
 
-jest.mock("../../../src/services/fetch.service.js", () => ({
-  fetchService: { get: jest.fn() },
-}));
-
-import { fetchService } from "../../../src/services/fetch.service.js";
-
 const executor = new StartNodeExecutor();
-const emptyContext = { global: {}, next: {} };
+const emptyContext = { global: {} };
 const tx = null as any;
 
 const mockInstance: InstanceModel = {
@@ -62,8 +56,7 @@ describe("StartNodeExecutor", () => {
     expect((result.outputVariables.constants as Record<string, unknown>).amount).toBe(500);
   });
 
-  it("fetches data from URL and stores extracted value in constants when fetchableId is present", async () => {
-    jest.mocked(fetchService.get).mockResolvedValueOnce({ userId: "user-123" });
+  it("stores fetchable metadata in fetchables (not constants) when fetchableId is present", async () => {
     const node = makeNode({
       inputDataMap: [
         {
@@ -80,13 +73,11 @@ describe("StartNodeExecutor", () => {
     expect(result.status).toBe(TaskStatuses.COMPLETED);
     const constants = result.outputVariables.constants as Record<string, unknown>;
     const fetchables = result.outputVariables.fetchables as Record<string, unknown>;
-    expect(constants["userVar"]).toBe("user-123");
-    expect(fetchables["userVar"]).toBeDefined();
-    expect(fetchService.get).toHaveBeenCalledWith("https://api.example.com", {});
+    expect(constants["userVar"]).toBeUndefined();
+    expect(fetchables["userVar"]).toEqual({ urlId: "fetch-user", jsonPath: "userId" });
   });
 
-  it("deduplicates fetch calls when multiple inputDataMap entries reference the same fetchableId", async () => {
-    jest.mocked(fetchService.get).mockResolvedValueOnce({ name: "Alice", age: 30 });
+  it("stores multiple fetchable entries as metadata when they share a fetchableId", async () => {
     const node = makeNode({
       inputDataMap: [
         { jsonPath: "name", dataType: "string", contextVariableName: "userName", fetchableId: "fetch-profile", persist: false },
@@ -96,22 +87,25 @@ describe("StartNodeExecutor", () => {
     });
     const result = await executor.execute(mockInstance, node, emptyContext, tx);
     expect(result.status).toBe(TaskStatuses.COMPLETED);
-    expect(fetchService.get).toHaveBeenCalledTimes(1);
+    const fetchables = result.outputVariables.fetchables as Record<string, { urlId: string; jsonPath: string }>;
+    expect(fetchables["userName"]).toEqual({ urlId: "fetch-profile", jsonPath: "name" });
+    expect(fetchables["userAge"]).toEqual({ urlId: "fetch-profile", jsonPath: "age" });
     const constants = result.outputVariables.constants as Record<string, unknown>;
-    expect(constants["userName"]).toBe("Alice");
-    expect(constants["userAge"]).toBe(30);
+    expect(constants["userName"]).toBeUndefined();
+    expect(constants["userAge"]).toBeUndefined();
   });
 
-  it("evaluates FEEL urlExpression and stores the result in urls keyed by fetchable id", async () => {
+  it("evaluates FEEL urlExpression and stores {url, headers} in urls keyed by fetchable id", async () => {
     const node = makeNode({
       inputDataMap: [],
       fetchables: [{ id: "fetch-data", method: "GET", urlExpression: '"https://api.example.com"' }],
     });
     const result = await executor.execute(mockInstance, node, emptyContext, tx);
     expect(result.status).toBe(TaskStatuses.COMPLETED);
-    expect((result.outputVariables.urls as Record<string, unknown>)["fetch-data"]).toBe(
-      "https://api.example.com",
-    );
+    expect((result.outputVariables.urls as Record<string, unknown>)["fetch-data"]).toEqual({
+      url: "https://api.example.com",
+      headers: {},
+    });
   });
 
   it("returns COMPLETED with empty maps when inputDataMap and fetchables are empty", async () => {
@@ -145,7 +139,7 @@ describe("StartNodeExecutor", () => {
     const result = await executor.execute(
       mockInstance,
       node,
-      { global: { irrelevant: true }, next: { also: "ignored" } },
+      { global: { irrelevant: true } },
       tx,
     );
     expect(result.status).toBe(TaskStatuses.COMPLETED);

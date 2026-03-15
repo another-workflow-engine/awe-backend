@@ -1,7 +1,6 @@
 import { resumeUserTask } from "../../src/services/userTask.service.js";
 import { NotFoundError } from "../../src/errors/NotFoundError.js";
 import { StateTransitionError } from "../../src/errors/StateTransitionError.js";
-import { DataIntegrityError } from "../../src/errors/DataIntegrity.js";
 import { TaskStatuses, InstanceStatuses } from "../../src/types/enums.js";
 import type { TaskModel, InstanceModel, NodeModel } from "../../src/types/models.js";
 
@@ -83,7 +82,7 @@ const mockNode: NodeModel = {
   deleted_on: null,
 };
 
-const emptyContext = { global: {}, next: {} };
+const emptyContext = { global: {} };
 
 describe("resumeUserTask", () => {
   beforeEach(() => {
@@ -98,32 +97,32 @@ describe("resumeUserTask", () => {
 
   it("throws NotFoundError when task does not exist", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(undefined);
-    await expect(resumeUserTask("task-1", {})).rejects.toThrow(NotFoundError);
+    await expect(resumeUserTask("task-1", {}, "actor-1")).rejects.toThrow(NotFoundError);
   });
 
   it("throws StateTransitionError when task status is not IN_PROGRESS", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce({ ...mockTask, status: TaskStatuses.COMPLETED });
-    await expect(resumeUserTask("task-1", {})).rejects.toThrow(StateTransitionError);
+    await expect(resumeUserTask("task-1", {}, "actor-1")).rejects.toThrow(StateTransitionError);
   });
 
-  it("throws DataIntegrityError when instance is not found", async () => {
+  it("throws NotFoundError when instance is not found (ownership check)", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
-    jest.mocked(instanceRepository.findById).mockResolvedValueOnce(undefined);
-    await expect(resumeUserTask("task-1", {})).rejects.toThrow(DataIntegrityError);
+    jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(undefined);
+    await expect(resumeUserTask("task-1", {}, "actor-1")).rejects.toThrow(NotFoundError);
   });
 
   it("throws StateTransitionError when instance is not PAUSED", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
-    jest.mocked(instanceRepository.findById).mockResolvedValueOnce({ ...mockInstance, status: InstanceStatuses.IN_PROGRESS });
-    await expect(resumeUserTask("task-1", {})).rejects.toThrow(StateTransitionError);
+    jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce({ ...mockInstance, status: InstanceStatuses.IN_PROGRESS });
+    await expect(resumeUserTask("task-1", {}, "actor-1")).rejects.toThrow(StateTransitionError);
   });
 
   it("enqueues next nodes on successful user input submission", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
-    jest.mocked(instanceRepository.findById).mockResolvedValueOnce(mockInstance);
+    jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockInstance);
     jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([mockNode]);
 
-    await resumeUserTask("task-1", { approved: true });
+    await resumeUserTask("task-1", { approved: true }, "actor-1");
 
     expect(queueService.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ instanceId: "inst-1", nodeId: "node-end" }),
@@ -132,24 +131,23 @@ describe("resumeUserTask", () => {
 
   it("maps userInput fields to context variables via responseMap", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
-    jest.mocked(instanceRepository.findById).mockResolvedValueOnce(mockInstance);
+    jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockInstance);
     jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([mockNode]);
 
-    await resumeUserTask("task-1", { approved: true });
+    await resumeUserTask("task-1", { approved: true }, "actor-1");
 
     expect(contextManager.merge).toHaveBeenCalledWith(
       emptyContext,
       expect.objectContaining({ isApproved: true }),
-      expect.anything(),
     );
   });
 
   it("updates task to COMPLETED and instance to IN_PROGRESS after user input", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
-    jest.mocked(instanceRepository.findById).mockResolvedValueOnce(mockInstance);
+    jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockInstance);
     jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([mockNode]);
 
-    await resumeUserTask("task-1", { approved: true });
+    await resumeUserTask("task-1", { approved: true }, "actor-1");
 
     expect(taskRepository.updateById).toHaveBeenCalledWith("task-1", { status: TaskStatuses.COMPLETED }, {});
     expect(instanceRepository.updateById).toHaveBeenCalledWith("inst-1", expect.objectContaining({ status: InstanceStatuses.IN_PROGRESS }), {});

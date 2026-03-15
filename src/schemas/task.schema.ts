@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const TaskParamsSchema = z.object({
-  taskId: z.uuid(),
+  taskId: z.uuidv4(),
 });
 
 export const TaskCompleteSchema = z.object({

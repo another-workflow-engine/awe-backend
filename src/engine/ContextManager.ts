@@ -11,7 +11,13 @@ export const contextManager = {
     context: WorkflowContext,
     vars: Record<string, unknown>,
   ): WorkflowContext {
-    return { ...context, global: { ...context.global, ...vars } };
+    let newContext = { ...context, global: { ...context.global } };
+    newContext.global.constants = {
+      ...(newContext.global.constants ?? {}),
+      ...vars,
+    };
+
+    return newContext;
   },
 
   resolveForNode(context: WorkflowContext): Record<string, unknown> {

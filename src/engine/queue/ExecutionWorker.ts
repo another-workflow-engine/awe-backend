@@ -46,17 +46,23 @@ export class ExecutionWorker {
     if (result.outcome === "next") {
       if (instance.auto_advance) {
         for (const nextNodeId of result.nextNodeIds) {
-          await this.queue.add("execute-node", {
-            instanceId,
-            nodeId: nextNodeId,
-            context: result.context,
-          }, {
-            jobId: `${instanceId}-${nextNodeId}`,
-            ...JOB_OPTIONS,
-          });
+          await this.queue.add(
+            "execute-node",
+            {
+              instanceId,
+              nodeId: nextNodeId,
+              context: result.context,
+            },
+            {
+              jobId: `${instanceId}-${nextNodeId}`,
+              ...JOB_OPTIONS,
+            },
+          );
         }
       } else {
-        await instanceRepository.updateById(instanceId, { status: InstanceStatuses.PAUSED });
+        await instanceRepository.updateById(instanceId, {
+          status: InstanceStatuses.PAUSED,
+        });
       }
     }
   }

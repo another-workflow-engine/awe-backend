@@ -14,7 +14,8 @@ export const edgeResolver = {
   ): string[] {
     const completedNode = nodes.find((n) => n.id === completedNodeId);
     const outgoing = edges.filter(
-      (e) => e.source_node_id === completedNodeId && e.destination_node_id !== null,
+      (e) =>
+        e.source_node_id === completedNodeId && e.destination_node_id !== null,
     );
 
     if (outgoing.length === 0) return [];

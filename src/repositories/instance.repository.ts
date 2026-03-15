@@ -7,7 +7,34 @@ import { RepositoryError } from "../errors/RepositoryError.js";
 export type NewInstance = Insertable<Instance>;
 export type UpdateInstance = Updateable<Instance>;
 
+export type InstanceListItem = InstanceModel & {
+  version_number: number | null;
+  workflow_name: string;
+};
+
 export const instanceRepository = {
+  findAll: async (): Promise<InstanceListItem[]> => {
+    try {
+      return await db
+        .selectFrom("instance")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .selectAll("instance")
+        .select((eb) => [
+          eb.ref("workflow_version.version").as("version_number"),
+          eb.ref("workflow.name").as("workflow_name"),
+        ])
+        .orderBy("instance.created_on", "desc")
+        .execute() as unknown as InstanceListItem[];
+    } catch (err) {
+      throw new RepositoryError("Find all instances failed", err);
+    }
+  },
+
   findById: async (
     id: string,
     transaction?: Transaction<DB>,

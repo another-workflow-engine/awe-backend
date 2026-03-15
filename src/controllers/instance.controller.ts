@@ -4,6 +4,11 @@ import { InstanceCreateSchema, InstanceParamsSchema } from "../schemas/instance.
 import { NotFoundError } from "../errors/NotFoundError.js";
 
 export const instanceController = {
+  list: async (_req: Request, res: Response) => {
+    const instances = await instanceService.listAll();
+    return res.json({ instances });
+  },
+
   create: async (req: Request, res: Response) => {
     const data = InstanceCreateSchema.parse({ ...req.body });
     const instance = await instanceService.createNew(data, req.actor);

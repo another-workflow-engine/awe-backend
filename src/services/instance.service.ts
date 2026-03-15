@@ -16,10 +16,15 @@ import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { InstanceStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
+import type { InstanceListItem } from "../repositories/instance.repository.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
 export const instanceService = {
+  listAll: async (): Promise<InstanceListItem[]> => {
+    return instanceRepository.findAll();
+  },
+
   createNew: async (data: CreateVersionInput, actor: ActorModel): Promise<InstanceModel> => {
     const workflowVersion = await workflowVersionService.getActiveVersionByWorkflowId(
       data.workflowId,

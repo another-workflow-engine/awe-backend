@@ -57,7 +57,11 @@ export const executionEngine = {
 
       const startedOn = new Date();
       const task = await taskRepository.insert(
-        { instance_id: instance.id, node_id: node.id, status: TaskStatuses.IN_PROGRESS },
+        {
+          instance_id: instance.id,
+          node_id: node.id,
+          status: TaskStatuses.IN_PROGRESS,
+        },
         tx,
       );
 
@@ -82,7 +86,9 @@ export const executionEngine = {
           input_variables: converterUtils.objectToJsonValue(
             contextManager.resolveForNode(context),
           ),
-          output_variables: converterUtils.objectToJsonValue(result.outputVariables),
+          output_variables: converterUtils.objectToJsonValue(
+            result.outputVariables,
+          ),
         },
         tx,
       );
@@ -110,7 +116,9 @@ export const executionEngine = {
           instance.id,
           {
             status: InstanceStatuses.COMPLETED,
-            output_variables: converterUtils.objectToJsonValue(result.outputVariables),
+            output_variables: converterUtils.objectToJsonValue(
+              result.outputVariables,
+            ),
             ended_on: new Date(),
           },
           tx,
@@ -120,11 +128,22 @@ export const executionEngine = {
 
       let updatedContext: WorkflowContext;
       if (node.type === NodeTypes.START) {
-        const constants = (result.outputVariables.constants ?? {}) as Record<string, unknown>;
-        updatedContext = contextManager.merge(context, constants, ContextVariableScopeType.GLOBAL);
+        const constants = (result.outputVariables.constants ?? {}) as Record<
+          string,
+          unknown
+        >;
+        updatedContext = contextManager.merge(
+          context,
+          constants,
+          ContextVariableScopeType.GLOBAL,
+        );
       } else {
         const cleared = contextManager.clearNextScope(context);
-        updatedContext = contextManager.merge(cleared, result.outputVariables, ContextVariableScopeType.GLOBAL);
+        updatedContext = contextManager.merge(
+          cleared,
+          result.outputVariables,
+          ContextVariableScopeType.GLOBAL,
+        );
       }
 
       const updatedInstance = await instanceRepository.updateById(
@@ -140,7 +159,12 @@ export const executionEngine = {
 
       let nextNodeIds: string[];
       try {
-        nextNodeIds = edgeResolver.resolveNextNodeIds(node.id, updatedContext, edges, nodes);
+        nextNodeIds = edgeResolver.resolveNextNodeIds(
+          node.id,
+          updatedContext,
+          edges,
+          nodes,
+        );
       } catch {
         const updated = await instanceRepository.updateById(
           instance.id,
@@ -159,7 +183,12 @@ export const executionEngine = {
         return { outcome: "failed", instance: updated };
       }
 
-      return { outcome: "next", instance: updatedInstance, nextNodeIds, context: updatedContext };
+      return {
+        outcome: "next",
+        instance: updatedInstance,
+        nextNodeIds,
+        context: updatedContext,
+      };
     });
   },
 };

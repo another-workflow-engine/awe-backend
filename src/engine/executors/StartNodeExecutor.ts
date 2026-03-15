@@ -68,7 +68,9 @@ export class StartNodeExecutor extends BaseExecutor {
       const url = urls[urlId];
       if (!url) continue;
       if (!(urlId in fetchedResponses)) {
-        const fetchableConfig = configuration.fetchables.find((f) => f.id === urlId);
+        const fetchableConfig = configuration.fetchables.find(
+          (f) => f.id === urlId,
+        );
         const headers: Record<string, string> = {};
         for (const h of fetchableConfig?.headers ?? []) {
           const headerVal = evaluate(h.valueExpression, constants);

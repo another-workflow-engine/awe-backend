@@ -59,7 +59,9 @@ export class EndNodeExecutor extends BaseExecutor {
     }
 
     return {
-      status: configuration.success ? TaskStatuses.COMPLETED : TaskStatuses.FAILED,
+      status: configuration.success
+        ? TaskStatuses.COMPLETED
+        : TaskStatuses.FAILED,
       outputVariables,
     };
   }

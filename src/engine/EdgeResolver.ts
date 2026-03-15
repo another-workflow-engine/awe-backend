@@ -6,6 +6,7 @@ import { contextManager } from "./ContextManager.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 
 export const edgeResolver = {
+  
   resolveNextNodeIds(
     completedNodeId: string,
     context: WorkflowContext,

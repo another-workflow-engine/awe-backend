@@ -16,38 +16,50 @@ import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { InstanceStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
+import { edgeService } from "./edge.services.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
 export const instanceService = {
-  createNew: async (data: CreateVersionInput, actor: ActorModel): Promise<InstanceModel> => {
-    const workflowVersion = await workflowVersionService.getActiveVersionByWorkflowId(
-      data.workflowId,
-    );
+  createNew: async (
+    data: CreateVersionInput,
+    actor: ActorModel,
+  ): Promise<InstanceModel> => {
+    const workflowVersion =
+      await workflowVersionService.getActiveVersionByWorkflowId(
+        data.workflowId,
+      );
     if (!workflowVersion) {
       throw new NotFoundError("No active workflow version found");
     }
 
-    const { instance, startNodeId } = await db.transaction().execute(async (tx) => {
-      const newInstance = await instanceRepository.insert(
-        {
-          workflow_version_id: workflowVersion.id,
-          started_on: new Date(),
-          status: InstanceStatuses.IN_PROGRESS,
-          input_variables: converterUtils.objectToJsonValue(data.context),
-          auto_advance: data.autoAdvance,
-          created_by: actor.id,
-        },
-        tx,
-      );
-      const startNode = await nodeService.getByStartNodeByWorkflowVersionIdOrThrow(
-        workflowVersion.id,
-        tx,
-      );
-      return { instance: newInstance, startNodeId: startNode.id };
-    });
+    const { instance, startNodeId } = await db
+      .transaction()
+      .execute(async (tx) => {
+        const newInstance = await instanceRepository.insert(
+          {
+            workflow_version_id: workflowVersion.id,
+            started_on: new Date(),
+            status: InstanceStatuses.IN_PROGRESS,
+            input_variables: converterUtils.objectToJsonValue(data.context),
+            auto_advance: data.autoAdvance,
+            created_by: actor.id,
+          },
+          tx,
+        );
+        const startNode =
+          await nodeService.getByStartNodeByWorkflowVersionIdOrThrow(
+            workflowVersion.id,
+            tx,
+          );
+        return { instance: newInstance, startNodeId: startNode.id };
+      });
 
-    await queueService.enqueue({ instanceId: instance.id, nodeId: startNodeId, context: contextManager.create() });
+    await queueService.enqueue({
+      instanceId: instance.id,
+      nodeId: startNodeId,
+      context: contextManager.create(),
+    });
     return instance;
   },
 
@@ -57,24 +69,31 @@ export const instanceService = {
 
   resumeInstance: async (instanceId: string): Promise<InstanceModel> => {
     const instance = await instanceRepository.findById(instanceId);
-    if (!instance) throw new NotFoundError(`Instance id=${instanceId} not found`);
+    if (!instance) {
+      throw new NotFoundError(`Instance`);
+    }
+
     if (instance.status !== InstanceStatuses.PAUSED) {
       throw new StateTransitionError(`Instance id=${instanceId} is not paused`);
     }
 
-    const lastTask = await taskRepository.findLastCompletedByInstanceId(instanceId);
+    const lastTask =
+      await taskRepository.findLastCreatedByInstanceId(instanceId);
     if (!lastTask) {
-      throw new DataIntegrityError(`No completed task found for instance id=${instanceId}`);
+      throw new DataIntegrityError(
+        `No task found for instance id=${instanceId}`,
+      );
     }
 
-    const nodes = await nodeRepository.findByWorkflowVersionId(instance.workflow_version_id);
-    const edges = await edgeRepository.findByNodeIds(nodes.map((n) => n.id));
-    const context = contextManager.fromJson(instance.current_variables);
-    const nextNodeIds = edgeResolver.resolveNextNodeIds(lastTask.node_id, context, edges, nodes);
+    const nextNodeIds = await edgeService.getNextNodeIdsBySourceNodeId(
+      lastTask.node_id,
+    );
 
     const updated = await instanceRepository.updateById(instanceId, {
       status: InstanceStatuses.IN_PROGRESS,
     });
+
+    const context = contextManager.fromJson(instance.current_variables);
 
     for (const nodeId of nextNodeIds) {
       await queueService.enqueue({ instanceId, nodeId, context });

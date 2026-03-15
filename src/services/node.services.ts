@@ -118,14 +118,20 @@ export const nodeService = {
     workflowVersion: WorkflowVersionModel,
     transaction?: Transaction<DB>,
   ): Promise<NodeModel[]> => {
-    return await nodeRepository.findByWorkflowVersionId(workflowVersion.id, transaction);
+    return await nodeRepository.findByWorkflowVersionId(
+      workflowVersion.id,
+      transaction,
+    );
   },
 
   deleteByWorkflowVersion: async (
     workflowVersion: WorkflowVersionModel,
     transaction?: Transaction<DB>,
   ): Promise<void> => {
-    await nodeRepository.deleteByWorkflowVersionId(workflowVersion.id, transaction);
+    await nodeRepository.deleteByWorkflowVersionId(
+      workflowVersion.id,
+      transaction,
+    );
   },
 
   getByStartNodeByWorkflowVersionIdOrThrow: async (

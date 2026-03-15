@@ -1,6 +1,9 @@
 import type { Request, Response } from "express";
 import { instanceService } from "../services/instance.service.js";
-import { InstanceCreateSchema, InstanceParamsSchema } from "../schemas/instance.schema.js";
+import {
+  InstanceCreateSchema,
+  InstanceParamsSchema,
+} from "../schemas/instance.schema.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 
 export const instanceController = {
@@ -13,11 +16,12 @@ export const instanceController = {
   getById: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const instance = await instanceService.getById(instanceId);
-    if (!instance) throw new NotFoundError(`Instance id=${instanceId} not found`);
+    if (!instance)
+      throw new NotFoundError(`Instance id=${instanceId} not found`);
     return res.json({ instance });
   },
 
-  resumeInstance: async (req: Request, res: Response) => {
+  advance: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const instance = await instanceService.resumeInstance(instanceId);
     return res.json({ instance });

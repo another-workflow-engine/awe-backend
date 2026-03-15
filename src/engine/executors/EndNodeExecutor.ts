@@ -54,6 +54,10 @@ export class EndNodeExecutor extends BaseExecutor {
       outputVariables[mapping.contextVariable.name] = result.value;
     }
 
+    if (configuration.message) {
+      outputVariables._message = configuration.message;
+    }
+
     return {
       status: configuration.success ? TaskStatuses.COMPLETED : TaskStatuses.FAILED,
       outputVariables,

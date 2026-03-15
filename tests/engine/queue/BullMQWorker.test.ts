@@ -116,6 +116,14 @@ describe("ExecutionWorker", () => {
       expect(instanceRepository.updateById).toHaveBeenCalledWith("inst-1", { status: InstanceStatuses.PAUSED });
     });
 
+    it("does not enqueue or update instance when outcome is 'user_task'", async () => {
+      jest.mocked(instanceRepository.findById).mockResolvedValueOnce(mockInstance as any);
+      jest.mocked(executionEngine.runNode).mockResolvedValueOnce({ outcome: "user_task", instance: mockInstance as any, taskId: "task-user" });
+      await capturedProcessor!(makeJob());
+      expect(mockQueueAdd).not.toHaveBeenCalled();
+      expect(instanceRepository.updateById).not.toHaveBeenCalled();
+    });
+
     it("does not enqueue next nodes when outcome is 'completed'", async () => {
       jest.mocked(instanceRepository.findById).mockResolvedValueOnce(mockInstance as any);
       jest.mocked(executionEngine.runNode).mockResolvedValueOnce({ outcome: "completed", instance: mockInstance as any });

@@ -5,6 +5,7 @@ import { nodeRepository } from "../../src/repositories/node.repository.js";
 import { edgeRepository } from "../../src/repositories/edge.repository.js";
 import { StartNodeExecutor } from "../../src/engine/executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "../../src/engine/executors/EndNodeExecutor.js";
+import { UserTaskExecutor } from "../../src/engine/executors/UserTaskExecutor.js";
 import { executionEngine } from "../../src/engine/ExecutionEngine.js";
 import { edgeResolver } from "../../src/engine/EdgeResolver.js";
 import { TaskStatuses, InstanceStatuses, NodeTypes } from "../../src/types/enums.js";
@@ -32,6 +33,11 @@ jest.mock("../../src/engine/executors/StartNodeExecutor.js", () => ({
 }));
 jest.mock("../../src/engine/executors/EndNodeExecutor.js", () => ({
   EndNodeExecutor: jest.fn().mockImplementation(function (this: any) {
+    this.execute = jest.fn();
+  }),
+}));
+jest.mock("../../src/engine/executors/UserTaskExecutor.js", () => ({
+  UserTaskExecutor: jest.fn().mockImplementation(function (this: any) {
     this.execute = jest.fn();
   }),
 }));
@@ -75,6 +81,7 @@ const baseNodeProps = {
 const startNode: NodeModel = { ...baseNodeProps, id: "node-start", client_id: "client-start", type: NodeTypes.START };
 const endNode: NodeModel = { ...baseNodeProps, id: "node-end", client_id: "client-end", type: NodeTypes.END };
 const userNode: NodeModel = { ...baseNodeProps, id: "node-user", client_id: "client-user", type: "user" };
+const serviceNode: NodeModel = { ...baseNodeProps, id: "node-service", client_id: "client-service", type: "service" };
 
 const baseEdgeProps = {
   name: null,
@@ -98,9 +105,11 @@ const edgeStartToEnd: EdgeModel = {
 
 const mockTask1: TaskModel = { id: "task-1", instance_id: "inst-1", node_id: "node-start", status: "in_progress", created_on: new Date() };
 const mockTask2: TaskModel = { id: "task-2", instance_id: "inst-1", node_id: "node-end", status: "in_progress", created_on: new Date() };
+const mockTaskUser: TaskModel = { id: "task-user", instance_id: "inst-1", node_id: "node-user", status: "in_progress", created_on: new Date() };
 const mockInstanceWithVars: InstanceModel = { ...mockInstance, current_variables: { global: { amount: 500 }, next: {} } };
 const mockCompletedInstance: InstanceModel = { ...mockInstance, status: "completed" };
 const mockFailedInstance: InstanceModel = { ...mockInstance, status: "failed" };
+const mockPausedInstance: InstanceModel = { ...mockInstance, status: "paused" };
 
 const completedStartResult = {
   status: TaskStatuses.COMPLETED,
@@ -114,10 +123,12 @@ const completedEndResult = {
 
 let startExecMock: jest.Mock;
 let endExecMock: jest.Mock;
+let userExecMock: jest.Mock;
 
 beforeAll(() => {
   startExecMock = (jest.mocked(StartNodeExecutor).mock.instances[0] as any).execute;
   endExecMock = (jest.mocked(EndNodeExecutor).mock.instances[0] as any).execute;
+  userExecMock = (jest.mocked(UserTaskExecutor).mock.instances[0] as any).execute;
 });
 
 describe("ExecutionEngine", () => {
@@ -181,12 +192,29 @@ describe("ExecutionEngine", () => {
     });
 
     it("node type has no registered executor → throws StateTransitionError", async () => {
-      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, userNode]);
-      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, serviceNode]);
 
       await expect(
-        executionEngine.runNode(mockInstance, "node-user", emptyContext),
+        executionEngine.runNode(mockInstance, "node-service", emptyContext),
       ).rejects.toThrow(StateTransitionError);
+    });
+
+    it("user task node returns IN_PROGRESS → outcome 'user_task', instance set to PAUSED", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, userNode]);
+      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTaskUser);
+      userExecMock.mockResolvedValueOnce({ status: TaskStatuses.IN_PROGRESS, outputVariables: { requestData: {}, responseMap: [] } });
+      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockPausedInstance);
+
+      const result = await executionEngine.runNode(mockInstance, "node-user", emptyContext);
+      expect(result.outcome).toBe("user_task");
+      if (result.outcome === "user_task") {
+        expect(result.taskId).toBe("task-user");
+      }
+      expect(jest.mocked(instanceRepository.updateById)).toHaveBeenCalledWith(
+        mockInstance.id,
+        expect.objectContaining({ status: InstanceStatuses.PAUSED }),
+        {},
+      );
     });
 
     it("no outgoing edges → outcome 'failed'", async () => {

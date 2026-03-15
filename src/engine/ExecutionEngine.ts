@@ -11,6 +11,7 @@ import { contextManager } from "./ContextManager.js";
 import { edgeResolver } from "./EdgeResolver.js";
 import { StartNodeExecutor } from "./executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "./executors/EndNodeExecutor.js";
+import { UserTaskExecutor } from "./executors/UserTaskExecutor.js";
 import type { BaseExecutor } from "./executors/BaseExecutor.js";
 import {
   ContextVariableScopeType,
@@ -25,6 +26,7 @@ import { StateTransitionError } from "../errors/StateTransitionError.js";
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
   [NodeTypes.END]: new EndNodeExecutor(),
+  [NodeTypes.USER]: new UserTaskExecutor(),
 };
 
 export const executionEngine = {
@@ -92,6 +94,15 @@ export const executionEngine = {
           tx,
         );
         return { outcome: "failed", instance: updated };
+      }
+
+      if (result.status === TaskStatuses.IN_PROGRESS) {
+        const updated = await instanceRepository.updateById(
+          instance.id,
+          { status: InstanceStatuses.PAUSED },
+          tx,
+        );
+        return { outcome: "user_task", instance: updated, taskId: task.id };
       }
 
       if (node.type === NodeTypes.END) {

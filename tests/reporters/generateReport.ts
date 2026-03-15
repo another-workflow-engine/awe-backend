@@ -87,8 +87,8 @@ for (const suite of data.testResults) {
   const suiteStatus = suite.status === "passed" ? "✅" : "❌";
   lines.push(`## ${suiteStatus} ${relativePath}`);
   lines.push(``);
-  lines.push(`| Test Case | Description | Expected Result | Actual Result | Status | Error Details | Additional Notes |`);
-  lines.push(`|-----------|-------------|-----------------|---------------|--------|---------------|-----------------|`);
+  lines.push(`| Test Case | Description | Steps | Expected Result | Actual Result | Status | Error Details | Additional Notes |`);
+  lines.push(`|-----------|-------------|-------|-----------------|---------------|--------|---------------|-----------------|`);
 
   for (const test of suite.assertionResults) {
     const isPassed = test.status === "passed";
@@ -98,6 +98,11 @@ for (const suite of data.testResults) {
       test.ancestorTitles.length > 0
         ? `${test.ancestorTitles.join(" › ")} › ${test.title}`
         : test.title,
+    );
+    const steps = sanitizeCell(
+      test.ancestorTitles.length > 0
+        ? test.ancestorTitles.map((t, i) => `${i + 1}. ${t}`).join("; ")
+        : "1. Execute test",
     );
     const expected = sanitizeCell(deriveExpected(test.title));
     const actualResult = isPassed
@@ -112,7 +117,7 @@ for (const suite of data.testResults) {
     const additionalNotes =
       test.duration != null ? `${test.duration}ms` : "—";
 
-    lines.push(`| ${title} | ${description} | ${expected} | ${actualResult} | ${statusIcon} | ${errorDetails} | ${additionalNotes} |`);
+    lines.push(`| ${title} | ${description} | ${steps} | ${expected} | ${actualResult} | ${statusIcon} | ${errorDetails} | ${additionalNotes} |`);
   }
 
   lines.push(``);

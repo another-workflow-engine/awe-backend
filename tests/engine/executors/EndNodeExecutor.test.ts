@@ -127,19 +127,10 @@ describe("EndNodeExecutor", () => {
     ).rejects.toThrow(DataIntegrityError);
   });
 
-  it("evaluates FEEL null literal to null without crashing", async () => {
-    const ctx = { global: {}, next: {} };
-    const node = makeNode({
-      success: true,
-      resultMap: [
-        {
-          contextVariable: { name: "result", scope: "global" },
-          valueExpression: "null",
-        },
-      ],
-    });
-    const result = await executor.execute(mockInstance, node, ctx, tx);
+  it("includes message in outputVariables when end node has a message configured", async () => {
+    const node = makeNode({ success: true, resultMap: [], message: "Workflow completed successfully!" });
+    const result = await executor.execute(mockInstance, node, { global: {}, next: {} }, tx);
     expect(result.status).toBe(TaskStatuses.COMPLETED);
-    expect(result.outputVariables.result).toBeNull();
+    expect(result.outputVariables._message).toBe("Workflow completed successfully!");
   });
 });

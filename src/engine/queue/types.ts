@@ -10,5 +10,6 @@ export interface QueueJob {
 export type NodeRunResult =
   | { outcome: "failed"; instance: InstanceModel }
   | { outcome: "completed"; instance: InstanceModel }
-  | { outcome: "next"; instance: InstanceModel; nextNodeIds: string[]; context: WorkflowContext };
+  | { outcome: "next"; instance: InstanceModel; nextNodeIds: string[]; context: WorkflowContext }
+  | { outcome: "user_task"; instance: InstanceModel; taskId: string };
 

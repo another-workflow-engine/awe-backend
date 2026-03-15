@@ -8,6 +8,15 @@ import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { TaskStatuses } from "../../types/enums.js";
 import { converterUtils } from "../../utils/converter.utils.js";
+import { fetchService } from "../../services/fetch.service.js";
+
+function getByPath(data: unknown, path: string): unknown {
+  const parts = path.split(".").filter(Boolean);
+  return parts.reduce<unknown>((acc, key) => {
+    if (acc === null || acc === undefined) return undefined;
+    return (acc as Record<string, unknown>)[key];
+  }, data);
+}
 
 export class StartNodeExecutor extends BaseExecutor {
   async execute(
@@ -53,6 +62,24 @@ export class StartNodeExecutor extends BaseExecutor {
       }
       urls[f.id] = result.value;
     });
+
+    const fetchedResponses: Record<string, unknown> = {};
+    for (const [varName, { urlId, jsonPath }] of Object.entries(fetchables)) {
+      const url = urls[urlId];
+      if (!url) continue;
+      if (!(urlId in fetchedResponses)) {
+        const fetchableConfig = configuration.fetchables.find((f) => f.id === urlId);
+        const headers: Record<string, string> = {};
+        for (const h of fetchableConfig?.headers ?? []) {
+          const headerVal = evaluate(h.valueExpression, constants);
+          if (typeof headerVal.value === "string") {
+            headers[h.key] = headerVal.value;
+          }
+        }
+        fetchedResponses[urlId] = await fetchService.get(url, headers);
+      }
+      constants[varName] = getByPath(fetchedResponses[urlId], jsonPath);
+    }
 
     return {
       status: TaskStatuses.COMPLETED,

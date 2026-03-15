@@ -1,6 +1,9 @@
 import type { Request, Response } from "express";
 import { instanceService } from "../services/instance.service.js";
-import { InstanceCreateSchema, InstanceParamsSchema } from "../schemas/instance.schema.js";
+import {
+  InstanceCreateSchema,
+  InstanceParamsSchema,
+} from "../schemas/instance.schema.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 
 export const instanceController = {
@@ -22,9 +25,9 @@ export const instanceController = {
     return res.json({ instance });
   },
 
-  resumeInstance: async (req: Request, res: Response) => {
+  advance: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.resumeInstance(instanceId, req.actor.id);
+    const instance = await instanceService.advanceInstance(instanceId, req.actor.id);
     return res.json({ instance });
   },
 };

@@ -35,25 +35,17 @@ export const taskRepository = {
     }
   },
 
-  findLastCompletedByInstanceId: async (
+  findLastCreatedByInstanceId: async (
     instanceId: string,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel | undefined> => {
-    try {
-      return await (transaction ?? db)
-        .selectFrom("task")
-        .selectAll()
-        .where("instance_id", "=", instanceId)
-        .where("status", "=", TaskStatuses.COMPLETED)
-        .orderBy("created_on", "desc")
-        .limit(1)
-        .executeTakeFirst();
-    } catch (err) {
-      throw new RepositoryError(
-        `Find last completed task for instance id=${instanceId} failed`,
-        err,
-      );
-    }
+    return await (transaction ?? db)
+      .selectFrom("task")
+      .selectAll()
+      .where("instance_id", "=", instanceId)
+      .orderBy("created_on", "desc")
+      .limit(1)
+      .executeTakeFirst();
   },
 
   insert: async (

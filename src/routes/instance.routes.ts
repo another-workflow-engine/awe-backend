@@ -6,5 +6,13 @@ export const instanceRouter = Router();
 
 instanceRouter.get("/", authenticateRequest, instanceController.list);
 instanceRouter.post("/", authenticateRequest, instanceController.create);
-instanceRouter.get("/:instanceId", authenticateRequest, instanceController.getById);
-instanceRouter.post("/:instanceId/resume", authenticateRequest, instanceController.resumeInstance);
+instanceRouter.get(
+  "/:instanceId",
+  authenticateRequest,
+  instanceController.getById,
+);
+instanceRouter.post(
+  "/:instanceId/advance",
+  authenticateRequest,
+  instanceController.advance,
+);

@@ -27,14 +27,16 @@ export class ExecutionWorker {
     );
 
     this.worker.on("failed", (job, err) => {
-      console.error(`[Worker] ✗ BullMQ job ${job?.id} failed:`, err.message);
+      console.error(`[Worker] BullMQ job ${job?.id} failed:`, err.message);
     });
 
     this.worker.on("completed", (job) => {
-      console.log(`[Worker] ✓ BullMQ job ${job.id} completed`);
+      console.log(`[Worker] BullMQ job ${job.id} completed`);
     });
 
-    console.log(`[Worker] ExecutionWorker started, listening on queue "${EXECUTION_QUEUE_NAME}" (concurrency=10)`);
+    console.log(
+      `[Worker] ExecutionWorker started, listening on queue "${EXECUTION_QUEUE_NAME}" (concurrency=10)`,
+    );
   }
 
   async close(): Promise<void> {
@@ -43,24 +45,34 @@ export class ExecutionWorker {
 
   private async processJob(job: Job<QueueJob>): Promise<void> {
     const { instanceId, nodeId, context } = job.data;
-    console.log(`\n[Worker] ▶ Job ${job.id} — instanceId=${instanceId} nodeId=${nodeId}`);
+    console.log(
+      `\n[Worker] Job ${job.id} — instanceId=${instanceId} nodeId=${nodeId}`,
+    );
 
     const instance = await instanceRepository.findById(instanceId);
     if (!instance) {
-      console.warn(`[Worker] ✗ Instance ${instanceId} not found — skipping`);
+      console.warn(`[Worker] Instance ${instanceId} not found — skipping`);
       return;
     }
     if (instance.status !== InstanceStatuses.IN_PROGRESS) {
-      console.warn(`[Worker] ✗ Instance ${instanceId} status="${instance.status}" (not in_progress) — skipping`);
+      console.warn(
+        `[Worker] Instance ${instanceId} status="${instance.status}" (not in_progress) — skipping`,
+      );
       return;
     }
 
     const result = await executionEngine.runNode(instance, nodeId, context);
-    console.log(`[Worker] ◀ runNode outcome="${result.outcome}" instanceId=${instanceId} nodeId=${nodeId}`);
+    console.log(
+      `[Worker] runNode outcome="${result.outcome}" instanceId=${instanceId} nodeId=${nodeId}`,
+    );
 
     if (result.outcome === "next") {
       if (instance.auto_advance) {
-        console.log(`[Worker] ↪ Auto-advancing instance=${instanceId} to nodes: [${result.nextNodeIds.join(", ")}]`);
+        console.log(
+          `[Worker] Auto-advancing instance=${instanceId} to nodes: [${result.nextNodeIds.join(
+            ", ",
+          )}]`,
+        );
         for (const nextNodeId of result.nextNodeIds) {
           await this.queue.add(
             "execute-node",
@@ -74,20 +86,26 @@ export class ExecutionWorker {
               ...JOB_OPTIONS,
             },
           );
-          console.log(`[Worker] ✚ Enqueued nodeId=${nextNodeId} for instanceId=${instanceId}`);
+          console.log(
+            `[Worker] Enqueued nodeId=${nextNodeId} for instanceId=${instanceId}`,
+          );
         }
       } else {
-        console.log(`[Worker] ⏸ auto_advance=false — pausing instance=${instanceId}`);
+        console.log(
+          `[Worker] auto_advance=false — pausing instance=${instanceId}`,
+        );
         await instanceRepository.updateById(instanceId, {
           status: InstanceStatuses.PAUSED,
         });
       }
     } else if (result.outcome === "user_task") {
-      console.log(`[Worker] 👤 User task created — taskId=${result.taskId} instance=${instanceId} now PAUSED`);
+      console.log(
+        `[Worker] User task created — taskId=${result.taskId} instance=${instanceId} now PAUSED`,
+      );
     } else if (result.outcome === "completed") {
-      console.log(`[Worker] ✅ Instance ${instanceId} COMPLETED`);
+      console.log(`[Worker] Instance ${instanceId} COMPLETED`);
     } else if (result.outcome === "failed") {
-      console.log(`[Worker] ❌ Instance ${instanceId} FAILED`);
+      console.log(`[Worker] Instance ${instanceId} FAILED`);
     }
   }
 }

@@ -29,6 +29,7 @@ export const instanceRepository = {
           eb.ref("workflow.name").as("workflow_name"),
         ])
         .where("workflow.created_by", "=", actorId)
+        .where("instance.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .execute() as unknown as InstanceListItem[];
     } catch (err) {

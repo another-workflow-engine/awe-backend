@@ -22,12 +22,6 @@ function getByPath(data: unknown, path: string): unknown {
   }, data);
 }
 
-/**
- * Coerces a raw value (typically from a JSON HTTP response) to the FEEL type
- * declared in the workflow's inputDataMap.  Without this step a JSON string
- * like `"7"` cannot be compared to a number literal in a FEEL expression
- * because FEEL equality (`==`) does not perform type coercion.
- */
 function coerceToDataType(
   value: unknown,
   dataType: string | undefined,

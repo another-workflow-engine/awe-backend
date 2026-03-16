@@ -68,6 +68,7 @@ export const instanceRepository = {
       .selectAll("instance")
       .select((eb) => [
         eb.ref("workflow_version.version").as("version_number"),
+        eb.ref("workflow.name").as("workflow_name"),
       ])
       .where("instance.id", "=", id)
       .where("workflow.created_by", "=", actorId)

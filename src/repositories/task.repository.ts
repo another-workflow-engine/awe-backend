@@ -8,11 +8,13 @@ import { TaskStatuses, NodeTypes } from "../types/enums.js";
 export type TaskListItem = TaskModel & {
   node_configuration: unknown;
   workflow_name: string;
+  version_number: number | null;
 };
 
 export type TaskDetailItem = TaskModel & {
   node_configuration: unknown;
   workflow_name: string;
+  version_number: number | null;
   instance_context: unknown | null;
 };
 
@@ -96,6 +98,7 @@ export const taskRepository = {
         .select((eb) => [
           eb.ref("node.configuration").as("node_configuration"),
           eb.ref("workflow.name").as("workflow_name"),
+          eb.ref("workflow_version.version").as("version_number"),
           eb.ref("instance.current_variables").as("instance_context"),
         ])
         .where("task.status", "=", TaskStatuses.IN_PROGRESS)
@@ -127,6 +130,7 @@ export const taskRepository = {
         .select((eb) => [
           eb.ref("node.configuration").as("node_configuration"),
           eb.ref("workflow.name").as("workflow_name"),
+          eb.ref("workflow_version.version").as("version_number"),
           eb.ref("instance.current_variables").as("instance_context"),
         ])
         .where("task.id", "=", id)

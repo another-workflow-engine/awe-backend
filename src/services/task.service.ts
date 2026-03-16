@@ -4,7 +4,6 @@ import {
 } from "../repositories/task.repository.js";
 import { UserNodeConfigurationSchema } from "../schemas/node.schema.js";
 import { contextManager } from "../engine/ContextManager.js";
-import { buildFeelContext } from "../utils/contextResolver.js";
 import { evaluate } from "@bpmn-io/feelin";
 import type { JsonValue } from "../types/database.js";
 
@@ -24,7 +23,25 @@ export interface ResolvedTask {
   };
 }
 
-async function resolveTask(task: TaskDetailItem): Promise<ResolvedTask> {
+function buildLocalFeelContext(
+  context: { global: Record<string, unknown> },
+): { context: Record<string, unknown> } {
+  const global = context.global;
+  const constants = (global.constants as Record<string, unknown>) ?? {};
+
+  const structuralKeys = new Set(["constants", "fetchables", "urls"]);
+  const variables: Record<string, unknown> = { ...constants };
+
+  for (const [key, val] of Object.entries(global)) {
+    if (!structuralKeys.has(key)) {
+      variables[key] = val;
+    }
+  }
+
+  return { context: variables };
+}
+
+function resolveTask(task: TaskDetailItem): ResolvedTask {
   const configParsed = UserNodeConfigurationSchema.safeParse(
     task.node_configuration,
   );
@@ -35,10 +52,10 @@ async function resolveTask(task: TaskDetailItem): Promise<ResolvedTask> {
   }
 
   const config = configParsed.data;
-  const context = contextManager.fromJson(
+  const wfContext = contextManager.fromJson(
     task.instance_context as JsonValue,
   );
-  const feelContext = await buildFeelContext(context);
+  const feelContext = buildLocalFeelContext(wfContext);
 
   const resolvedRequestMap = config.requestMap.map((field) => {
     const result = evaluate(field.valueExpression, feelContext);
@@ -69,7 +86,7 @@ async function resolveTask(task: TaskDetailItem): Promise<ResolvedTask> {
 export const taskService = {
   listPending: async (actorId: string): Promise<ResolvedTask[]> => {
     const tasks = await taskRepository.findAllPending(actorId);
-    return Promise.all(tasks.map(resolveTask));
+    return tasks.map(resolveTask);
   },
 
   getTask: async (

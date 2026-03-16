@@ -9,10 +9,10 @@ describe("ContextManager", () => {
   });
 
   describe("merge()", () => {
-    it("merges vars into global scope", () => {
+    it("merges vars into global.constants", () => {
       const ctx = contextManager.create();
       const merged = contextManager.merge(ctx, { x: 1 });
-      expect(merged.global).toEqual({ x: 1 });
+      expect(merged.global).toEqual({ constants: { x: 1 } });
     });
 
     it("does not mutate the original context object", () => {
@@ -25,7 +25,7 @@ describe("ContextManager", () => {
     it("merges new vars on top of existing global vars", () => {
       const ctx = { global: { a: 1, b: 2 } };
       const merged = contextManager.merge(ctx, { b: 99, c: 3 });
-      expect(merged.global).toEqual({ a: 1, b: 99, c: 3 });
+      expect(merged.global).toEqual({ a: 1, b: 2, constants: { b: 99, c: 3 } });
     });
   });
 

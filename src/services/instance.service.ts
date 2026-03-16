@@ -86,7 +86,7 @@ export const instanceService = {
     instanceId: string,
     actorId: string,
   ): Promise<InstanceModel | undefined> => {
-    return instanceRepository.findByIdForActor(instanceId, actorId);
+    return instanceRepository.findDetailByIdForActor(instanceId, actorId);
   },
 
   advanceInstance: async (

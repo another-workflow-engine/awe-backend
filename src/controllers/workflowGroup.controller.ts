@@ -27,12 +27,13 @@ export const workflowGroupController = {
   list: async (req: Request, res: Response) => {
     const workflows = await workflowService.getAll(req.actor);
     const formattedWorkflows = workflows.map(
-      ({ workflow, latestWorkflowVersion }) => {
+      ({ workflow, latestWorkflowVersion, status }) => {
         return {
           id: workflow.id,
           name: workflow.name,
           description: workflow.description,
           latestVersion: latestWorkflowVersion,
+          status: status,
           createdAt: workflow.created_on,
           updatedAt: workflow.modified_on,
         };

@@ -292,7 +292,7 @@ describe("ExecutionEngine", () => {
       const result = await executionEngine.runNode(mockInstance, "node-user", incomingContext);
       expect(result.outcome).toBe("next");
       if (result.outcome === "next") {
-        expect(result.context.global).toMatchObject({ existing: "kept", newVar: 42 });
+        expect(result.context.global).toMatchObject({ existing: "kept", constants: { newVar: 42 } });
       }
     });
 

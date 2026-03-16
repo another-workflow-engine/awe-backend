@@ -3,6 +3,7 @@ import type { DB, Workflow } from "../types/database.js";
 import type { Insertable, Transaction, Updateable } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type { WorkflowModel, WorkflowVersionModel } from "../types/models.js";
+import type {WorkflowVersionStatus} from "../types/database.js"
 
 type NewWorkflow = Insertable<Workflow>;
 type UpdateWorkflow = Updateable<Workflow>;
@@ -51,46 +52,58 @@ export const workflowRepository = {
   },
 
   findByEnvironmentIdWithLatestVersion: async (
-    environemntId: string,
-    transaction?: Transaction<DB>,
-  ): Promise<
-    {
-      workflow: WorkflowModel;
-      latestWorkflowVersion: number | null;
-    }[]
-  > => {
-    const dbConn = transaction ?? db;
-    const workflows = await dbConn
-      .selectFrom("workflow")
-      .selectAll()
-      .where("environment_id", "=", environemntId)
-      .where("is_deleted", "=", false)
-      .execute();
+  environemntId: string,
+  transaction?: Transaction<DB>,
+): Promise<
+  {
+    workflow: WorkflowModel;
+    status: WorkflowVersionStatus | null;
+    latestWorkflowVersion: number | null;
+  }[]
+> => {
+  const dbConn = transaction ?? db;
 
-    const workflowIds = workflows.map((w) => w.id);
+  const workflows = await dbConn
+    .selectFrom("workflow")
+    .selectAll()
+    .where("environment_id", "=", environemntId)
+    .where("is_deleted", "=", false)
+    .execute();
 
-    if (workflowIds.length === 0) {
-      return [];
-    }
+  const workflowIds = workflows.map((w) => w.id);
 
-    const versions = await dbConn
-      .selectFrom("workflow_version")
-      .select(["workflow_id", dbConn.fn.max("version").as("max_version")])
-      .where("workflow_id", "in", workflowIds)
-      .where("is_deleted", "=", false)
-      .groupBy("workflow_id")
-      .execute();
+  if (workflowIds.length === 0) {
+    return [];
+  }
 
-    const versionMap = new Map(
-      versions.map((v) => [
-        v.workflow_id,
-        v.max_version !== null ? Number(v.max_version) : null,
-      ]),
-    );
+  const versions = await dbConn
+    .selectFrom("workflow_version")
+    .select(["workflow_id", "version", "status"])
+    .where("workflow_id", "in", workflowIds)
+    .where("is_deleted", "=", false)
+    .distinctOn("workflow_id")
+    .orderBy("workflow_id")
+    .orderBy("version", "desc")
+    .execute();
 
-    return workflows.map((wf) => ({
+  const versionMap = new Map(
+    versions.map((v) => [
+      v.workflow_id,
+      {
+        version: Number(v.version),
+        status: v.status,
+      },
+    ]),
+  );
+
+  return workflows.map((wf) => {
+    const versionInfo = versionMap.get(wf.id);
+
+    return {
       workflow: wf,
-      latestWorkflowVersion: versionMap.get(wf.id) ?? null,
-    }));
-  },
+      status: versionInfo?.status ?? null,
+      latestWorkflowVersion: versionInfo?.version ?? null,
+    };
+  });
+},
 };

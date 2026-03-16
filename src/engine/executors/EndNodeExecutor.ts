@@ -59,7 +59,7 @@ export class EndNodeExecutor extends BaseExecutor {
     }
 
     return {
-      status: TaskStatuses.FAILED,
+      status: TaskStatuses.COMPLETED,
       outputVariables,
     };
   }

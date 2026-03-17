@@ -11,6 +11,7 @@ const Config = {
   REDIS_HOST: process.env.REDIS_HOST,
   REDIS_PORT: process.env.REDIS_PORT,
   REDIS_PASSWORD: process.env.REDIS_PASSWORD,
+  EXECUTION_QUEUE_NAME: process.env.EXECUTION_QUEUE_NAME,
 };
 
 function validateConfig(config: Record<string, string | undefined>) {

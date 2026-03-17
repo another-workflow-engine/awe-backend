@@ -1,13 +1,12 @@
 import type { Transaction } from "kysely";
 import type { DB } from "../../types/database.js";
-import type { InstanceModel, NodeModel } from "../../types/models.js";
-import type { WorkflowContext, ExecutorResult } from "../types.js";
+import type { NodeModel } from "../../types/models.js";
+import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 
 export abstract class BaseExecutor {
   abstract execute(
-    instance: InstanceModel,
     node: NodeModel,
-    context: WorkflowContext,
-    transaction: Transaction<DB>,
+    inputVariables: ContextVariables,
+    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult>;
 }

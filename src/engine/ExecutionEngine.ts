@@ -1,14 +1,4 @@
 import { db } from "../database.js";
-import type { InstanceModel } from "../types/models.js";
-import type { ExecutorResult, WorkflowContext } from "./types.js";
-import type { NodeRunResult } from "./queue/types.js";
-import { instanceRepository } from "../repositories/instance.repository.js";
-import { taskRepository } from "../repositories/task.repository.js";
-import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
-import { nodeRepository } from "../repositories/node.repository.js";
-import { edgeRepository } from "../repositories/edge.repository.js";
-import { contextManager } from "./ContextManager.js";
-import { edgeResolver } from "./EdgeResolver.js";
 import { StartNodeExecutor } from "./executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "./executors/EndNodeExecutor.js";
 import { UserTaskExecutor } from "./executors/UserTaskExecutor.js";
@@ -16,307 +6,173 @@ import { DecisionNodeExecutor } from "./executors/DecisionNodeExecutor.js";
 import type { BaseExecutor } from "./executors/BaseExecutor.js";
 import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { converterUtils } from "../utils/converter.utils.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { StateTransitionError } from "../errors/StateTransitionError.js";
-import { executionLogger } from "../utils/executionLogger.js";
+import { ScriptNodeExecutor } from "./executors/ScriptNodeExecutor.js";
+import { taskService } from "../services/task.service.js";
+import { taskExecutionService } from "../services/taskExecution.service.js";
+import { instanceService } from "../services/instance.service.js";
+import type { InstanceStatus } from "../types/database.js";
+import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
+import type {
+  ContextVariables,
+  ExecutorResult,
+  NodeRunResult,
+} from "../types/engine.js";
+import { instanceRepository } from "../repositories/instance.repository.js";
+import { taskRepository } from "../repositories/task.repository.js";
 
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
   [NodeTypes.END]: new EndNodeExecutor(),
-  [NodeTypes.USER]: new UserTaskExecutor(),
-  [NodeTypes.DECISION]: new DecisionNodeExecutor(),
+  // [NodeTypes.USER]: new UserTaskExecutor(),
+  // [NodeTypes.DECISION]: new DecisionNodeExecutor(),
+  [NodeTypes.SCRIPT]: new ScriptNodeExecutor(),
 };
 
 export const executionEngine = {
   runNode: async (
     instance: InstanceModel,
-    nodeId: string,
-    context: WorkflowContext,
+    node: NodeModel,
+    task: TaskModel,
   ): Promise<NodeRunResult> => {
-    return db.transaction().execute(async (tx) => {
-      const node = await nodeRepository.findById(nodeId, tx);
+    const res = await Promise.all([
+      instanceRepository.updateById(instance.id, {
+        status: InstanceStatuses.IN_PROGRESS,
+      }),
+      taskRepository.updateById(task.id, {
+        status: TaskStatuses.IN_PROGRESS,
+      }),
+    ]);
 
-      if (!node) {
-        throw new DataIntegrityError(
-          `Node id=${nodeId} not found in for instance id=${instance.id}`,
-        );
+    const inputVariablesJson = converterUtils.jsonValueToObject(
+      instance.input_variables,
+    );
+
+    const inputVariables =
+      node.type === NodeTypes.START
+        ? ({
+            constants: inputVariablesJson,
+            fetchables: {},
+            urls: {},
+          } as ContextVariables)
+        : (converterUtils.jsonValueToObject(
+            instance.current_variables,
+          ) as ContextVariables);
+
+    // console.log(instance.input_variables);
+    // console.log(inputVariablesJson);
+    // console.log(inputVariables);
+
+    const executor = executors[node.type];
+    if (!executor) {
+      throw new Error(`Executor for node type="${node.type}" not found`);
+    }
+
+    const taskExecution = await taskExecutionService.startNew(
+      task.id,
+      TaskStatuses.IN_PROGRESS,
+      inputVariables,
+    );
+
+    let result: ExecutorResult = {
+      status: TaskStatuses.IN_PROGRESS,
+      outputVariables: {},
+      nextNodeId: null,
+    };
+
+    let nodeThrew = false;
+
+    try {
+      result = await executor.execute(node, inputVariables);
+    } catch (err) {
+      console.error(err);
+      nodeThrew = true;
+      let message = "Unknown error";
+
+      if (err instanceof Error) {
+        message = err.message;
       }
-
-      const executor = executors[node.type];
-      if (!executor) {
-        throw new StateTransitionError(
-          `No executor available for node type="${node.type}"`,
-        );
-      }
-
-      const startedOn = new Date();
-      const task = await taskRepository.insert(
-        {
-          instance_id: instance.id,
-          node_id: node.id,
-          status: TaskStatuses.IN_PROGRESS,
-        },
-        tx,
-      );
-
-      const taskExecution = await taskExecutionRepository.insert(
-        {
-          task_id: task.id,
-          status: TaskStatuses.IN_PROGRESS,
-          started_on: startedOn,
-          input_variables: converterUtils.objectToJsonValue(
-            contextManager.resolveForNode(context),
-          ),
-        },
-        tx,
-      );
-
-      executionLogger.nodeStart({
-        instanceId: instance.id,
-        nodeId: node.id,
-        nodeType: node.type,
-        nodeName: node.name ?? null,
-        startedAt: startedOn,
-      });
-
-      let result: ExecutorResult;
-      try {
-        result = await executor.execute(instance, node, context, tx);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        result = {
-          status: TaskStatuses.FAILED,
-          outputVariables: {},
-          error: msg,
-        };
-      }
-
-      await taskExecutionRepository.updateById(
-        taskExecution.id,
-        {
-          status: result.status,
-          ended_on: new Date(),
-          output_variables: converterUtils.objectToJsonValue(
-            result.outputVariables,
-          ),
-        },
-        tx,
-      );
-
-      await taskRepository.updateById(task.id, { status: result.status }, tx);
-
-      executionLogger.nodeComplete({
-        instanceId: instance.id,
-        nodeId: node.id,
-        nodeType: node.type,
-        startedAt: startedOn,
-        status: result.status,
-        outputKeys: Object.keys(result.outputVariables),
-        ...(result.error !== undefined ? { error: result.error } : {}),
-      });
-
-      // End node
-      if (node.type === NodeTypes.END) {
-        const instanceStatus =
-          result.status === TaskStatuses.FAILED
-            ? InstanceStatuses.FAILED
-            : InstanceStatuses.COMPLETED;
-
-        const endedAt = new Date();
-        const instanceStarted = new Date(
-          instance.started_on as unknown as string,
-        );
-
-        const updated = await instanceRepository.updateById(
-          instance.id,
-          {
-            status: instanceStatus,
-            output_variables: converterUtils.objectToJsonValue(
-              result.outputVariables,
-            ),
-            ended_on: endedAt,
-          },
-          tx,
-        );
-
-        const resultMapping = Object.entries(result.outputVariables).map(
-          ([name, value]) => ({ name, value }),
-        );
-        const endMsg = (result.outputVariables as Record<string, unknown>)
-          ?.message as string | undefined;
-
-        if (instanceStatus === InstanceStatuses.COMPLETED) {
-          executionLogger.endNodeSuccess({
-            instanceId: instance.id,
-            nodeId: node.id,
-            completedAt: endedAt,
-            resultMapping,
-            instanceStarted,
-            ...(endMsg !== undefined ? { message: endMsg } : {}),
-          });
-          executionLogger.instanceSummary({
-            instanceId: instance.id,
-            workflowVersionId: instance.workflow_version_id,
-            startedAt: instanceStarted,
-            endedAt,
-            status: "completed",
-            ...(endMsg !== undefined ? { completionMessage: endMsg } : {}),
-          });
-        } else {
-          executionLogger.endNodeFailure({
-            instanceId: instance.id,
-            nodeId: node.id,
-            failedAt: endedAt,
-            instanceStarted,
-            ...(endMsg !== undefined ? { message: endMsg } : {}),
-            ...(result.error !== undefined ? { reason: result.error } : {}),
-          });
-          executionLogger.instanceSummary({
-            instanceId: instance.id,
-            workflowVersionId: instance.workflow_version_id,
-            startedAt: instanceStarted,
-            endedAt,
-            status: "failed",
-            ...(result.error !== undefined
-              ? { failureReason: result.error }
-              : {}),
-          });
-        }
-
-        const outcome =
-          instanceStatus === InstanceStatuses.COMPLETED
-            ? "completed"
-            : "failed";
-        return { outcome, instance: updated };
-      }
-
-      //  executor failure
-      if (result.status === TaskStatuses.FAILED) {
-        const failedAt = new Date();
-        const instanceStarted = new Date(
-          instance.started_on as unknown as string,
-        );
-
-        const updated = await instanceRepository.updateById(
-          instance.id,
-          { status: InstanceStatuses.FAILED, ended_on: failedAt },
-          tx,
-        );
-
-        executionLogger.midNodeFailure({
-          instanceId: instance.id,
-          nodeId: node.id,
-          nodeType: node.type,
-          failedAt,
-          reason: result.error ?? "Executor failed with no message",
-        });
-        executionLogger.instanceSummary({
-          instanceId: instance.id,
-          workflowVersionId: instance.workflow_version_id,
-          startedAt: instanceStarted,
-          endedAt: failedAt,
-          status: "failed",
-          ...(result.error !== undefined
-            ? { failureReason: result.error }
-            : {}),
-        });
-
-        return { outcome: "failed", instance: updated };
-      }
-
-      // User-task node (paused, awaiting human input)
-      if (result.status === TaskStatuses.IN_PROGRESS) {
-        const updated = await instanceRepository.updateById(
-          instance.id,
-          { status: InstanceStatuses.PAUSED },
-          tx,
-        );
-
-        executionLogger.userTaskCreated({
-          taskId: task.id,
-          instanceId: instance.id,
-          nodeId: node.id,
-          createdAt: startedOn,
-          displayData: result.outputVariables,
-        });
-
-        return { outcome: "user_task", instance: updated, taskId: task.id };
-      }
-
-      //  COMPLETED non-end node
-      let updatedContext: WorkflowContext;
-      if (node.type === NodeTypes.START) {
-        updatedContext = { global: result.outputVariables };
-      } else {
-        updatedContext = contextManager.merge(context, result.outputVariables);
-      }
-
-      const updatedInstance = await instanceRepository.updateById(
-        instance.id,
-        { current_variables: converterUtils.objectToJsonValue(updatedContext) },
-        tx,
-      );
-
-      const edges = await edgeRepository.findBySourceNodeId(node.id, tx);
-
-      // Resolve next node IDs
-      const allNodes = await nodeRepository.findByWorkflowVersionId(
-        instance.workflow_version_id,
-        tx,
-      );
-      const nextNodeIds = await edgeResolver.resolveNextNodeIds(
-        node.id,
-        updatedContext,
-        edges,
-        allNodes,
-        instance.id,
-      );
-
-      if (nextNodeIds.length === 0) {
-        const failedAt = new Date();
-        const instanceStarted = new Date(
-          instance.started_on as unknown as string,
-        );
-
-        const updated = await instanceRepository.updateById(
-          instance.id,
-          { status: InstanceStatuses.FAILED, ended_on: failedAt },
-          tx,
-        );
-
-        executionLogger.midNodeFailure({
-          instanceId: instance.id,
-          nodeId: node.id,
-          nodeType: node.type,
-          failedAt,
-          reason: "No outgoing edges — workflow has no next step",
-        });
-        executionLogger.instanceSummary({
-          instanceId: instance.id,
-          workflowVersionId: instance.workflow_version_id,
-          startedAt: instanceStarted,
-          endedAt: failedAt,
-          status: "failed",
-          failureReason: "No outgoing edges",
-        });
-
-        return { outcome: "failed", instance: updated };
-      }
-
-      executionLogger.transition({
-        fromNodeId: node.id,
-        fromNodeType: node.type,
-        toNodeIds: nextNodeIds,
-        reason:
-          node.type === NodeTypes.DECISION ? "condition matched" : "sequential",
-      });
-
-      return {
-        outcome: "next",
-        instance: updatedInstance,
-        nextNodeIds,
-        context: updatedContext,
+      result = {
+        status: TaskStatuses.FAILED,
+        outputVariables: {},
+        error: message,
+        nextNodeId: null,
       };
+    }
+
+    let currentVariables: ContextVariables;
+
+    if (node.type === NodeTypes.START) {
+      currentVariables = result.outputVariables as ContextVariables;
+    } else if (node.type !== NodeTypes.END) {
+      currentVariables = converterUtils.jsonValueToObject(
+        instance.current_variables,
+      ) as ContextVariables;
+      currentVariables.constants = {
+        ...currentVariables.constants,
+        ...result.outputVariables,
+      };
+    }
+
+    let instanceStatus: InstanceStatus;
+
+    if (nodeThrew) {
+      instanceStatus = InstanceStatuses.FAILED;
+    } else if (
+      result.status === TaskStatuses.IN_PROGRESS &&
+      node.type === NodeTypes.USER
+    ) {
+      instanceStatus = InstanceStatuses.PAUSED;
+    } else if (result.status === TaskStatuses.TERMINATED) {
+      instanceStatus = InstanceStatuses.TERMINATED;
+    } else if (node.type === NodeTypes.END) {
+      instanceStatus = InstanceStatuses.COMPLETED;
+    } else if (
+      result.nextNodeId === null ||
+      result.status === TaskStatuses.FAILED
+    ) {
+      instanceStatus = InstanceStatuses.FAILED;
+    } else {
+      instanceStatus = instance.auto_advance
+        ? InstanceStatuses.IN_PROGRESS
+        : InstanceStatuses.PAUSED;
+    }
+
+    db.transaction().execute(async (transaction) => {
+      let instanceUpdate;
+      if (node.type === NodeTypes.END && !nodeThrew) {
+        instanceUpdate = instanceService.end(
+          instance.id,
+          instanceStatus,
+          result.outputVariables,
+          transaction,
+        );
+      } else {
+        instanceUpdate = instanceService.updateContext(
+          instance.id,
+          instanceStatus,
+          currentVariables,
+          result.nextNodeId,
+          transaction,
+        );
+      }
+
+      await Promise.all([
+        taskExecutionService.end(
+          taskExecution.id,
+          result.status,
+          result.outputVariables,
+          transaction,
+        ),
+        taskService.updateStatus(task.id, result.status, transaction),
+        instanceUpdate,
+      ]);
     });
+
+    return {
+      nextNodeIds:
+        result.nextNodeId === null || !instance.auto_advance
+          ? []
+          : [result.nextNodeId],
+    };
   },
 };

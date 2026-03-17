@@ -1,10 +1,7 @@
 import { taskRepository } from "../repositories/task.repository.js";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { nodeRepository } from "../repositories/node.repository.js";
-import { edgeRepository } from "../repositories/edge.repository.js";
 import { UserNodeConfigurationSchema } from "../schemas/node.schema.js";
-import { contextManager } from "../engine/ContextManager.js";
-import { edgeResolver } from "../engine/EdgeResolver.js";
 import { queueService } from "./queue.service.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -12,7 +9,10 @@ import { NotFoundError } from "../errors/NotFoundError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { TaskStatuses, InstanceStatuses } from "../types/enums.js";
-import { executionLogger } from "../utils/executionLogger.js";
+import { edgeService } from "./edge.services.js";
+import { instanceService } from "./instance.service.js";
+import type { ContextVariables } from "../types/engine.js";
+import { taskService } from "./task.service.js";
 
 export async function resumeUserTask(
   taskId: string,
@@ -33,70 +33,75 @@ export async function resumeUserTask(
   );
   if (!instance)
     throw new NotFoundError(`Instance not found for task id=${taskId}`);
-  if (instance.status !== InstanceStatuses.PAUSED) {
-    throw new StateTransitionError(`Instance id=${instance.id} is not paused`);
+  if (instance.status !== InstanceStatuses.IN_PROGRESS) {
+    throw new StateTransitionError(
+      `Instance id=${instance.id} is not in progress`,
+    );
   }
 
-  const nodes = await nodeRepository.findByWorkflowVersionId(
-    instance.workflow_version_id,
-  );
-  const node = nodes.find((n) => n.id === task.node_id);
+  const node = await nodeRepository.findById(task.node_id);
   if (!node) throw new DataIntegrityError(`Node id=${task.node_id} not found`);
 
   const parsed = UserNodeConfigurationSchema.safeParse(node.configuration);
-  if (!parsed.data)
+  if (!parsed.success)
     throw new DataIntegrityError(
       `User node configuration invalid for node id=${node.id}`,
     );
 
+  const configuration = parsed.data;
+
   const outputVariables: Record<string, unknown> = {};
-  for (const field of parsed.data.responseMap) {
+  for (const field of configuration.responseMap) {
     if (field.contextVariable) {
       outputVariables[field.contextVariable.name] = userInput[field.fieldId];
     }
   }
 
-  const edges = await edgeRepository.findByNodeIds(nodes.map((n) => n.id));
-  const context = contextManager.fromJson(instance.current_variables);
-  const updatedContext = contextManager.merge(context, outputVariables);
-  const nextNodeIds = await edgeResolver.resolveNextNodeIds(
-    task.node_id,
-    updatedContext,
-    edges,
-    nodes,
-    instance.id,
-  );
+  const currentVariables = converterUtils.jsonValueToObject(
+    instance.current_variables,
+  ) as ContextVariables;
+
+  currentVariables.constants = {
+    ...currentVariables.constants,
+    ...outputVariables,
+  };
+
+  const [nextNodeId] = await edgeService.getNextNodeIdsBySourceNodeId(node.id);
 
   await db.transaction().execute(async (tx) => {
+    await instanceService.updateContext(
+      instance.id,
+      instance.auto_advance
+        ? InstanceStatuses.IN_PROGRESS
+        : InstanceStatuses.PAUSED,
+      currentVariables,
+      nextNodeId ?? null,
+      tx,
+    );
+
     await taskRepository.updateById(
       taskId,
       { status: TaskStatuses.COMPLETED },
       tx,
     );
-    await instanceRepository.updateById(
-      instance.id,
-      {
-        status: InstanceStatuses.IN_PROGRESS,
-        current_variables: converterUtils.objectToJsonValue(updatedContext),
-      },
-      tx,
-    );
-  });
 
-  executionLogger.userTaskCompleted({
-    taskId,
-    instanceId: instance.id,
-    actorId,
-    completedAt: new Date(),
-    userInput,
-    contextUpdates: outputVariables,
-  });
+    if (!nextNodeId) {
+      throw new DataIntegrityError(
+        "No node after user node. End node missing.",
+      );
+    }
 
-  for (const nodeId of nextNodeIds) {
-    await queueService.enqueue({
-      instanceId: instance.id,
-      nodeId,
-      context: updatedContext,
-    });
-  }
+    if (instance.auto_advance) {
+      const newTask = await taskService.createNew(
+        instance.id,
+        nextNodeId,
+        TaskStatuses.IN_PROGRESS,
+        tx,
+      );
+
+      await queueService.enqueue({
+        taskId: newTask.id,
+      });
+    }
+  });
 }

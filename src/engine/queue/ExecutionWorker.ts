@@ -1,28 +1,24 @@
 import { Worker, type Job } from "bullmq";
 import type { ConnectionOptions, Queue } from "bullmq";
-import type { QueueJob } from "./types.js";
 import { instanceRepository } from "../../repositories/instance.repository.js";
 import { executionEngine } from "../ExecutionEngine.js";
-import { InstanceStatuses } from "../../types/enums.js";
-import { EXECUTION_QUEUE_NAME } from "./BullMQQueue.js";
-
-const JOB_OPTIONS = {
-  attempts: 3,
-  backoff: { type: "exponential" as const, delay: 1000 },
-  removeOnComplete: { count: 1000 },
-  removeOnFail: { count: 5000 },
-} as const;
+import { InstanceStatuses, TaskStatuses } from "../../types/enums.js";
+import Config from "../../config.js";
+import type { QueueJobData } from "../../types/engine.js";
+import { taskService } from "../../services/task.service.js";
+import { Transaction } from "kysely";
+import { db } from "../../database.js";
 
 export class ExecutionWorker {
-  private readonly worker: Worker<QueueJob>;
+  private readonly worker: Worker<QueueJobData>;
 
   constructor(
-    private readonly queue: Queue<QueueJob>,
+    private readonly queue: Queue<QueueJobData>,
     connection: ConnectionOptions,
   ) {
-    this.worker = new Worker<QueueJob>(
-      EXECUTION_QUEUE_NAME,
-      (job: Job<QueueJob>) => this.processJob(job),
+    this.worker = new Worker<QueueJobData>(
+      Config.EXECUTION_QUEUE_NAME,
+      (job: Job<QueueJobData>) => this.processJob(job),
       { connection, concurrency: 10 },
     );
 
@@ -35,7 +31,7 @@ export class ExecutionWorker {
     });
 
     console.log(
-      `[Worker] ExecutionWorker started, listening on queue "${EXECUTION_QUEUE_NAME}" (concurrency=10)`,
+      `[Worker] ExecutionWorker started, listening on queue "${Config.EXECUTION_QUEUE_NAME}" (concurrency=10)`,
     );
   }
 
@@ -43,69 +39,33 @@ export class ExecutionWorker {
     await this.worker.close();
   }
 
-  private async processJob(job: Job<QueueJob>): Promise<void> {
-    const { instanceId, nodeId, context } = job.data;
-    console.log(
-      `\n[Worker] Job ${job.id} — instanceId=${instanceId} nodeId=${nodeId}`,
-    );
+  private async processJob(job: Job<QueueJobData>): Promise<void> {
+    const { taskId } = job.data;
+    const { instance, node, task } =
+      await taskService.getAllTaskDetails(taskId);
 
-    const instance = await instanceRepository.findById(instanceId);
-    if (!instance) {
-      console.warn(`[Worker] Instance ${instanceId} not found — skipping`);
-      return;
-    }
-    if (instance.status !== InstanceStatuses.IN_PROGRESS) {
-      console.warn(
-        `[Worker] Instance ${instanceId} status="${instance.status}" (not in_progress) — skipping`,
-      );
-      return;
-    }
+    const result = await executionEngine.runNode(instance, node, task);
 
-    const result = await executionEngine.runNode(instance, nodeId, context);
-    console.log(
-      `[Worker] runNode outcome="${result.outcome}" instanceId=${instanceId} nodeId=${nodeId}`,
-    );
-
-    if (result.outcome === "next") {
-      if (instance.auto_advance) {
-        console.log(
-          `[Worker] Auto-advancing instance=${instanceId} to nodes: [${result.nextNodeIds.join(
-            ", ",
-          )}]`,
+    db.transaction().execute(async (transaction) => {
+      result.nextNodeIds.forEach(async (nodeId) => {
+        const task = await taskService.createNew(
+          instance.id,
+          nodeId,
+          TaskStatuses.IN_PROGRESS,
+          transaction,
         );
-        for (const nextNodeId of result.nextNodeIds) {
-          await this.queue.add(
-            "execute-node",
-            {
-              instanceId,
-              nodeId: nextNodeId,
-              context: result.context,
-            },
-            {
-              jobId: `${instanceId}-${nextNodeId}`,
-              ...JOB_OPTIONS,
-            },
-          );
-          console.log(
-            `[Worker] Enqueued nodeId=${nextNodeId} for instanceId=${instanceId}`,
-          );
-        }
-      } else {
-        console.log(
-          `[Worker] auto_advance=false — pausing instance=${instanceId}`,
+
+        await this.queue.add(
+          "execute-node",
+          { taskId: task.id },
+          {
+            jobId: task.id,
+            attempts: 1,
+            removeOnComplete: { count: 100 },
+            removeOnFail: { count: 5000 },
+          },
         );
-        await instanceRepository.updateById(instanceId, {
-          status: InstanceStatuses.PAUSED,
-        });
-      }
-    } else if (result.outcome === "user_task") {
-      console.log(
-        `[Worker] User task created — taskId=${result.taskId} instance=${instanceId} now PAUSED`,
-      );
-    } else if (result.outcome === "completed") {
-      console.log(`[Worker] Instance ${instanceId} COMPLETED`);
-    } else if (result.outcome === "failed") {
-      console.log(`[Worker] Instance ${instanceId} FAILED`);
-    }
+      });
+    });
   }
 }

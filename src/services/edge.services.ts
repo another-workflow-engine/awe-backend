@@ -59,8 +59,6 @@ const findNodesByEdgeModel = (
   }
 
   if (!source) {
-    console.log(nodes);
-    console.log(edge);
     throw new DataIntegrityError("source cannot be null");
   }
 

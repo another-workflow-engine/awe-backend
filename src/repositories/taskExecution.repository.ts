@@ -29,6 +29,7 @@ export const taskExecutionRepository = {
     transaction?: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
     try {
+      console.log(id);
       return await (transaction ?? db)
         .updateTable("task_execution")
         .set(data)

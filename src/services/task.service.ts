@@ -3,9 +3,17 @@ import {
   type TaskDetailItem,
 } from "../repositories/task.repository.js";
 import { UserNodeConfigurationSchema } from "../schemas/node.schema.js";
-import { contextManager } from "../engine/ContextManager.js";
 import { evaluate } from "@bpmn-io/feelin";
-import type { JsonValue } from "../types/database.js";
+import type { DB, TaskStatus } from "../types/database.js";
+import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
+import { nodeRepository } from "../repositories/node.repository.js";
+import { instanceRepository } from "../repositories/instance.repository.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
+import type { Transaction } from "kysely";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import { buildFeelContext } from "../utils/contextResolver.js";
+import { converterUtils } from "../utils/converter.utils.js";
+import type { ContextVariables } from "../types/engine.js";
 
 export interface ResolvedTask {
   id: string;
@@ -23,62 +31,81 @@ export interface ResolvedTask {
   };
 }
 
-function buildLocalFeelContext(
-  context: { global: Record<string, unknown> },
-): { context: Record<string, unknown> } {
-  const global = context.global;
-  const constants = (global.constants as Record<string, unknown>) ?? {};
-
-  const structuralKeys = new Set(["constants", "fetchables", "urls"]);
-  const variables: Record<string, unknown> = { ...constants };
-
-  for (const [key, val] of Object.entries(global)) {
-    if (!structuralKeys.has(key)) {
-      variables[key] = val;
-    }
+async function resolveTask(
+  task: TaskDetailItem,
+  fetch: boolean,
+): Promise<ResolvedTask> {
+  const parsed = UserNodeConfigurationSchema.safeParse(task.node_configuration);
+  if (!parsed.success) {
+    throw new DataIntegrityError(
+      `Node id=${task.node_id} has an invalid configuration`,
+    );
   }
 
-  return { context: variables };
-}
+  const configuration = parsed.data;
 
-function resolveTask(task: TaskDetailItem): ResolvedTask {
-  const configParsed = UserNodeConfigurationSchema.safeParse(
-    task.node_configuration,
-  );
+  const instance = await instanceRepository.findById(task.instance_id);
+  if (!instance) {
+    throw new DataIntegrityError(
+      `No instance referenced to node id=${task.node_id}`,
+    );
+  }
 
-  if (!configParsed.success) {
+  if (!fetch) {
     const { instance_context: _, ...rest } = task;
-    return rest as unknown as ResolvedTask;
+
+    return {
+      ...rest,
+      node_configuration: {
+        title: configuration.title,
+        description: configuration.description,
+        assignee: null,
+        requestMap: {},
+        responseMap: configuration.responseMap,
+      },
+    } as unknown as ResolvedTask;
   }
 
-  const config = configParsed.data;
-  const wfContext = contextManager.fromJson(
-    task.instance_context as JsonValue,
+  const context = await buildFeelContext(
+    converterUtils.jsonValueToObject(
+      instance.current_variables,
+    ) as ContextVariables,
   );
-  const feelContext = buildLocalFeelContext(wfContext);
 
-  const resolvedRequestMap = config.requestMap.map((field) => {
-    const result = evaluate(field.valueExpression, feelContext);
+  let resolvedAssignee: unknown;
+
+  if (configuration.assignee) {
+    const result = evaluate(configuration.assignee, context);
+    if (result.warnings.length > 0) {
+      throw new DataIntegrityError(
+        `FEEL evaluation failed for expression "${configuration.assignee}"`,
+      );
+    }
+
+    resolvedAssignee = result.value;
+  }
+
+  const resolvedRequestMap = configuration.requestMap.map((field) => {
+    const result = evaluate(field.valueExpression, context);
+    if (result.warnings.length > 0) {
+      throw new DataIntegrityError(
+        `FEEL evaluation failed for expression "${configuration.assignee}"`,
+      );
+    }
+
     return { label: field.label, value: result.value };
   });
-
-  let resolvedAssignee = config.assignee;
-  if (resolvedAssignee && resolvedAssignee.startsWith("context.")) {
-    const result = evaluate(resolvedAssignee, feelContext);
-    resolvedAssignee =
-      result.value != null ? String(result.value) : resolvedAssignee;
-  }
 
   const { instance_context: _, ...rest } = task;
 
   return {
     ...rest,
     node_configuration: {
-      title: config.title,
-      description: config.description,
+      title: configuration.title,
+      description: configuration.description,
       assignee: resolvedAssignee,
       requestMap: resolvedRequestMap,
-      responseMap: config.responseMap,
+      responseMap: configuration.responseMap,
     },
   } as unknown as ResolvedTask;
 }
@@ -86,7 +113,11 @@ function resolveTask(task: TaskDetailItem): ResolvedTask {
 export const taskService = {
   listPending: async (actorId: string): Promise<ResolvedTask[]> => {
     const tasks = await taskRepository.findAllPending(actorId);
-    return tasks.map(resolveTask);
+    return Promise.all(
+      tasks.map(async (t) => {
+        return await resolveTask(t, false);
+      }),
+    );
   },
 
   getTask: async (
@@ -94,7 +125,61 @@ export const taskService = {
     actorId: string,
   ): Promise<ResolvedTask | undefined> => {
     const task = await taskRepository.findByIdWithContext(taskId, actorId);
-    if (!task) return undefined;
-    return resolveTask(task);
+    if (!task) {
+      return undefined;
+    }
+    return await resolveTask(task, true);
+  },
+
+  getAllTaskDetails: async (
+    taskId: string,
+  ): Promise<{ instance: InstanceModel; node: NodeModel; task: TaskModel }> => {
+    const task = await taskRepository.findById(taskId);
+    if (!task) {
+      throw new NotFoundError("task");
+    }
+
+    const [instance, node] = await Promise.all([
+      instanceRepository.findById(task.instance_id),
+      nodeRepository.findById(task.node_id),
+    ]);
+
+    if (!instance) {
+      throw new NotFoundError("instance");
+    }
+    if (!node) {
+      throw new NotFoundError("node");
+    }
+
+    return { instance, node, task };
+  },
+
+  createNew: async (
+    instanceId: string,
+    nodeId: string,
+    status: TaskStatus,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    return taskRepository.insert(
+      {
+        instance_id: instanceId,
+        node_id: nodeId,
+        status,
+      },
+      transaction,
+    );
+  },
+  updateStatus: async (
+    taskId: string,
+    status: TaskStatus,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    return taskRepository.updateById(
+      taskId,
+      {
+        status,
+      },
+      transaction,
+    );
   },
 };

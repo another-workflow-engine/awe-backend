@@ -13,11 +13,14 @@ import { contextManager } from "../engine/ContextManager.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
-import { InstanceStatuses } from "../types/enums.js";
+import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
 import { executionLogger } from "../utils/executionLogger.js";
+import type { DB, InstanceStatus } from "../types/database.js";
+import type { Transaction } from "kysely";
+import { taskService } from "./task.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -38,48 +41,43 @@ export const instanceService = {
       throw new NotFoundError("No active workflow version found");
     }
 
-    const { instance, startNodeId } = await db
-      .transaction()
-      .execute(async (tx) => {
-        const newInstance = await instanceRepository.insert(
-          {
-            workflow_version_id: workflowVersion.id,
-            started_on: new Date(),
-            status: InstanceStatuses.IN_PROGRESS,
-            input_variables: converterUtils.objectToJsonValue(data.context),
-            auto_advance: data.autoAdvance,
-            created_by: actor.id,
-          },
+    return await db.transaction().execute(async (tx) => {
+      const startNode =
+        await nodeService.getByStartNodeByWorkflowVersionIdOrThrow(
+          workflowVersion.id,
           tx,
         );
-        const startNode =
-          await nodeService.getByStartNodeByWorkflowVersionIdOrThrow(
-            workflowVersion.id,
-            tx,
-          );
-        return { instance: newInstance, startNodeId: startNode.id };
-      });
 
-    await queueService.enqueue({
-      instanceId: instance.id,
-      nodeId: startNodeId,
-      context: contextManager.create(),
+      const instance = await instanceRepository.insert(
+        {
+          workflow_version_id: workflowVersion.id,
+          started_on: new Date(),
+          status: data.autoAdvance
+            ? InstanceStatuses.IN_PROGRESS
+            : InstanceStatuses.PAUSED,
+          input_variables: converterUtils.objectToJsonValue(data.context),
+          auto_advance: data.autoAdvance,
+          created_by: actor.id,
+          current_node_id: startNode.id,
+        },
+        tx,
+      );
+
+      if (instance.auto_advance) {
+        const task = await taskService.createNew(
+          instance.id,
+          startNode.id,
+          TaskStatuses.IN_PROGRESS,
+          tx,
+        );
+
+        await queueService.enqueue({
+          taskId: task.id,
+        });
+      }
+
+      return instance;
     });
-
-    executionLogger.instanceCreated({
-      instanceId: instance.id,
-      workflowId: data.workflowId,
-      workflowVersionId: workflowVersion.id,
-      workflowName: String(
-        (workflowVersion as Record<string, unknown>).name ?? data.workflowId,
-      ),
-      actorId: actor.id,
-      autoAdvance: data.autoAdvance,
-      createdAt: new Date(instance.started_on as unknown as string),
-      inputVariables: data.context as Record<string, unknown>,
-    });
-
-    return instance;
   },
 
   getById: async (
@@ -97,43 +95,94 @@ export const instanceService = {
       instanceId,
       actorId,
     );
+
     if (!instance)
       throw new NotFoundError(`Instance id=${instanceId} not found`);
-    if (instance.status !== InstanceStatuses.PAUSED) {
-      throw new StateTransitionError(`Instance id=${instanceId} is not paused`);
-    }
 
-    const lastTask = await taskRepository.findLastCreatedByInstanceId(
-      instanceId,
-    );
-    if (!lastTask) {
-      throw new DataIntegrityError(
-        `No task found for instance id=${instanceId}`,
+    if (instance.auto_advance) {
+      throw new StateTransitionError(
+        `Instance id=${instanceId} is in auto advance state`,
       );
     }
 
-    const context = contextManager.fromJson(instance.current_variables);
-
-    const nodes = await nodeRepository.findByWorkflowVersionId(
-      instance.workflow_version_id,
-    );
-    const edges = await edgeRepository.findByNodeIds(nodes.map((n) => n.id));
-    const nextNodeIds = await edgeResolver.resolveNextNodeIds(
-      lastTask.node_id,
-      context,
-      edges,
-      nodes,
-      instanceId,
-    );
-
-    const updated = await instanceRepository.updateById(instanceId, {
-      status: InstanceStatuses.IN_PROGRESS,
-    });
-
-    for (const nodeId of nextNodeIds) {
-      await queueService.enqueue({ instanceId, nodeId, context });
+    if (
+      instance.status === InstanceStatuses.FAILED ||
+      instance.status === InstanceStatuses.TERMINATED ||
+      instance.status === InstanceStatuses.COMPLETED
+    ) {
+      throw new StateTransitionError(
+        `Instance id=${instanceId} is has already ended. Cannot advance`,
+      );
     }
 
-    return updated;
+    if (instance.status === InstanceStatuses.IN_PROGRESS) {
+      throw new StateTransitionError(
+        `Instance id=${instanceId} is in progress. Wait for previous task.`,
+      );
+    }
+
+    if (!instance.current_node_id) {
+      throw new StateTransitionError(
+        `Instance id=${instanceId} has no next node.`,
+      );
+    }
+
+    const nextNode = await nodeRepository.findById(instance.current_node_id);
+    if (!nextNode) {
+      throw new StateTransitionError(
+        `Instance id=${instanceId} has no next node.`,
+      );
+    }
+    // if (nextNode.type === NodeTypes.USER) {
+    //   throw new StateTransitionError(
+    //     `Instance id=${instanceId} waiting for user task completion.`,
+    //   );
+    // }
+
+    const task = await taskService.createNew(
+      instance.id,
+      nextNode.id,
+      TaskStatuses.IN_PROGRESS,
+    );
+
+    await queueService.enqueue({ taskId: task.id });
+
+    return instance;
+  },
+
+  updateContext: async (
+    instanceId: string,
+    status: InstanceStatus,
+    currentVariables: object,
+    nextNodeId: string | null,
+    transaction?: Transaction<DB>,
+  ) => {
+    return await instanceRepository.updateById(
+      instanceId,
+      {
+        status: status,
+        current_variables: converterUtils.objectToJsonValue(currentVariables),
+        current_node_id: nextNodeId,
+      },
+      transaction,
+    );
+  },
+
+  end: async (
+    instanceId: string,
+    status: InstanceStatus,
+    outputVariables: object,
+    transaction?: Transaction<DB>,
+  ): Promise<InstanceModel> => {
+    return instanceRepository.updateById(
+      instanceId,
+      {
+        status,
+        output_variables: converterUtils.objectToJsonValue(outputVariables),
+        ended_on: new Date(),
+        current_node_id: null,
+      },
+      transaction,
+    );
   },
 };

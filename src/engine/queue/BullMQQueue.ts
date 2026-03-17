@@ -1,22 +1,22 @@
 import { Queue } from "bullmq";
 import type { ConnectionOptions } from "bullmq";
-import type { QueueJob } from "./types.js";
-
-export const EXECUTION_QUEUE_NAME = "execution";
+import Config from "../../config.js";
+import type { QueueJobData } from "../../types/engine.js";
 
 export class BullMQQueue {
-  readonly queue: Queue<QueueJob>;
+  readonly queue: Queue<QueueJobData>;
 
   constructor(connection: ConnectionOptions) {
-    this.queue = new Queue<QueueJob>(EXECUTION_QUEUE_NAME, { connection });
+    this.queue = new Queue<QueueJobData>(Config.EXECUTION_QUEUE_NAME, {
+      connection,
+    });
   }
 
-  async enqueue(job: QueueJob): Promise<void> {
-    await this.queue.add("execute-node", job, {
-      jobId: `${job.instanceId}-${job.nodeId}`,
-      attempts: 3,
-      backoff: { type: "exponential", delay: 1000 },
-      removeOnComplete: { count: 1000 },
+  async enqueue(jobData: QueueJobData): Promise<void> {
+    await this.queue.add("execute-node", jobData, {
+      jobId: jobData.taskId,
+      attempts: 1,
+      removeOnComplete: { count: 100 },
       removeOnFail: { count: 5000 },
     });
   }

@@ -1,12 +1,10 @@
 import { Worker, type Job } from "bullmq";
 import type { ConnectionOptions, Queue } from "bullmq";
-import { instanceRepository } from "../../repositories/instance.repository.js";
 import { executionEngine } from "../ExecutionEngine.js";
-import { InstanceStatuses, TaskStatuses } from "../../types/enums.js";
+import { TaskStatuses } from "../../types/enums.js";
 import Config from "../../config.js";
 import type { QueueJobData } from "../../types/engine.js";
 import { taskService } from "../../services/task.service.js";
-import { Transaction } from "kysely";
 import { db } from "../../database.js";
 
 export class ExecutionWorker {

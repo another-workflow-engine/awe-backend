@@ -1,11 +1,10 @@
 import type { Transaction } from "kysely";
 import type { DB } from "../../types/database.js";
-import type { InstanceModel, NodeModel } from "../../types/models.js";
+import type { NodeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
 import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
-import { converterUtils } from "../../utils/converter.utils.js";
 import { fetchService } from "../../services/fetch.service.js";
 import { buildFeelContext } from "../../utils/contextResolver.js";
 import { TaskStatuses } from "../../types/enums.js";
@@ -26,9 +25,8 @@ export class ScriptNodeExecutor extends BaseExecutor {
     }
 
     const configuration = parsed.data;
-    console.log(inputVariables);
+    
     const currentContext = await buildFeelContext(inputVariables);
-
     const parameters = configuration.parameterMap.map(
       (parameter) => evaluate(parameter.valueExpression, currentContext).value,
     );

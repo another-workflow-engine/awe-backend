@@ -1,4 +1,3 @@
-import type { ContextVariables } from "../engine/executors/BaseExecutor";
 import type { JsonValue } from "../types/database";
 
 export const converterUtils = {

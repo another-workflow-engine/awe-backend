@@ -1,7 +1,6 @@
 import { db } from "../database.js";
 import { StartNodeExecutor } from "./executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "./executors/EndNodeExecutor.js";
-import { UserTaskExecutor } from "./executors/UserTaskExecutor.js";
 import { DecisionNodeExecutor } from "./executors/DecisionNodeExecutor.js";
 import type { BaseExecutor } from "./executors/BaseExecutor.js";
 import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
@@ -23,7 +22,6 @@ import { taskRepository } from "../repositories/task.repository.js";
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
   [NodeTypes.END]: new EndNodeExecutor(),
-  // [NodeTypes.USER]: new UserTaskExecutor(),
   // [NodeTypes.DECISION]: new DecisionNodeExecutor(),
   [NodeTypes.SCRIPT]: new ScriptNodeExecutor(),
 };
@@ -57,10 +55,6 @@ export const executionEngine = {
         : (converterUtils.jsonValueToObject(
             instance.current_variables,
           ) as ContextVariables);
-
-    // console.log(instance.input_variables);
-    // console.log(inputVariablesJson);
-    // console.log(inputVariables);
 
     const executor = executors[node.type];
     if (!executor) {

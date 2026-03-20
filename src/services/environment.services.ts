@@ -3,7 +3,7 @@ import { environmentRepository } from "../repositories/environment.repository.js
 import { ActorTypes } from "../types/enums.js";
 import type { ActorModel, EnvironmentModel } from "../types/models.js";
 
-export const environemntService = {
+export const environmentService = {
   getByActor: async (actor: ActorModel) => {
     let environment: EnvironmentModel | undefined;
 
@@ -19,7 +19,7 @@ export const environemntService = {
 
     if (!environment) {
       throw new DataIntegrityError(
-        `No environemnt exists for Actor = ${actor}`,
+        `No environment exists for Actor = ${actor}`,
       );
     }
 

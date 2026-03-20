@@ -16,6 +16,7 @@ import type {
   ExecutorResult,
   NodeRunResult,
 } from "../types/engine.js";
+import { StateTransitionError } from "../errors/StateTransitionError.js";
 
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
@@ -30,26 +31,6 @@ export const executionEngine = {
     node: NodeModel,
     task: TaskModel,
   ): Promise<NodeRunResult> => {
-    const inputVariablesJson = converterUtils.jsonValueToObject(
-      instance.input_variables,
-    );
-
-    const inputVariables =
-      node.type === NodeTypes.START
-        ? ({
-            constants: inputVariablesJson,
-            fetchables: {},
-            urls: {},
-          } as ContextVariables)
-        : (converterUtils.jsonValueToObject(
-            instance.current_variables,
-          ) as ContextVariables);
-
-    const executor = executors[node.type];
-    if (!executor) {
-      throw new Error(`Executor for node type="${node.type}" not found`);
-    }
-
     let result: ExecutorResult = {
       status: TaskStatuses.IN_PROGRESS,
       outputVariables: {},
@@ -57,9 +38,82 @@ export const executionEngine = {
     };
 
     let nodeThrew = false;
-    let currentVariables: ContextVariables | undefined;
+    let autoAdvance = instance.auto_advance;
 
     await db.transaction().execute(async (transaction) => {
+      const currentInstance = await instanceService.findById(
+        instance.id,
+        transaction,
+      );
+
+      if (!currentInstance) {
+        throw new StateTransitionError(
+          `Instance id=${instance.id} not found during execution`,
+        );
+      }
+
+      autoAdvance = currentInstance.auto_advance;
+
+      if (
+        currentInstance.status === InstanceStatuses.COMPLETED ||
+        currentInstance.status === InstanceStatuses.FAILED ||
+        currentInstance.status === InstanceStatuses.TERMINATED
+      ) {
+        throw new StateTransitionError(
+          `Instance id=${instance.id} has already ended with status=${currentInstance.status}. Cannot execute.`,
+        );
+      }
+
+      const executor = executors[node.type];
+      if (!executor) {
+        await instanceService.updateStatus(
+          instance.id,
+          InstanceStatuses.FAILED,
+          transaction,
+        );
+        await taskService.updateStatus(
+          task.id,
+          TaskStatuses.FAILED,
+          transaction,
+        );
+        throw new StateTransitionError(
+          `Executor for node type="${node.type}" not found`,
+        );
+      }
+
+      const freshInputJson = converterUtils.jsonValueToObject(
+        currentInstance.input_variables,
+      );
+
+      const inputVariables: ContextVariables =
+        node.type === NodeTypes.START
+          ? {
+              constants: freshInputJson,
+              fetchables: {},
+              urls: {},
+            }
+          : (converterUtils.jsonValueToObject(
+              currentInstance.current_variables,
+            ) as ContextVariables);
+
+      let currentVariables: ContextVariables = converterUtils.jsonValueToObject(
+        currentInstance.current_variables,
+      ) as ContextVariables;
+
+      if (!currentVariables || typeof currentVariables !== "object") {
+        currentVariables = { constants: {}, fetchables: {}, urls: {} };
+      }
+
+      currentVariables.constants = currentVariables.constants ?? {};
+      currentVariables.fetchables = currentVariables.fetchables ?? {};
+      currentVariables.urls = currentVariables.urls ?? {};
+
+      await instanceService.updateStatus(
+        instance.id,
+        InstanceStatuses.IN_PROGRESS,
+        transaction,
+      );
+
       await taskService.updateStatus(
         task.id,
         TaskStatuses.IN_PROGRESS,
@@ -79,7 +133,6 @@ export const executionEngine = {
         console.error(err);
         nodeThrew = true;
         let message = "Unknown error";
-
         if (err instanceof Error) {
           message = err.message;
         }
@@ -94,9 +147,6 @@ export const executionEngine = {
       if (node.type === NodeTypes.START) {
         currentVariables = result.outputVariables as ContextVariables;
       } else if (node.type !== NodeTypes.END) {
-        currentVariables = converterUtils.jsonValueToObject(
-          instance.current_variables,
-        ) as ContextVariables;
         currentVariables.constants = {
           ...currentVariables.constants,
           ...result.outputVariables,
@@ -122,7 +172,7 @@ export const executionEngine = {
       ) {
         instanceStatus = InstanceStatuses.FAILED;
       } else {
-        instanceStatus = instance.auto_advance
+        instanceStatus = autoAdvance
           ? InstanceStatuses.IN_PROGRESS
           : InstanceStatuses.PAUSED;
       }
@@ -139,7 +189,7 @@ export const executionEngine = {
         instanceUpdate = instanceService.updateContext(
           instance.id,
           instanceStatus,
-          currentVariables || {},
+          currentVariables,
           result.nextNodeId,
           transaction,
         );
@@ -159,9 +209,7 @@ export const executionEngine = {
 
     return {
       nextNodeIds:
-        result.nextNodeId === null || !instance.auto_advance
-          ? []
-          : [result.nextNodeId],
+        result.nextNodeId === null || !autoAdvance ? [] : [result.nextNodeId],
     };
   },
 };

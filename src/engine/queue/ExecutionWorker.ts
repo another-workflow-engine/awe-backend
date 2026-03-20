@@ -44,9 +44,11 @@ export class ExecutionWorker {
 
     const result = await executionEngine.runNode(instance, node, task);
 
-    db.transaction().execute(async (transaction) => {
-      result.nextNodeIds.forEach(async (nodeId) => {
-        const task = await taskService.createNew(
+    if (result.nextNodeIds.length === 0) return;
+
+    await db.transaction().execute(async (transaction) => {
+      for (const nodeId of result.nextNodeIds) {
+        const newTask = await taskService.createNew(
           instance.id,
           nodeId,
           TaskStatuses.IN_PROGRESS,
@@ -55,15 +57,15 @@ export class ExecutionWorker {
 
         await this.queue.add(
           "execute-node",
-          { taskId: task.id },
+          { taskId: newTask.id },
           {
-            jobId: task.id,
+            jobId: newTask.id,
             attempts: 1,
             removeOnComplete: { count: 100 },
             removeOnFail: { count: 5000 },
           },
         );
-      });
+      }
     });
   }
 }

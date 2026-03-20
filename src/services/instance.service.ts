@@ -92,7 +92,10 @@ export const instanceService = {
     instanceId: string,
     actorId: string,
   ): Promise<InstanceModel | null> => {
-    const instance = await instanceRepository.findByIdForActor(instanceId, actorId);
+    const instance = await instanceRepository.findByIdForActor(
+      instanceId,
+      actorId,
+    );
     return instance ?? null;
   },
 
@@ -172,6 +175,20 @@ export const instanceService = {
         status: status,
         current_variables: converterUtils.objectToJsonValue(currentVariables),
         current_node_id: nextNodeId,
+      },
+      transaction,
+    );
+  },
+
+  updateStatus: async (
+    instanceId: string,
+    status: InstanceStatus,
+    transaction?: Transaction<DB>,
+  ) => {
+    return await instanceRepository.updateById(
+      instanceId,
+      {
+        status: status,
       },
       transaction,
     );

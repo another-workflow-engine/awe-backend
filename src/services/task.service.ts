@@ -60,7 +60,7 @@ async function resolveTask(
         title: configuration.title,
         description: configuration.description,
         assignee: null,
-        requestMap: {},
+        requestMap: [],
         responseMap: configuration.responseMap,
       },
     } as unknown as ResolvedTask;

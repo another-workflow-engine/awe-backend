@@ -16,19 +16,29 @@ export const fetchService = {
   },
 
   post: async (url: string, body: Record<string, unknown>) => {
-    let response;
+    let response: Response;
     try {
       response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+    } catch (err) {
+      throw new Error(
+        `Network error posting to ${url}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `HTTP ${response.status} ${response.statusText} posting to ${url}`,
+      );
+    }
+
+    try {
       return await response.json();
     } catch {
-      console.log(response);
-      throw new Error("Response was not valid JSON");
+      throw new Error(`Response from ${url} was not valid JSON`);
     }
   },
 };

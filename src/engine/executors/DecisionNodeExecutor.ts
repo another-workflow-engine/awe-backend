@@ -13,7 +13,7 @@ import { edgeService } from "../../services/edge.services.js";
 import { nodeService } from "../../services/node.services.js";
 
 const normalizeExpression = (expr: string): string => {
-  return expr.replace(/\s+/g, ' ').trim();
+  return expr.replace(/\s+/g, " ").trim();
 };
 
 export class DecisionNodeExecutor extends BaseExecutor {
@@ -49,7 +49,9 @@ export class DecisionNodeExecutor extends BaseExecutor {
       const normalizedRuleExpr = normalizeExpression(rule.conditionExpression);
 
       const edge = edges.find(
-        (e) => e.condition_expression && normalizeExpression(e.condition_expression) === normalizedRuleExpr,
+        (e) =>
+          e.condition_expression &&
+          normalizeExpression(e.condition_expression) === normalizedRuleExpr,
       );
 
       if (!edge) {
@@ -66,7 +68,10 @@ export class DecisionNodeExecutor extends BaseExecutor {
         );
       }
 
-      if (evaluationResult.value === null || evaluationResult.value === undefined) {
+      if (
+        evaluationResult.value === null ||
+        evaluationResult.value === undefined
+      ) {
         continue;
       }
 
@@ -91,17 +96,6 @@ export class DecisionNodeExecutor extends BaseExecutor {
     if (!matchedEdge.destination_node_id) {
       throw new DataIntegrityError(
         `Matched edge id=${matchedEdge.id} has no destination node`,
-      );
-    }
-
-    const destinationNode = await nodeService.getById(
-      matchedEdge.destination_node_id,
-      transaction,
-    );
-
-    if (!destinationNode) {
-      throw new DataIntegrityError(
-        `Destination node id=${matchedEdge.destination_node_id} does not exist for matched edge id=${matchedEdge.id}`,
       );
     }
 

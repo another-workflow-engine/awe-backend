@@ -13,20 +13,24 @@ export const errorHandler = (
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
       success: false,
-      error: err.message,
+      message: err.message,
     });
   }
 
   if (err instanceof ZodError) {
+    const errorDetails = err.issues.map((issue) => {
+      return { field: issue.path.join("."), message: issue.message };
+    });
+
     return res.status(400).json({
       success: false,
-      error: "Validation failed",
-      details: err.issues,
+      error: "Validation failed ",
+      details: errorDetails,
     });
   }
 
   return res.status(500).json({
     success: false,
-    error: "Internal server error",
+    message: "Internal server error",
   });
 };

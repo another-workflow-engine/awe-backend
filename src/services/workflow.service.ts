@@ -2,7 +2,7 @@ import { NotFoundError } from "../errors/NotFoundError.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import type { ActorModel } from "../types/models.js";
-import { environemntService } from "./environment.services.js";
+import { environmentService } from "./environment.services.js";
 
 export type CreateWorkflowInput = {
   name: string;
@@ -17,7 +17,7 @@ export type UpdateWorkflowInput = {
 
 export const workflowService = {
   getAll: async (actor: ActorModel) => {
-    const environment = await environemntService.getByActor(actor);
+    const environment = await environmentService.getByActor(actor);
 
     return await workflowRepository.findByEnvironmentIdWithLatestVersion(
       environment.id,
@@ -38,7 +38,7 @@ export const workflowService = {
   },
 
   create: async (data: CreateWorkflowInput, actor: ActorModel) => {
-    const environment = await environemntService.getByActor(actor);
+    const environment = await environmentService.getByActor(actor);
 
     return await workflowRepository.insert({
       name: data.name,

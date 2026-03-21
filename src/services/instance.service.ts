@@ -1,5 +1,4 @@
 import { instanceRepository } from "../repositories/instance.repository.js";
-import { nodeRepository } from "../repositories/node.repository.js";
 import type { InstanceCreateSchema } from "../schemas/instance.schema.js";
 import type { ActorModel, InstanceModel } from "../types/models.js";
 import type { z } from "zod";
@@ -81,6 +80,25 @@ export const instanceService = {
     return instanceRepository.findDetailByIdForActor(instanceId, actorId);
   },
 
+  findById: async (
+    instanceId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<InstanceModel | null> => {
+    const instance = await instanceRepository.findById(instanceId, transaction);
+    return instance ?? null;
+  },
+
+  findByIdForActor: async (
+    instanceId: string,
+    actorId: string,
+  ): Promise<InstanceModel | null> => {
+    const instance = await instanceRepository.findByIdForActor(
+      instanceId,
+      actorId,
+    );
+    return instance ?? null;
+  },
+
   advanceInstance: async (
     instanceId: string,
     actorId: string,
@@ -121,7 +139,7 @@ export const instanceService = {
       );
     }
 
-    const nextNode = await nodeRepository.findById(instance.current_node_id);
+    const nextNode = await nodeService.getById(instance.current_node_id);
     if (!nextNode) {
       throw new StateTransitionError(
         `Instance id=${instanceId} has no next node.`,
@@ -157,6 +175,20 @@ export const instanceService = {
         status: status,
         current_variables: converterUtils.objectToJsonValue(currentVariables),
         current_node_id: nextNodeId,
+      },
+      transaction,
+    );
+  },
+
+  updateStatus: async (
+    instanceId: string,
+    status: InstanceStatus,
+    transaction?: Transaction<DB>,
+  ) => {
+    return await instanceRepository.updateById(
+      instanceId,
+      {
+        status: status,
       },
       transaction,
     );

@@ -134,6 +134,14 @@ export const nodeService = {
     );
   },
 
+  getById: async (
+    nodeId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<NodeModel | null> => {
+    const node = await nodeRepository.findById(nodeId, transaction);
+    return node ?? null;
+  },
+
   getByStartNodeByWorkflowVersionIdOrThrow: async (
     workflowVersionId: string,
     transaction?: Transaction<DB>,

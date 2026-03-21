@@ -7,5 +7,5 @@ export const InstanceCreateSchema = z.object({
 });
 
 export const InstanceParamsSchema = z.object({
-  instanceId: z.uuid(),
+  instanceId: z.uuidv4(),
 });

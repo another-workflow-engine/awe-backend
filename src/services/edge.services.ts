@@ -175,6 +175,13 @@ export const edgeService = {
     await edgeRepository.deleteByNodeIds(ids, transaction);
   },
 
+  getBySourceNodeId: async (
+    nodeId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<EdgeModel[]> => {
+    return await edgeRepository.findBySourceNodeId(nodeId, transaction);
+  },
+
   getNextNodeIdsBySourceNodeId: async (
     nodeId: string,
     transaction?: Transaction<DB>,

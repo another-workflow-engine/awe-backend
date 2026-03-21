@@ -35,24 +35,21 @@ export class StartNodeExecutor extends BaseExecutor {
 
     const outputVariables: ContextVariables = { constants, fetchables, urls };
 
-    configuration.inputDataMap.forEach((dataMap) => {
+    for (const dataMap of configuration.inputDataMap) {
       if (dataMap.fetchableId) {
         const fetchable = configuration.fetchables.find(
-          (fetchable) => fetchable.id === dataMap.fetchableId,
+          (f) => f.id === dataMap.fetchableId,
         );
-
         if (!fetchable) {
           throw new DataIntegrityError(
-            `Start node with id=${node.id} does not have referenced fetchable of id=${dataMap.fetchableId} `,
+            `Start node id=${node.id} has no fetchable with id=${dataMap.fetchableId}`,
           );
         }
-
         fetchables[dataMap.contextVariableName] = {
           urlId: fetchable.id,
           jsonPath: dataMap.jsonPath,
           dataType: dataMap.dataType,
         };
-
         const headers =
           fetchable.headers?.reduce(
             (acc, { key, valueExpression }) => {
@@ -61,11 +58,11 @@ export class StartNodeExecutor extends BaseExecutor {
             },
             {} as Record<string, string>,
           ) ?? {};
-
         urls[fetchable.id] = {
           urlExpression: fetchable.urlExpression,
-          headers: headers,
+          headers,
         };
+        continue;
       }
 
       const value = inputJson[dataMap.jsonPath];
@@ -74,6 +71,7 @@ export class StartNodeExecutor extends BaseExecutor {
           status: TaskStatuses.FAILED,
           outputVariables,
           error: `"${dataMap.jsonPath}" is missing`,
+          nextNodeId: null,
         };
       }
 
@@ -84,20 +82,20 @@ export class StartNodeExecutor extends BaseExecutor {
               status: TaskStatuses.FAILED,
               outputVariables,
               error: `"${dataMap.jsonPath}" must be an array`,
+              nextNodeId: null,
             };
           }
           break;
-
         case FeelDataType.NULL:
           if (value !== null) {
             return {
               status: TaskStatuses.FAILED,
               outputVariables,
               error: `"${dataMap.jsonPath}" must be null`,
+              nextNodeId: null,
             };
           }
           break;
-
         case FeelDataType.OBJECT:
           if (
             typeof value !== "object" ||
@@ -108,22 +106,23 @@ export class StartNodeExecutor extends BaseExecutor {
               status: TaskStatuses.FAILED,
               outputVariables,
               error: `"${dataMap.jsonPath}" must be an object`,
+              nextNodeId: null,
             };
           }
           break;
-
         default:
           if (typeof value !== dataMap.dataType) {
             return {
               status: TaskStatuses.FAILED,
               outputVariables,
               error: `"${dataMap.jsonPath}" must be of type ${dataMap.dataType}`,
+              nextNodeId: null,
             };
           }
       }
 
       constants[dataMap.contextVariableName] = value;
-    });
+    }
 
     const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(node.id);
 

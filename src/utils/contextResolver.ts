@@ -57,10 +57,7 @@ export async function buildFeelContext(
         headers[key] = result.value;
       }
 
-      fetchedResponses[urlId] = await fetchService.get(
-        result.value,
-        urlSettings.headers,
-      );
+      fetchedResponses[urlId] = await fetchService.get(result.value, headers);
     }
 
     const rawValue = getByPath(fetchedResponses[urlId], jsonPath);

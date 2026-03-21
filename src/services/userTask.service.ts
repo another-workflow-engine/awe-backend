@@ -1,6 +1,3 @@
-import { taskRepository } from "../repositories/task.repository.js";
-import { instanceRepository } from "../repositories/instance.repository.js";
-import { nodeRepository } from "../repositories/node.repository.js";
 import { UserNodeConfigurationSchema } from "../schemas/node.schema.js";
 import { queueService } from "./queue.service.js";
 import { db } from "../database.js";
@@ -13,13 +10,14 @@ import { edgeService } from "./edge.services.js";
 import { instanceService } from "./instance.service.js";
 import type { ContextVariables } from "../types/engine.js";
 import { taskService } from "./task.service.js";
+import { nodeService } from "./node.services.js";
 
 export async function resumeUserTask(
   taskId: string,
   userInput: Record<string, unknown>,
   actorId: string,
 ): Promise<void> {
-  const task = await taskRepository.findById(taskId);
+  const task = await taskService.findById(taskId);
   if (!task) throw new NotFoundError(`Task id=${taskId}`);
   if (task.status !== TaskStatuses.IN_PROGRESS) {
     throw new StateTransitionError(
@@ -27,7 +25,7 @@ export async function resumeUserTask(
     );
   }
 
-  const instance = await instanceRepository.findByIdForActor(
+  const instance = await instanceService.findByIdForActor(
     task.instance_id,
     actorId,
   );
@@ -39,7 +37,7 @@ export async function resumeUserTask(
     );
   }
 
-  const node = await nodeRepository.findById(task.node_id);
+  const node = await nodeService.getById(task.node_id);
   if (!node) throw new DataIntegrityError(`Node id=${task.node_id} not found`);
 
   const parsed = UserNodeConfigurationSchema.safeParse(node.configuration);
@@ -66,9 +64,12 @@ export async function resumeUserTask(
     ...outputVariables,
   };
 
-  const [nextNodeId] = await edgeService.getNextNodeIdsBySourceNodeId(node.id);
-
   await db.transaction().execute(async (tx) => {
+    const [nextNodeId] = await edgeService.getNextNodeIdsBySourceNodeId(
+      node.id,
+      tx,
+    );
+
     await instanceService.updateContext(
       instance.id,
       instance.auto_advance
@@ -79,11 +80,7 @@ export async function resumeUserTask(
       tx,
     );
 
-    await taskRepository.updateById(
-      taskId,
-      { status: TaskStatuses.COMPLETED },
-      tx,
-    );
+    await taskService.updateStatus(taskId, TaskStatuses.COMPLETED, tx);
 
     if (!nextNodeId) {
       throw new DataIntegrityError(

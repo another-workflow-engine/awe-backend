@@ -6,14 +6,14 @@ import { UserNodeConfigurationSchema } from "../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import type { DB, TaskStatus } from "../types/database.js";
 import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
-import { nodeRepository } from "../repositories/node.repository.js";
-import { instanceRepository } from "../repositories/instance.repository.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import type { Transaction } from "kysely";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { buildFeelContext } from "../utils/contextResolver.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { ContextVariables } from "../types/engine.js";
+import { instanceService } from "./instance.service.js";
+import { nodeService } from "./node.services.js";
 
 export interface ResolvedTask {
   id: string;
@@ -44,7 +44,7 @@ async function resolveTask(
 
   const configuration = parsed.data;
 
-  const instance = await instanceRepository.findById(task.instance_id);
+  const instance = await instanceService.findById(task.instance_id);
   if (!instance) {
     throw new DataIntegrityError(
       `No instance referenced to node id=${task.node_id}`,
@@ -60,7 +60,7 @@ async function resolveTask(
         title: configuration.title,
         description: configuration.description,
         assignee: null,
-        requestMap: {},
+        requestMap: [],
         responseMap: configuration.responseMap,
       },
     } as unknown as ResolvedTask;
@@ -111,6 +111,14 @@ async function resolveTask(
 }
 
 export const taskService = {
+  findById: async (
+    taskId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel | null> => {
+    const task = await taskRepository.findById(taskId, transaction);
+    return task ?? null;
+  },
+
   listPending: async (actorId: string): Promise<ResolvedTask[]> => {
     const tasks = await taskRepository.findAllPending(actorId);
     return Promise.all(
@@ -134,14 +142,14 @@ export const taskService = {
   getAllTaskDetails: async (
     taskId: string,
   ): Promise<{ instance: InstanceModel; node: NodeModel; task: TaskModel }> => {
-    const task = await taskRepository.findById(taskId);
+    const task = await taskService.findById(taskId);
     if (!task) {
       throw new NotFoundError("task");
     }
 
     const [instance, node] = await Promise.all([
-      instanceRepository.findById(task.instance_id),
-      nodeRepository.findById(task.node_id),
+      instanceService.findById(task.instance_id),
+      nodeService.getById(task.node_id),
     ]);
 
     if (!instance) {

@@ -30,3 +30,8 @@ export interface QueueJobData {
 }
 
 export type NodeRunResult = { nextNodeIds: string[] };
+
+export interface ScriptExecutionResponse {
+  output?: Record<string, unknown>;
+  error?: string;
+}

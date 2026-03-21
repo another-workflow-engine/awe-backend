@@ -1,4 +1,4 @@
-import { fetchService } from "../services/fetch.service.js";
+import { httpRequestService } from "../services/httpRequest.service.js";
 import type { ContextVariables } from "../types/engine.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { evaluate } from "@bpmn-io/feelin";
@@ -57,7 +57,10 @@ export async function buildFeelContext(
         headers[key] = result.value;
       }
 
-      fetchedResponses[urlId] = await fetchService.get(result.value, headers);
+      fetchedResponses[urlId] = await httpRequestService.get(
+        result.value,
+        headers,
+      );
     }
 
     const rawValue = getByPath(fetchedResponses[urlId], jsonPath);

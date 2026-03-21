@@ -3,16 +3,12 @@ import { NodeTypes } from "../../src/types/enums.js";
 import type { NodeModel, EdgeModel } from "../../src/types/models.js";
 
 jest.mock("../../src/utils/contextResolver.js", () => ({
-  buildFeelContext: jest.fn(async (ctx: { global: Record<string, unknown> }) => {
-    const global = ctx.global;
-    const constants = (global.constants as Record<string, unknown>) ?? {};
-    const structuralKeys = new Set(["constants", "fetchables", "urls"]);
-    const variables: Record<string, unknown> = { ...constants };
-    for (const [key, val] of Object.entries(global)) {
-      if (!structuralKeys.has(key)) {
-        variables[key] = val;
-      }
-    }
+  buildFeelContext: jest.fn(async (ctx: {
+    constants?: Record<string, unknown>;
+  }) => {
+    const variables: Record<string, unknown> = {
+      ...(ctx.constants ?? {}),
+    };
     return { context: variables };
   }),
 }));

@@ -101,6 +101,7 @@ export const taskRepository = {
           eb.ref("workflow_version.version").as("version_number"),
           eb.ref("instance.current_variables").as("instance_context"),
         ])
+        .where("instance.is_deleted", "=", false)
         .where("task.status", "=", TaskStatuses.IN_PROGRESS)
         .where("node.type", "=", NodeTypes.USER)
         .where("workflow.created_by", "=", actorId)

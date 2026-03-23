@@ -51,6 +51,7 @@ export class StartNodeExecutor extends BaseExecutor {
           jsonPath: dataMap.jsonPath,
           dataType: dataMap.dataType,
         };
+
         const headers =
           fetchable.headers?.reduce(
             (acc, { key, valueExpression }) => {

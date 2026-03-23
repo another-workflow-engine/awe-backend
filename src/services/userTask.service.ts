@@ -112,14 +112,11 @@ export const userTaskService = {
     const configuration = parsed.data;
 
     const requestData: Record<string, unknown> = {};
-    configuration.requestMap.map((data) => {
-      return {
-        label: data.label,
-        value: contextUtils.getEvaluatedValue(
-          data.valueExpression,
-          evaluatedContext,
-        ),
-      };
+    configuration.requestMap.forEach((data) => {
+      requestData[data.label] = contextUtils.getEvaluatedValue(
+        data.valueExpression,
+        evaluatedContext,
+      );
     });
 
     const responseData = configuration.responseMap.map((data) => {

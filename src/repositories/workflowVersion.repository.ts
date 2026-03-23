@@ -12,7 +12,10 @@ import { WorkflowVersionStatuses } from "../types/enums.js";
 
 export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 export type UpdateWorkflowVersion = Updateable<WorkflowVersion>;
-export type NewWorkflowVersionWithoutVersion = Omit<NewWorkflowVersion, "version">;
+export type NewWorkflowVersionWithoutVersion = Omit<
+  NewWorkflowVersion,
+  "version"
+>;
 
 export const workflowVersionRepository = {
   findByWorkflowId: async (
@@ -124,5 +127,23 @@ export const workflowVersionRepository = {
       .where("status", "=", WorkflowVersionStatuses.ACTIVE)
       .where("is_deleted", "=", false)
       .execute();
+  },
+
+  doesDraftOrValidVersionExists: async (
+    workflowId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<boolean> => {
+    const result = await (transaction ?? db)
+      .selectFrom("workflow_version")
+      .select(sql<number>`count(*)`.as("count"))
+      .where("workflow_id", "=", workflowId)
+      .where("status", "in", [
+        WorkflowVersionStatuses.DRAFT,
+        WorkflowVersionStatuses.VALID,
+      ])
+      .where("is_deleted", "=", false)
+      .executeTakeFirst();
+    
+    return result ? result.count > 0 : false;
   },
 };

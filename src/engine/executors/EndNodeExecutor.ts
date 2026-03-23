@@ -35,7 +35,7 @@ export class EndNodeExecutor extends BaseExecutor {
         );
       }
 
-      outputVariables[rm.contextVariable.name] = result.value;
+      outputVariables[rm.variableName] = result.value;
     });
 
     if (configuration.message) {

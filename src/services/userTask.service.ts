@@ -208,11 +208,7 @@ export const userTaskService = {
 
     const outputVariables: Record<string, unknown> = {};
     for (const field of configuration.responseMap) {
-      if (!field.contextVariable) {
-        continue;
-      }
-
-      outputVariables[field.contextVariable.name] = userInput[field.fieldId];
+      outputVariables[field.contextVariableName] = userInput[field.fieldId];
     }
 
     const mainContext = converterUtils.jsonValueToContextVariables(

@@ -115,7 +115,7 @@ async function getNextNode(
   nodeType: NodeType,
   executionThrew: boolean,
 ) {
-  if (nodeType !== NodeTypes.END || executionThrew === true) {
+  if (nodeType === NodeTypes.END || executionThrew === true) {
     return undefined;
   }
 
@@ -224,6 +224,7 @@ export const executionEngine = {
 
       result = await executor.execute(node, executionContext);
     } catch (err) {
+      console.error(err);
       executionThrew = true;
       let message = "Unknown error";
 
@@ -288,21 +289,26 @@ export const executionEngine = {
         );
       }
 
-      await Promise.all([
-        taskExecution
-          ? taskExecutionService.end(
-              taskExecution.id,
-              result.status,
-              result.outputVariables,
-              transaction,
-            )
-          : Promise.resolve(),
-        taskService.updateStatus(task.id, result.status, transaction),
-        instanceUpdateCallback,
-      ]);
+      const [updatedtaskExecution, updatedtask, updatedInstance] =
+        await Promise.all([
+          taskExecution
+            ? taskExecutionService.end(
+                taskExecution.id,
+                result.status,
+                result.outputVariables,
+                transaction,
+              )
+            : Promise.resolve(),
+          taskService.updateStatus(task.id, result.status, transaction),
+          instanceUpdateCallback,
+        ]);
 
       if (nextNode) {
-        await executionEngine.createNewTask(nextNode, instance, transaction);
+        await executionEngine.createNewTask(
+          nextNode,
+          updatedInstance,
+          transaction,
+        );
       }
     });
   },

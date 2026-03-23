@@ -4,8 +4,6 @@ import {
   InstanceCreateSchema,
   InstanceParamsSchema,
 } from "../schemas/instance.schema.js";
-import { NotFoundError } from "../errors/NotFoundError.js";
-import { version } from "node:os";
 
 export const instanceController = {
   list: async (req: Request, res: Response) => {

@@ -5,7 +5,6 @@ import { BaseExecutor } from "./BaseExecutor.js";
 import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
-import { fetchService } from "../../services/fetch.service.js";
 import { contextUtils } from "../../utils/context.utils.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
@@ -18,7 +17,6 @@ export class ScriptNodeExecutor extends BaseExecutor {
     inputVariables: ContextVariables,
     transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
-
     const parsed = ScriptNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {
       throw new DataIntegrityError(
@@ -42,14 +40,13 @@ export class ScriptNodeExecutor extends BaseExecutor {
       const response = await JDoodleService.executeScript(
         configuration.sourceCode,
         configuration.entryFunctionName,
-        parameters
+        parameters,
       );
 
       parsedOutput = response.parsedOutput;
 
       console.log("RAW:", response.rawOutput);
       console.log("PARSED:", parsedOutput);
-
     } catch (error: any) {
       return {
         status: TaskStatuses.FAILED,
@@ -70,16 +67,12 @@ export class ScriptNodeExecutor extends BaseExecutor {
 
     let outputVariables: Record<string, unknown> = {};
 
-    configuration.responseMap.forEach(
-      ({ jsonPath, contextVariable }) => {
-        if (!contextVariable) return;
-
-        outputVariables[contextVariable.name] =
-          typeof parsedOutput === "object"
-            ? parsedOutput?.[jsonPath]
-            : parsedOutput;
-      }
-    );
+    configuration.responseMap.forEach(({ jsonPath, contextVariableName }) => {
+      outputVariables[contextVariableName] =
+        typeof parsedOutput === "object"
+          ? parsedOutput?.[jsonPath]
+          : parsedOutput;
+    });
 
     const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
       node.id,

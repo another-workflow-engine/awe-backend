@@ -11,6 +11,11 @@ instanceRouter.get(
   authenticateRequest,
   instanceController.getById,
 );
+instanceRouter.get(
+  "/:instanceId/executions",
+  authenticateRequest,
+  instanceController.getExecutionLogs,
+);
 instanceRouter.post(
   "/:instanceId/advance",
   authenticateRequest,

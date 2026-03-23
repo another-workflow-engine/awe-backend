@@ -18,24 +18,34 @@ export class JDoodleService {
 
     const stdin = JSON.stringify({ params: parameters });
 
-    const wrappedScript = `def main(name,age):
-${sourceCode}
+    const wrappedScript = `${sourceCode}
 
 import json
 import sys
 import io
 
-def convert(obj):
-    if isinstance(obj,set):
-        return [convert(i) for i in obj]
-    elif isinstance(obj,tuple):
-        return [convert(i) for i in obj]
-    elif isinstance(obj,dict):
-        return {k: convert(v) for k, v in obj.items()}
-    elif isinstance(obj,list):
-        return [convert(i) for i in obj]
-    else:
-        return obj
+def safe_serialize(obj):
+    try:
+        import numpy as np
+    except:
+        np = None
+    def convert(o):
+        if np is not None and isinstance(o, np.ndarray):
+            return o.tolist()
+        try:
+            return o.tolist()
+        except:
+            pass
+        if isinstance(o,set):
+            return [convert(i) for i in o]
+        elif isinstance(o,tuple):
+            return [convert(i) for i in o]
+        elif isinstance(o,dict):
+            return {k: convert(v) for k, v in o.items()}
+        elif isinstance(o,list):
+            return [convert(i) for i in o]
+        else:
+            return convert(obj)
 
 if __name__ == "__main__":
     try:
@@ -49,7 +59,7 @@ if __name__ == "__main__":
 
         sys.stdout = sys.__stdout__
 
-        result = convert(result)
+        result = safe_serialize(result)
 
         print(json.dumps(result))
 
@@ -57,7 +67,8 @@ if __name__ == "__main__":
         sys.stdout = sys.__stdout__
         print(json.dumps({"error": str(e)}))
 `;
-
+console.log(wrappedScript)
+console.log(stdin)
     try {
       const response = await axios.post(JDoodleConfig.endpoint, {
         clientId: JDoodleConfig.clientId,

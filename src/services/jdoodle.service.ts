@@ -18,8 +18,7 @@ export class JDoodleService {
 
     const stdin = JSON.stringify({ params: parameters });
 
-    const wrappedScript = `def main(name,age):
-${sourceCode}
+    const wrappedScript = `${sourceCode}
 
 import json
 import sys

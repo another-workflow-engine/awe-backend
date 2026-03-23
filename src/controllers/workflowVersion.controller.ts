@@ -15,6 +15,9 @@ export const workflowVersionController = {
       workflowId: req.params.workflowId,
       actor: req.actor,
     });
+
+    
+
     const workflowVersion = await workflowVersionService.createNew(data);
 
     return res.status(201).json({

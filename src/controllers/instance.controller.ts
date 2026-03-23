@@ -20,19 +20,14 @@ export const instanceController = {
       req.actor,
     );
     return res.status(201).json({
-      instance: {
-        id: instance.id,
-        workflow_version_id: instance.workflow_version_id,
-        status: instance.status,
-        auto_advance: instance.auto_advance,
-        input_variables: instance.input_variables,
-        current_variables: instance.current_variables,
-        output_variables: instance.output_variables,
-        started_on: instance.started_on,
-        ended_on: instance.ended_on,
-        created_by: instance.created_by,
-        created_on: instance.created_on,
-        version_number: workflowVersion.version,
+      id: instance.id,
+      inputVariables: instance.input_variables,
+      status: instance.status,
+      startedAt: instance.started_on,
+      autoAdvance: instance.auto_advance,
+      workflow: {
+        id: workflowVersion.workflow_id,
+        version: workflowVersion.version,
       },
     });
   },

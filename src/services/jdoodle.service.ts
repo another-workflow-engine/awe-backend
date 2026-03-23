@@ -14,7 +14,7 @@ export class JDoodleService {
     sourceCode: string,
     entryFunctionName: string,
     parameters: any[]
-  ): Promise<any> {
+  ): Promise<{parsedOutput:any,rawOutput:string}> {
 
     const stdin = JSON.stringify({ params: parameters });
 
@@ -45,7 +45,8 @@ def safe_serialize(obj):
         elif isinstance(o,list):
             return [convert(i) for i in o]
         else:
-            return convert(obj)
+            return str(o)
+    return convert(obj)
 
 if __name__ == "__main__":
     try:
@@ -67,8 +68,6 @@ if __name__ == "__main__":
         sys.stdout = sys.__stdout__
         print(json.dumps({"error": str(e)}))
 `;
-console.log(wrappedScript)
-console.log(stdin)
     try {
       const response = await axios.post(JDoodleConfig.endpoint, {
         clientId: JDoodleConfig.clientId,
@@ -83,9 +82,10 @@ console.log(stdin)
       let parsedOutput;
 
       try {
-        const rawOutput = response.data.output.trim();
+        const rawOutput = response.data.output || "";
+        const trimmed=rawOutput.trim();
         const lastLine = rawOutput.split("\n").pop();
-        parsedOutput = JSON.parse(lastLine || "");
+        parsedOutput = lastLine?JSON.parse(lastLine): null;
       } catch {
         parsedOutput = response.data.output;
       }

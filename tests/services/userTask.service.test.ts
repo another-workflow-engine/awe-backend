@@ -1,6 +1,7 @@
 import { resumeUserTask } from "../../src/services/userTask.service.js";
 import { NotFoundError } from "../../src/errors/NotFoundError.js";
 import { StateTransitionError } from "../../src/errors/StateTransitionError.js";
+import { ValidationError } from "../../src/errors/ValidationError.js";
 import { TaskStatuses, InstanceStatuses } from "../../src/types/enums.js";
 import type { TaskModel, InstanceModel, NodeModel } from "../../src/types/models.js";
 
@@ -44,7 +45,7 @@ const mockTask: TaskModel = {
 const mockInstance: InstanceModel = {
   id: "inst-1",
   workflow_version_id: "wfv-1",
-  status: InstanceStatuses.PAUSED,
+  status: InstanceStatuses.IN_PROGRESS,
   auto_advance: true,
   input_variables: null,
   output_variables: null,
@@ -86,10 +87,13 @@ const emptyContext = { global: {} };
 
 describe("resumeUserTask", () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     jest.mocked(contextManager.fromJson).mockReturnValue(emptyContext);
     jest.mocked(contextManager.merge).mockReturnValue(emptyContext);
     jest.mocked(edgeResolver.resolveNextNodeIds).mockResolvedValue(["node-end"]);
-    jest.mocked(edgeRepository.findByNodeIds).mockResolvedValue([]);
+    jest
+      .mocked(edgeRepository.findBySourceNodeId)
+      .mockResolvedValue([{ destination_node_id: "node-end" } as any]);
     jest.mocked(queueService.enqueue).mockResolvedValue(undefined);
     jest.mocked(taskRepository.updateById).mockResolvedValue(mockTask);
     jest.mocked(instanceRepository.updateById).mockResolvedValue(mockInstance);
@@ -111,45 +115,75 @@ describe("resumeUserTask", () => {
     await expect(resumeUserTask("task-1", {}, "actor-1")).rejects.toThrow(NotFoundError);
   });
 
-  it("throws StateTransitionError when instance is not PAUSED", async () => {
+  it("throws StateTransitionError when instance is not IN_PROGRESS", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
-    jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce({ ...mockInstance, status: InstanceStatuses.IN_PROGRESS });
+    jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce({ ...mockInstance, status: InstanceStatuses.PAUSED });
     await expect(resumeUserTask("task-1", {}, "actor-1")).rejects.toThrow(StateTransitionError);
   });
 
   it("enqueues next nodes on successful user input submission", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
     jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockInstance);
-    jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([mockNode]);
+    jest.mocked(nodeRepository.findById).mockResolvedValueOnce(mockNode);
+    jest.mocked(taskRepository.insert).mockResolvedValueOnce({
+      ...mockTask,
+      id: "task-2",
+      node_id: "node-end",
+    });
 
     await resumeUserTask("task-1", { approved: true }, "actor-1");
 
     expect(queueService.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ instanceId: "inst-1", nodeId: "node-end" }),
+      expect.objectContaining({ taskId: "task-2" }),
     );
   });
 
   it("maps userInput fields to context variables via responseMap", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
     jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockInstance);
-    jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([mockNode]);
+    jest.mocked(nodeRepository.findById).mockResolvedValueOnce(mockNode);
+    jest.mocked(taskRepository.insert).mockResolvedValueOnce({
+      ...mockTask,
+      id: "task-2",
+      node_id: "node-end",
+    });
 
     await resumeUserTask("task-1", { approved: true }, "actor-1");
 
-    expect(contextManager.merge).toHaveBeenCalledWith(
-      emptyContext,
-      expect.objectContaining({ isApproved: true }),
+    expect(instanceRepository.updateById).toHaveBeenCalledWith(
+      "inst-1",
+      expect.objectContaining({
+        current_variables: expect.objectContaining({
+          constants: expect.objectContaining({ isApproved: true }),
+        }),
+      }),
+      {},
     );
   });
 
   it("updates task to COMPLETED and instance to IN_PROGRESS after user input", async () => {
     jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
     jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockInstance);
-    jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([mockNode]);
+    jest.mocked(nodeRepository.findById).mockResolvedValueOnce(mockNode);
+    jest.mocked(taskRepository.insert).mockResolvedValueOnce({
+      ...mockTask,
+      id: "task-2",
+      node_id: "node-end",
+    });
 
     await resumeUserTask("task-1", { approved: true }, "actor-1");
 
     expect(taskRepository.updateById).toHaveBeenCalledWith("task-1", { status: TaskStatuses.COMPLETED }, {});
     expect(instanceRepository.updateById).toHaveBeenCalledWith("inst-1", expect.objectContaining({ status: InstanceStatuses.IN_PROGRESS }), {});
+  });
+
+  it("throws ValidationError when user input contains unexpected fields", async () => {
+    jest.mocked(taskRepository.findById).mockResolvedValueOnce(mockTask);
+    jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockInstance);
+    jest.mocked(nodeRepository.findById).mockResolvedValueOnce(mockNode);
+
+    await expect(
+      resumeUserTask("task-1", { approved: true, extra: "not-allowed" }, "actor-1"),
+    ).rejects.toThrow(ValidationError);
   });
 });

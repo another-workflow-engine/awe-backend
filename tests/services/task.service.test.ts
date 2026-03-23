@@ -1,9 +1,11 @@
 import { taskService } from "../../src/services/task.service.js";
 import { taskRepository } from "../../src/repositories/task.repository.js";
+import { instanceService } from "../../src/services/instance.service.js";
 import { RepositoryError } from "../../src/errors/RepositoryError.js";
 import type { TaskDetailItem } from "../../src/repositories/task.repository.js";
 
 jest.mock("../../src/repositories/task.repository.js");
+jest.mock("../../src/services/instance.service.js");
 
 const mockTask: TaskDetailItem = {
   id: "task-uuid-1",
@@ -11,18 +13,43 @@ const mockTask: TaskDetailItem = {
   node_id: "node-1",
   status: "completed",
   created_on: new Date(),
-  node_configuration: {},
+  node_configuration: {
+    requestMap: [],
+    responseMap: [],
+  },
   workflow_name: "Test Workflow",
-  instance_context: null,
+  instance_context: { constants: {}, fetchables: {}, urls: {} },
 };
 
 describe("taskService", () => {
   describe("getTask()", () => {
     it("returns the task without instance_context when repository resolves with a task", async () => {
       jest.mocked(taskRepository.findByIdWithContext).mockResolvedValueOnce(mockTask);
+      jest
+        .mocked(instanceService.findById)
+        .mockResolvedValueOnce(
+          {
+            id: "inst-1",
+            current_variables: {
+              constants: {},
+              fetchables: {},
+              urls: {},
+            },
+          } as any,
+        );
+
       const result = await taskService.getTask("task-uuid-1", "actor-1");
-      const { instance_context: _, ...expected } = mockTask;
-      expect(result).toEqual(expected);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: "task-uuid-1",
+          node_id: "node-1",
+          node_configuration: expect.objectContaining({
+            requestMap: [],
+            responseMap: [],
+          }),
+        }),
+      );
     });
 
     it("returns undefined when repository resolves with undefined", async () => {

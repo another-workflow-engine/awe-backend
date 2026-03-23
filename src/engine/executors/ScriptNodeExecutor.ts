@@ -5,11 +5,27 @@ import { BaseExecutor } from "./BaseExecutor.js";
 import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
+import { httpRequestService } from "../../services/httpRequest.service.js";
 import { buildFeelContext } from "../../utils/contextResolver.js";
 import { TaskStatuses } from "../../types/enums.js";
-import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
+import type {
+  ContextVariables,
+  ExecutorResult,
+  ScriptExecutionResponse,
+} from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { JDoodleService } from "../../services/jdoodle.service.js";
+
+function getByPath(data: unknown, path: string): unknown {
+  const parts = path.split(".").filter(Boolean);
+
+  return parts.reduce<unknown>((acc, key) => {
+    if (acc === null || acc === undefined) {
+      return undefined;
+    }
+    return (acc as Record<string, unknown>)[key];
+  }, data);
+}
 
 export class ScriptNodeExecutor extends BaseExecutor {
   async execute(

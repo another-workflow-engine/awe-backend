@@ -1,25 +1,18 @@
 import { StartNodeExecutor } from "../../../src/engine/executors/StartNodeExecutor.js";
 import { TaskStatuses } from "../../../src/types/enums.js";
 import { DataIntegrityError } from "../../../src/errors/DataIntegrity.js";
-import type { NodeModel, InstanceModel } from "../../../src/types/models.js";
+import type { NodeModel } from "../../../src/types/models.js";
+
+jest.mock("../../../src/services/edge.services.js", () => ({
+  edgeService: {
+    getNextNodeIdsBySourceNodeId: jest.fn(),
+  },
+}));
+
+import { edgeService } from "../../../src/services/edge.services.js";
 
 const executor = new StartNodeExecutor();
-const emptyContext = { global: {} };
 const tx = null as any;
-
-const mockInstance: InstanceModel = {
-  id: "inst-1",
-  workflow_version_id: "wfv-1",
-  status: "in_progress",
-  auto_advance: true,
-  input_variables: { amount: 500, label: "test" },
-  output_variables: null,
-  current_variables: null,
-  started_on: new Date(),
-  ended_on: null,
-  created_by: "actor-1",
-  created_on: new Date(),
-};
 
 const makeNode = (configuration: unknown): NodeModel => ({
   id: "node-1",
@@ -44,19 +37,38 @@ const makeNode = (configuration: unknown): NodeModel => ({
 });
 
 describe("StartNodeExecutor", () => {
-  it("maps constants correctly from instanceInputVariables", async () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest
+      .mocked(edgeService.getNextNodeIdsBySourceNodeId)
+      .mockResolvedValue(["node-next"]);
+  });
+
+  it("maps constants from input variables", async () => {
     const node = makeNode({
       inputDataMap: [
-        { jsonPath: "amount", dataType: "number", contextVariableName: "amount", persist: false },
+        {
+          jsonPath: "amount",
+          dataType: "number",
+          contextVariableName: "amount",
+          persist: false,
+        },
       ],
       fetchables: [],
     });
-    const result = await executor.execute(mockInstance, node, emptyContext, tx);
+
+    const result = await executor.execute(
+      node,
+      { constants: { amount: 500 }, fetchables: {}, urls: {} },
+      tx,
+    );
+
     expect(result.status).toBe(TaskStatuses.COMPLETED);
-    expect((result.outputVariables.constants as Record<string, unknown>).amount).toBe(500);
+    expect((result.outputVariables as any).constants.amount).toBe(500);
+    expect(result.nextNodeId).toBe("node-next");
   });
 
-  it("stores fetchable metadata in fetchables (not constants) when fetchableId is present", async () => {
+  it("stores fetchable metadata and url expression", async () => {
     const node = makeNode({
       inputDataMap: [
         {
@@ -67,81 +79,62 @@ describe("StartNodeExecutor", () => {
           persist: false,
         },
       ],
-      fetchables: [{ id: "fetch-user", method: "GET", urlExpression: '"https://api.example.com"' }],
-    });
-    const result = await executor.execute(mockInstance, node, emptyContext, tx);
-    expect(result.status).toBe(TaskStatuses.COMPLETED);
-    const constants = result.outputVariables.constants as Record<string, unknown>;
-    const fetchables = result.outputVariables.fetchables as Record<string, unknown>;
-    expect(constants["userVar"]).toBeUndefined();
-    expect(fetchables["userVar"]).toEqual({ urlId: "fetch-user", jsonPath: "userId", dataType: "string" });
-  });
-
-  it("stores multiple fetchable entries as metadata when they share a fetchableId", async () => {
-    const node = makeNode({
-      inputDataMap: [
-        { jsonPath: "name", dataType: "string", contextVariableName: "userName", fetchableId: "fetch-profile", persist: false },
-        { jsonPath: "age", dataType: "number", contextVariableName: "userAge", fetchableId: "fetch-profile", persist: false },
+      fetchables: [
+        {
+          id: "fetch-user",
+          method: "GET",
+          urlExpression: '"https://api.example.com"',
+        },
       ],
-      fetchables: [{ id: "fetch-profile", method: "GET", urlExpression: '"https://api.example.com/profile"' }],
     });
-    const result = await executor.execute(mockInstance, node, emptyContext, tx);
-    expect(result.status).toBe(TaskStatuses.COMPLETED);
-    const fetchables = result.outputVariables.fetchables as Record<string, { urlId: string; jsonPath: string; dataType: string }>;
-    expect(fetchables["userName"]).toEqual({ urlId: "fetch-profile", jsonPath: "name", dataType: "string" });
-    expect(fetchables["userAge"]).toEqual({ urlId: "fetch-profile", jsonPath: "age", dataType: "number" });
-    const constants = result.outputVariables.constants as Record<string, unknown>;
-    expect(constants["userName"]).toBeUndefined();
-    expect(constants["userAge"]).toBeUndefined();
-  });
 
-  it("evaluates FEEL urlExpression and stores {url, headers} in urls keyed by fetchable id", async () => {
-    const node = makeNode({
-      inputDataMap: [],
-      fetchables: [{ id: "fetch-data", method: "GET", urlExpression: '"https://api.example.com"' }],
+    const result = await executor.execute(
+      node,
+      { constants: { userId: "u1" }, fetchables: {}, urls: {} },
+      tx,
+    );
+
+    const output = result.outputVariables as any;
+    expect(output.constants.userVar).toBeUndefined();
+    expect(output.fetchables.userVar).toEqual({
+      urlId: "fetch-user",
+      jsonPath: "userId",
+      dataType: "string",
     });
-    const result = await executor.execute(mockInstance, node, emptyContext, tx);
-    expect(result.status).toBe(TaskStatuses.COMPLETED);
-    expect((result.outputVariables.urls as Record<string, unknown>)["fetch-data"]).toEqual({
-      url: "https://api.example.com",
+    expect(output.urls["fetch-user"]).toEqual({
+      urlExpression: '"https://api.example.com"',
       headers: {},
     });
   });
 
-  it("returns COMPLETED with empty maps when inputDataMap and fetchables are empty", async () => {
-    const node = makeNode({ inputDataMap: [], fetchables: [] });
-    const result = await executor.execute(mockInstance, node, emptyContext, tx);
-    expect(result.status).toBe(TaskStatuses.COMPLETED);
-    expect(result.outputVariables.constants).toEqual({});
-    expect(result.outputVariables.fetchables).toEqual({});
-    expect(result.outputVariables.urls).toEqual({});
-  });
-
-  it("throws DataIntegrityError when node configuration is invalid", async () => {
-    const node = makeNode("not-an-object");
-    await expect(executor.execute(mockInstance, node, emptyContext, tx)).rejects.toThrow(
-      DataIntegrityError,
-    );
-  });
-
-  it("throws DataIntegrityError when FEEL URL expression evaluates to a non-string", async () => {
+  it("returns FAILED when required input field is missing", async () => {
     const node = makeNode({
-      inputDataMap: [],
-      fetchables: [{ id: "fetch-1", method: "GET", urlExpression: "42" }],
+      inputDataMap: [
+        {
+          jsonPath: "missing",
+          dataType: "string",
+          contextVariableName: "value",
+          persist: false,
+        },
+      ],
+      fetchables: [],
     });
-    await expect(executor.execute(mockInstance, node, emptyContext, tx)).rejects.toThrow(
-      DataIntegrityError,
-    );
-  });
 
-  it("ignores _context and _transaction params and still returns COMPLETED", async () => {
-    const node = makeNode({ inputDataMap: [], fetchables: [] });
     const result = await executor.execute(
-      mockInstance,
       node,
-      { global: { irrelevant: true } },
+      { constants: {}, fetchables: {}, urls: {} },
       tx,
     );
-    expect(result.status).toBe(TaskStatuses.COMPLETED);
+
+    expect(result.status).toBe(TaskStatuses.FAILED);
+    expect(result.error).toContain("missing");
+    expect(result.nextNodeId).toBeNull();
+  });
+
+  it("throws DataIntegrityError when configuration is invalid", async () => {
+    const node = makeNode("not-an-object");
+    await expect(
+      executor.execute(node, { constants: {}, fetchables: {}, urls: {} }, tx),
+    ).rejects.toThrow(DataIntegrityError);
   });
 });

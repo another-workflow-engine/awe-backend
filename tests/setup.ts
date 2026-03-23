@@ -12,3 +12,12 @@ process.env.API_KEY_PREFIX = "awe_test";
 process.env.REDIS_HOST = "localhost";
 process.env.REDIS_PORT = "6379";
 process.env.REDIS_PASSWORD = "test-password";
+process.env.EXECUTION_QUEUE_NAME = "execution-queue-test";
+
+jest.mock("../src/services/queue.service.js", () => ({
+	queueService: {
+		enqueue: jest.fn(async () => undefined),
+		initializeWorker: jest.fn(() => undefined),
+		close: jest.fn(async () => undefined),
+	},
+}));

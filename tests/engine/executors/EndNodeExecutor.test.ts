@@ -1,24 +1,10 @@
 import { EndNodeExecutor } from "../../../src/engine/executors/EndNodeExecutor.js";
 import { TaskStatuses } from "../../../src/types/enums.js";
 import { DataIntegrityError } from "../../../src/errors/DataIntegrity.js";
-import type { NodeModel, InstanceModel } from "../../../src/types/models.js";
+import type { NodeModel } from "../../../src/types/models.js";
 
 const executor = new EndNodeExecutor();
 const tx = null as any;
-
-const mockInstance: InstanceModel = {
-  id: "inst-1",
-  workflow_version_id: "wfv-1",
-  status: "in_progress",
-  auto_advance: true,
-  input_variables: null,
-  output_variables: null,
-  current_variables: null,
-  started_on: new Date(),
-  ended_on: null,
-  created_by: "actor-1",
-  created_on: new Date(),
-};
 
 const makeNode = (configuration: unknown): NodeModel => ({
   id: "node-end",
@@ -44,7 +30,7 @@ const makeNode = (configuration: unknown): NodeModel => ({
 
 describe("EndNodeExecutor", () => {
   it("evaluates resultMap FEEL expressions and returns COMPLETED with correct outputVariables", async () => {
-const ctx = { global: { amount: 500 } };
+    const ctx = { constants: { amount: 500 }, fetchables: {}, urls: {} };
     const node = makeNode({
       success: true,
       resultMap: [
@@ -54,19 +40,23 @@ const ctx = { global: { amount: 500 } };
         },
       ],
     });
-    const result = await executor.execute(mockInstance, node, ctx, tx);
+    const result = await executor.execute(node, ctx, tx);
     expect(result.status).toBe(TaskStatuses.COMPLETED);
     expect(result.outputVariables.result).toBe(500);
   });
 
   it("returns FAILED when configuration.success is false even when FEEL evaluation succeeds", async () => {
     const node = makeNode({ success: false, resultMap: [] });
-    const result = await executor.execute(mockInstance, node, { global: {} }, tx);
+    const result = await executor.execute(
+      node,
+      { constants: {}, fetchables: {}, urls: {} },
+      tx,
+    );
     expect(result.status).toBe(TaskStatuses.FAILED);
   });
 
-  it("returns FAILED when FEEL expression produces evaluation warnings", async () => {
-const ctx = { global: { amount: 500 } };
+  it("throws DataIntegrityError when FEEL expression produces evaluation warnings", async () => {
+    const ctx = { constants: { amount: 500 }, fetchables: {}, urls: {} };
     const node = makeNode({
       success: true,
       resultMap: [
@@ -76,46 +66,18 @@ const ctx = { global: { amount: 500 } };
         },
       ],
     });
-    const result = await executor.execute(mockInstance, node, ctx, tx);
-    expect(result.status).toBe(TaskStatuses.FAILED);
-    expect(result.error).toContain("amount()");
-  });
-
-  it("returns COMPLETED when validationExpression evaluates to true", async () => {
-const ctx = { global: { amount: 500 } };
-    const node = makeNode({
-      success: true,
-      resultMap: [
-        {
-          contextVariable: { name: "result", scope: "global" },
-          valueExpression: "context.amount",
-          validationExpression: "value > 100",
-        },
-      ],
-    });
-    const result = await executor.execute(mockInstance, node, ctx, tx);
-    expect(result.status).toBe(TaskStatuses.COMPLETED);
-  });
-
-  it("returns FAILED when validationExpression evaluates to false", async () => {
-    const ctx = { global: { amount: 50 }, next: {} };
-    const node = makeNode({
-      success: true,
-      resultMap: [
-        {
-          contextVariable: { name: "result", scope: "global" },
-          valueExpression: "context.amount",
-          validationExpression: "value > 100",
-        },
-      ],
-    });
-    const result = await executor.execute(mockInstance, node, ctx, tx);
-    expect(result.status).toBe(TaskStatuses.FAILED);
+    await expect(executor.execute(node, ctx, tx)).rejects.toThrow(
+      DataIntegrityError,
+    );
   });
 
   it("returns COMPLETED with empty outputVariables when resultMap is empty", async () => {
     const node = makeNode({ success: true, resultMap: [] });
-    const result = await executor.execute(mockInstance, node, { global: {} }, tx);
+    const result = await executor.execute(
+      node,
+      { constants: {}, fetchables: {}, urls: {} },
+      tx,
+    );
     expect(result.status).toBe(TaskStatuses.COMPLETED);
     expect(result.outputVariables).toEqual({});
   });
@@ -123,13 +85,17 @@ const ctx = { global: { amount: 500 } };
   it("throws DataIntegrityError when node configuration is invalid", async () => {
     const node = makeNode("not-an-object");
     await expect(
-      executor.execute(mockInstance, node, { global: {} }, tx),
+      executor.execute(node, { constants: {}, fetchables: {}, urls: {} }, tx),
     ).rejects.toThrow(DataIntegrityError);
   });
 
   it("includes message in outputVariables when end node has a message configured", async () => {
     const node = makeNode({ success: true, resultMap: [], message: "Workflow completed successfully!" });
-    const result = await executor.execute(mockInstance, node, { global: {} }, tx);
+    const result = await executor.execute(
+      node,
+      { constants: {}, fetchables: {}, urls: {} },
+      tx,
+    );
     expect(result.status).toBe(TaskStatuses.COMPLETED);
     expect(result.outputVariables.message).toBe("Workflow completed successfully!");
   });

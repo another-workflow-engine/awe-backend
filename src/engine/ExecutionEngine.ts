@@ -2,6 +2,7 @@ import { db } from "../database.js";
 import { StartNodeExecutor } from "./executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "./executors/EndNodeExecutor.js";
 import { DecisionNodeExecutor } from "./executors/DecisionNodeExecutor.js";
+import { ServiceNodeExecutor } from "./executors/ServiceNodeExecuter.js";
 import type { BaseExecutor } from "./executors/BaseExecutor.js";
 import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -23,6 +24,7 @@ const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.END]: new EndNodeExecutor(),
   [NodeTypes.DECISION]: new DecisionNodeExecutor(),
   [NodeTypes.SCRIPT]: new ScriptNodeExecutor(),
+  [NodeTypes.SERVICE]: new ServiceNodeExecutor(),
 };
 
 export const executionEngine = {

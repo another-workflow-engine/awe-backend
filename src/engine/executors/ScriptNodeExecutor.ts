@@ -7,11 +7,7 @@ import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { buildFeelContext } from "../../utils/contextResolver.js";
 import { TaskStatuses } from "../../types/enums.js";
-import type {
-  ContextVariables,
-  ExecutorResult,
-  ScriptExecutionResponse,
-} from "../../types/engine.js";
+import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { JDoodleService } from "../../services/jdoodle.service.js";
 
@@ -21,7 +17,6 @@ export class ScriptNodeExecutor extends BaseExecutor {
     inputVariables: ContextVariables,
     transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
-
     const parsed = ScriptNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {
       throw new DataIntegrityError(
@@ -34,8 +29,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
     const currentContext = await buildFeelContext(inputVariables);
 
     const parameters = configuration.parameterMap.map(
-      (parameter) =>
-        evaluate(parameter.valueExpression, currentContext).value,
+      (parameter) => evaluate(parameter.valueExpression, currentContext).value,
     );
 
     let parsedOutput;
@@ -44,14 +38,13 @@ export class ScriptNodeExecutor extends BaseExecutor {
       const response = await JDoodleService.executeScript(
         configuration.sourceCode,
         configuration.entryFunctionName,
-        parameters
+        parameters,
       );
 
       parsedOutput = response.parsedOutput;
 
       console.log("RAW:", response.rawOutput);
       console.log("PARSED:", parsedOutput);
-
     } catch (error: any) {
       return {
         status: TaskStatuses.FAILED,
@@ -72,16 +65,14 @@ export class ScriptNodeExecutor extends BaseExecutor {
 
     let outputVariables: Record<string, unknown> = {};
 
-    configuration.responseMap.forEach(
-      ({ jsonPath, contextVariable }) => {
-        if (!contextVariable) return;
+    configuration.responseMap.forEach(({ jsonPath, contextVariable }) => {
+      if (!contextVariable) return;
 
-        outputVariables[contextVariable.name] =
-          typeof parsedOutput === "object"
-            ? parsedOutput?.[jsonPath]
-            : parsedOutput;
-      }
-    );
+      outputVariables[contextVariable.name] =
+        typeof parsedOutput === "object"
+          ? parsedOutput?.[jsonPath]
+          : parsedOutput;
+    });
 
     const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(
       node.id,

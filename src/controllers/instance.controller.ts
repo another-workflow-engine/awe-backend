@@ -74,20 +74,12 @@ export const instanceController = {
   getExecutionLogs: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
 
-    const instance = await instanceService.getById(instanceId, req.actor.id);
-    if (!instance) throw new NotFoundError(`Instance id=${instanceId} not found`);
+    const instance = await instanceService.get(instanceId, req.actor.id);
+    if (!instance)
+      throw new NotFoundError(`Instance id=${instanceId} not found`);
 
-    const executions = await taskExecutionRepository.findByInstanceId(instanceId);
-    return res.json({ executions });
-  },
-
-  getExecutionLogs: async (req: Request, res: Response) => {
-    const { instanceId } = InstanceParamsSchema.parse(req.params);
-
-    const instance = await instanceService.getById(instanceId, req.actor.id);
-    if (!instance) throw new NotFoundError(`Instance id=${instanceId} not found`);
-
-    const executions = await taskExecutionRepository.findByInstanceId(instanceId);
+    const executions =
+      await taskExecutionRepository.findByInstanceId(instanceId);
     return res.json({ executions });
   },
 };

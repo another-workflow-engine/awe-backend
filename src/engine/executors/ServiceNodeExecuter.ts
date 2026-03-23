@@ -5,11 +5,11 @@ import { BaseExecutor } from "./BaseExecutor.js";
 import { ServiceNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
-import { buildFeelContext } from "../../utils/contextResolver.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { httpRequestService } from "../../services/httpRequest.service.js";
+import { contextUtils } from "../../utils/context.utils.js";
 
 function getByPath(data: unknown, path: string): unknown {
   const parts = path.split(".").filter(Boolean);
@@ -37,7 +37,7 @@ export class ServiceNodeExecutor extends BaseExecutor {
 
     const configuration = parsed.data;
 
-    const feelContext = await buildFeelContext(inputVariables);
+    const feelContext = await contextUtils.buildFeelContext(inputVariables);
 
     const urlResult = evaluate(configuration.urlExpression, feelContext);
     if (
@@ -136,79 +136,25 @@ export class ServiceNodeExecutor extends BaseExecutor {
           );
       }
     } catch (error) {
-      if (configuration.onError === "terminate" || !configuration.onError) {
-        return {
-          status: TaskStatuses.FAILED,
-          outputVariables: {},
-          error: error instanceof Error ? error.message : String(error),
-          nextNodeId: null,
-        };
-      }
-
-      const errorOutputVariables: Record<string, unknown> = {};
-      for (const errorItem of configuration.onError.errorMap) {
-        if (!errorItem.contextVariable) {
-          continue;
-        }
-
-        if ("valueExpression" in errorItem) {
-          const errorResult = evaluate(errorItem.valueExpression, feelContext);
-          if (errorResult.warnings.length === 0) {
-            errorOutputVariables[errorItem.contextVariable.name] =
-              errorResult.value;
-          }
-        } else if ("jsonPath" in errorItem) {
-          errorOutputVariables[errorItem.contextVariable.name] = undefined;
-        }
-      }
-
-      const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(
+      const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
         node.id,
         transaction,
       );
 
       return {
         status: TaskStatuses.COMPLETED,
-        outputVariables: errorOutputVariables,
+        outputVariables: {},
         nextNodeId: nextNode ?? null,
       };
     }
 
     const outputVariables: Record<string, unknown> = {};
     for (const responseItem of configuration.responseMap) {
-      if (!responseItem.contextVariable) {
-        continue;
-      }
-
       const value = getByPath(responseBody, responseItem.jsonPath);
-
-      if (responseItem.validationExpression) {
-        const validationContext = {
-          ...feelContext,
-          context: {
-            ...feelContext.context,
-            value,
-          },
-        };
-        const validationResult = evaluate(
-          responseItem.validationExpression,
-          validationContext,
-        );
-
-        if (validationResult.value !== true) {
-          return {
-            status: TaskStatuses.FAILED,
-            outputVariables: {},
-            error: `Validation failed for "${responseItem.jsonPath}": ${responseItem.validationExpression}`,
-            nextNodeId: null,
-          };
-        }
-      }
-
-      outputVariables[responseItem.contextVariable.name] = value;
+      outputVariables[responseItem.contextVariableName] = value;
     }
 
-    const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(
+    const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
       node.id,
       transaction,
     );

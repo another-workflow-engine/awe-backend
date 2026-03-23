@@ -10,7 +10,11 @@ import { taskService } from "../services/task.service.js";
 import { taskExecutionService } from "../services/taskExecution.service.js";
 import { instanceService } from "../services/instance.service.js";
 import type { DB, InstanceStatus, NodeType } from "../types/database.js";
-import type { InstanceModel, NodeModel } from "../types/models.js";
+import type {
+  InstanceModel,
+  NodeModel,
+  TaskExecutionModel,
+} from "../types/models.js";
 import type { ContextVariables, ExecutorResult } from "../types/engine.js";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { contextUtils } from "../utils/context.utils.js";
@@ -156,9 +160,11 @@ export const executionEngine = {
         transaction,
       );
 
-      if (instance.auto_advance) {
-        await executionEngine.createNewTask(startNode, instance, transaction);
+      if (!instance.auto_advance) {
+        return instance;
       }
+
+      await executionEngine.createNewTask(startNode, instance, transaction);
 
       return instance;
     });
@@ -199,21 +205,23 @@ export const executionEngine = {
       throw new EngineError(`Executor for node type="${node.type}" not found`);
     }
 
-    const executionContext = getExecutionContext(node, instance);
-
     let result: ExecutorResult = {
       status: TaskStatuses.IN_PROGRESS,
       outputVariables: {},
       nextNodeId: null,
     };
 
-    const taskExecution = await taskExecutionService.startNew(
-      task.id,
-      TaskStatuses.IN_PROGRESS,
-      executionContext,
-    );
+    let taskExecution: TaskExecutionModel;
 
     try {
+      const executionContext = getExecutionContext(node, instance);
+
+      taskExecution = await taskExecutionService.startNew(
+        task.id,
+        TaskStatuses.IN_PROGRESS,
+        executionContext,
+      );
+
       result = await executor.execute(node, executionContext);
     } catch (err) {
       executionThrew = true;
@@ -230,17 +238,17 @@ export const executionEngine = {
       };
     }
 
-    const updateInstanceContext = getUpdatedInstanceContext(
-      node,
-      result.outputVariables,
-      instance,
-    );
-
     const updateInstanceStatus = getUpdatedInstanceStatus(
       instance.auto_advance,
       executionThrew,
       result,
       node.type,
+    );
+
+    const updateInstanceContext = getUpdatedInstanceContext(
+      node,
+      result.outputVariables,
+      instance,
     );
 
     const nextNode = await getNextNode(
@@ -249,7 +257,7 @@ export const executionEngine = {
       executionThrew,
     );
 
-    db.transaction().execute(async (transaction) => {
+    await db.transaction().execute(async (transaction) => {
       let instanceUpdateCallback;
 
       if (
@@ -263,6 +271,13 @@ export const executionEngine = {
           result.outputVariables,
           transaction,
         );
+      } else if (updateInstanceStatus === InstanceStatuses.FAILED) {
+        instanceUpdateCallback = instanceService.end(
+          instance.id,
+          updateInstanceStatus,
+          {},
+          transaction,
+        );
       } else {
         instanceUpdateCallback = instanceService.updateContext(
           instance.id,
@@ -274,12 +289,14 @@ export const executionEngine = {
       }
 
       await Promise.all([
-        taskExecutionService.end(
-          taskExecution.id,
-          result.status,
-          result.outputVariables,
-          transaction,
-        ),
+        taskExecution
+          ? taskExecutionService.end(
+              taskExecution.id,
+              result.status,
+              result.outputVariables,
+              transaction,
+            )
+          : Promise.resolve(),
         taskService.updateStatus(task.id, result.status, transaction),
         instanceUpdateCallback,
       ]);
@@ -302,17 +319,19 @@ export const executionEngine = {
       transaction,
     );
 
-    if (node.type === NodeTypes.USER) {
-      await userTaskService.createNew(
-        node,
-        task,
-        getExecutionContext(node, instance),
-        transaction,
-      );
-    } else {
+    if (node.type !== NodeTypes.USER) {
       await queueService.enqueue({
         taskId: task.id,
       });
+
+      return;
     }
+
+    await userTaskService.createNew(
+      node,
+      task,
+      getExecutionContext(node, instance),
+      transaction,
+    );
   },
 };

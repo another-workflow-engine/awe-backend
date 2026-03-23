@@ -4,18 +4,18 @@ import type { ActorModel, InstanceModel } from "../types/models.js";
 import type { z } from "zod";
 import { workflowVersionService } from "./workflowVersion.service.js";
 import { nodeService } from "./node.services.js";
-import { queueService } from "./queue.service.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { InstanceStatuses, TaskStatuses } from "../types/enums.js";
+import { InstanceStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
 import type { DB, InstanceStatus } from "../types/database.js";
 import type { Transaction } from "kysely";
-import { taskService } from "./task.service.js";
 import { executionEngine } from "../engine/ExecutionEngine.js";
+import { taskRepository } from "../repositories/task.repository.js";
+import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -24,10 +24,7 @@ export const instanceService = {
     return instanceRepository.findAll(actorId);
   },
 
-  createNew: async (
-    data: CreateVersionInput,
-    actor: ActorModel,
-  ): Promise<InstanceModel> => {
+  createNew: async (data: CreateVersionInput, actor: ActorModel) => {
     const workflowVersion =
       await workflowVersionService.getActiveVersionByWorkflowId(
         data.workflowId,
@@ -36,19 +33,42 @@ export const instanceService = {
       throw new NotFoundError("No active workflow version found");
     }
 
-    return await executionEngine.startInstance(
+    const instance = await executionEngine.startInstance(
       workflowVersion.id,
       data.autoAdvance,
       data.context,
       actor.id,
     );
+
+    return { instance, workflowVersion };
   },
 
-  get: async (
-    instanceId: string,
-    actorId: string,
-  ): Promise<InstanceModel | undefined> => {
-    return instanceRepository.findDetailByIdForActor(instanceId, actorId);
+  get: async (instanceId: string, actorId: string) => {
+    const instance = await instanceRepository.findById(instanceId);
+    if (!instance) {
+      throw new NotFoundError("Instance");
+    }
+
+    const workflowVersion = await workflowVersionRepository.findById(
+      instance.workflow_version_id,
+    );
+    if (!workflowVersion) {
+      throw new DataIntegrityError(
+        `Workflow version does not exist id = ${instance.workflow_version_id}`,
+      );
+    }
+
+    const task = await taskRepository.findLatestByInstanceId(instance.id);
+    if (!task) {
+      return { instance, workflowVersion, node: null, task: null };
+    }
+
+    const node = await nodeService.getById(task.node_id);
+    if (!node) {
+      throw new DataIntegrityError(`Node does not exist id = ${task.node_id}`);
+    }
+
+    return { instance, workflowVersion, node, task };
   },
 
   advanceInstance: async (

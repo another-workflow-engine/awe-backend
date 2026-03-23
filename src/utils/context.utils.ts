@@ -3,6 +3,7 @@ import type { ContextVariables } from "../types/engine.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { evaluate } from "@bpmn-io/feelin";
 import type { NodeInputSchema } from "../types/workflow.js";
+import { EngineError } from "../errors/EngineError.js";
 
 type DataTypeMap = {
   string: string;
@@ -131,16 +132,16 @@ export const contextUtils = {
       urls: {},
     };
 
-    inputSchema.variableNames.forEach(async (variableName) => {
+    for (const variableName of inputSchema.variableNames) {
       if (variableName in constants) {
         returnContext.constants[variableName] = constants[variableName];
-        return;
+        continue;
       }
 
       const fetchable = fetchables[variableName];
 
       if (fetchable === undefined) {
-        throw new DataIntegrityError(
+        throw new EngineError(
           `Required variable ${variableName} does not exists in context`,
         );
       }
@@ -155,7 +156,7 @@ export const contextUtils = {
       }
 
       returnContext.urls[fetchable.urlId] = urlSettings;
-    });
+    }
 
     return returnContext;
   },

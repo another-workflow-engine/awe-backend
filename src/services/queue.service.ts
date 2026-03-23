@@ -18,6 +18,10 @@ export const queueService = {
     );
   },
 
+  obliterate: async (): Promise<void> => {
+    await bullMQQueue.queue.obliterate({ force: true });
+  },
+
   stopWorker: async (): Promise<void> => {
     await workerInstance?.close();
     workerInstance = null;

@@ -5,6 +5,7 @@ import {
   InstanceParamsSchema,
 } from "../schemas/instance.schema.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
+import { version } from "node:os";
 
 export const instanceController = {
   list: async (req: Request, res: Response) => {
@@ -14,16 +15,54 @@ export const instanceController = {
 
   create: async (req: Request, res: Response) => {
     const data = InstanceCreateSchema.parse({ ...req.body });
-    const instance = await instanceService.createNew(data, req.actor);
-    return res.status(201).json({ instance });
+    const { instance, workflowVersion } = await instanceService.createNew(
+      data,
+      req.actor,
+    );
+    return res.status(201).json({
+      id: instance.id,
+      inputVariables: instance.input_variables,
+      status: instance.status,
+      startedAt: instance.started_on,
+      autoAdvance: instance.auto_advance,
+      workflow: {
+        id: workflowVersion.workflow_id,
+        version: workflowVersion.version,
+      },
+    });
   },
 
   get: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.get(instanceId, req.actor.id);
-    if (!instance)
-      throw new NotFoundError(`Instance id=${instanceId} not found`);
-    return res.json({ instance });
+    const { instance, workflowVersion, node, task } = await instanceService.get(
+      instanceId,
+      req.actor.id,
+    );
+    return res.json({
+      id: instance.id,
+      inputVariables: instance.input_variables,
+      currentVariables: instance.current_variables,
+      outputVariables: instance.output_variables,
+      status: instance.status,
+      startedAt: instance.started_on,
+      endedAt: instance.ended_on,
+      autoAdvance: instance.auto_advance,
+      workflow: {
+        id: workflowVersion.workflow_id,
+        version: workflowVersion.version,
+      },
+      currentTask:
+        !task || !node
+          ? null
+          : {
+              id: task.id,
+              nodeId: node.client_id,
+              type: node.type,
+              name: node.name,
+              status: task.status,
+              startedAt: task.created_on,
+            },
+    });
   },
 
   advance: async (req: Request, res: Response) => {

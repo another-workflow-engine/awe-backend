@@ -23,6 +23,16 @@ export const taskRepository = {
     }
   },
 
+  findLatestByInstanceId: async (instanceId: string) => {
+    return await db
+      .selectFrom("task")
+      .selectAll()
+      .where("instance_id", "=", instanceId)
+      .orderBy("created_on", "desc")
+      .limit(1)
+      .executeTakeFirst();
+  },
+
   insert: async (
     data: NewTask,
     transaction?: Transaction<DB>,

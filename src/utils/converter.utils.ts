@@ -1,6 +1,10 @@
 import { DataIntegrityError } from "../errors/DataIntegrity";
 import type { JsonValue } from "../types/database";
-import type { ContextVariables } from "../types/engine";
+import type {
+  ContextVariables,
+  FetchableSettings,
+  UrlSettings,
+} from "../types/engine";
 import type { NodeInputSchema } from "../types/workflow";
 import { z } from "zod";
 
@@ -11,6 +15,10 @@ function isNodeInputSchema(value: unknown): value is NodeInputSchema {
     Array.isArray(obj.variableNames) &&
     obj.variableNames.every((v) => typeof v === "string")
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export const converterUtils = {
@@ -49,11 +57,13 @@ export const converterUtils = {
   objectToContextVariables: (
     obj: Record<string, unknown>,
   ): ContextVariables => {
-    if (!obj.constants || !obj.fetchables || !obj.urls) {
-      throw new DataIntegrityError("Invalid context variables");
-    }
-
-    return obj as unknown as ContextVariables;
+    return {
+      constants: isRecord(obj.constants) ? obj.constants : {},
+      fetchables: isRecord(obj.fetchables)
+        ? (obj.fetchables as Record<string, FetchableSettings>)
+        : {},
+      urls: isRecord(obj.urls) ? (obj.urls as Record<string, UrlSettings>) : {},
+    };
   },
 
   parseOrThrow<T>(

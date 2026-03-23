@@ -71,10 +71,7 @@ export const instanceService = {
     return { instance, workflowVersion, node, task };
   },
 
-  advanceInstance: async (
-    instanceId: string,
-    actor: ActorModel,
-  ) => {
+  advanceInstance: async (instanceId: string, actor: ActorModel) => {
     const instance = await instanceRepository.findById(instanceId);
     if (!instance)
       throw new NotFoundError(`Instance id=${instanceId} not found`);
@@ -100,7 +97,7 @@ export const instanceService = {
       );
     }
 
-    db.transaction().execute(async (transaction) => {
+    await db.transaction().execute(async (transaction) => {
       await executionEngine.createNextTask(nextNode, instance, transaction);
     });
   },

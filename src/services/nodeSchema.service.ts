@@ -21,7 +21,7 @@ export const nodeSchemaService = {
       label: node.name,
       description: node.description,
       position:
-        node.x_coordinate && node.y_coordinate
+        node.x_coordinate !== null && node.y_coordinate !== null
           ? { x: node.x_coordinate, y: node.y_coordinate }
           : null,
       type: node.type,
@@ -131,7 +131,20 @@ export const nodeSchemaService = {
       );
     });
 
+    if (configuration.assignee) {
+      nodeSchemaService._updateNameSetForExpression(
+        inputVariableSet,
+        configuration.assignee,
+      );
+    }
+
     configuration.responseMap.forEach((data) => {
+      data.options?.forEach((option) => {
+        nodeSchemaService._updateNameSetForExpression(
+          inputVariableSet,
+          option.valueExpression,
+        );
+      });
       outputVariableSet.add(data.contextVariableName);
     });
 
@@ -153,6 +166,20 @@ export const nodeSchemaService = {
   } => {
     const inputVariableSet = new Set<string>();
     const outputVariableSet = new Set<string>();
+
+    nodeSchemaService._updateNameSetForExpression(
+      inputVariableSet,
+      configuration.urlExpression,
+    );
+
+    if (configuration.headers) {
+      configuration.headers.forEach((header) => {
+        nodeSchemaService._updateNameSetForExpression(
+          inputVariableSet,
+          header.valueExpression,
+        );
+      });
+    }
 
     if (configuration.body) {
       configuration.body.forEach((data) =>

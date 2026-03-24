@@ -170,6 +170,11 @@ export const nodeSchemaService = {
       );
     }
 
+    nodeSchemaService._updateNameSetForExpression(
+      inputVariableSet,
+      configuration.urlExpression,
+    );
+
     configuration.responseMap.forEach((data) => {
       outputVariableSet.add(data.contextVariableName);
     });

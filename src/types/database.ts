@@ -33,7 +33,7 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
 
 export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
-export type InstanceTransitionType = "failed" | "paused" | "resumed" | "terminated";
+export type InstanceTransitionType = "completed" | "created" | "failed" | "paused" | "resumed" | "started" | "terminated";
 
 export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
 
@@ -57,7 +57,7 @@ export type StorageBuckettype = "ANALYTICS" | "STANDARD" | "VECTOR";
 
 export type TaskStatus = "completed" | "failed" | "in_progress" | "terminated";
 
-export type TaskTransitionType = "failed" | "retried" | "terminated";
+export type TaskTransitionType = "completed" | "failed" | "retried" | "started" | "terminated";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 

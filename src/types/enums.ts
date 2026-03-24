@@ -2,8 +2,10 @@ import type {
   ActorType,
   EnvironmentType,
   InstanceStatus,
+  InstanceTransitionType,
   NodeType,
   TaskStatus,
+  TaskTransitionType,
   WorkflowVersionStatus,
 } from "./database.js";
 
@@ -48,6 +50,24 @@ export const TaskStatuses = {
   IN_PROGRESS: "in_progress",
   TERMINATED: "terminated",
 } as const satisfies Record<string, TaskStatus>;
+
+export const InstanceTransitionTypes = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  PAUSED: "paused",
+  TERMINATED: "terminated",
+  CREATED: "created",
+  RESUMED: "resumed",
+  STARTED: "started",
+} as const satisfies Record<string, InstanceTransitionType>;
+
+export const TaskTransitionTypes = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  TERMINATED: "terminated",
+  STARTED: "started",
+  RETRIED: "retried",
+} as const satisfies Record<string, TaskTransitionType>;
 
 export enum FeelDataType {
   NUMBER = "number",

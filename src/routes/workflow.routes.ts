@@ -41,6 +41,12 @@ workflowRouter.post(
 );
 
 workflowRouter.get(
+  "/:workflowId/versions",
+  authenticateRequest,
+  workflowVersionController.list,
+);
+
+workflowRouter.get(
   "/:workflowId/versions/:version",
   authenticateRequest,
   workflowVersionController.get,
@@ -56,6 +62,24 @@ workflowRouter.patch(
   "/:workflowId/versions/:version/status",
   authenticateRequest,
   workflowVersionController.updateStatus,
+);
+
+workflowRouter.post(
+  "/:workflowId/versions/:version/publish",
+  authenticateRequest,
+  workflowVersionController.publish,
+);
+
+workflowRouter.post(
+  "/:workflowId/versions/:version/activate",
+  authenticateRequest,
+  workflowVersionController.activate,
+);
+
+workflowRouter.post(
+  "/:workflowId/versions/:version/deactivate",
+  authenticateRequest,
+  workflowVersionController.publish,
 );
 
 workflowRouter.patch(

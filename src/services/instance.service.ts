@@ -25,6 +25,17 @@ export const instanceService = {
     return instanceRepository.findAll(actorId);
   },
 
+  listPaginated: async (
+    actorId: string,
+    limit: number,
+    offset: number,
+  ): Promise<{
+    items: InstanceListItem[];
+    total: number;
+  }> => {
+    return instanceRepository.findWithPagination(actorId, limit, offset);
+  },
+
   createNew: async (data: CreateVersionInput, actor: ActorModel) => {
     const workflowVersion =
       await workflowVersionService.getActiveVersionByWorkflowId(

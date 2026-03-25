@@ -6,11 +6,24 @@ import {
 } from "../schemas/instance.schema.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
+import {
+  buildPaginatedResponse,
+  parsePaginationFromRequest,
+} from "../utils/pagination.utils.js";
 
 export const instanceController = {
   list: async (req: Request, res: Response) => {
-    const instances = await instanceService.listAll(req.actor.id);
-    return res.json({ instances });
+    const { page, limit, offset } = parsePaginationFromRequest(req);
+
+    const { items, total } = await instanceService.listPaginated(
+      req.actor.id,
+      limit,
+      offset,
+    );
+
+    return res.json(
+      buildPaginatedResponse("instances", items, total, page, limit),
+    );
   },
 
   create: async (req: Request, res: Response) => {

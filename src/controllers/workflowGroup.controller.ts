@@ -5,6 +5,10 @@ import {
   WorkflowGroupUpdateSchema,
   WorkflowIdSchema,
 } from "../schemas/workflow.schema.js";
+import {
+  buildPaginatedResponse,
+  parsePaginationFromRequest,
+} from "../utils/pagination.utils.js";
 
 export const workflowGroupController = {
   create: async (req: Request, res: Response) => {
@@ -25,8 +29,14 @@ export const workflowGroupController = {
   },
 
   list: async (req: Request, res: Response) => {
-    const workflows = await workflowService.getAll(req.actor);
-    const formattedWorkflows = workflows.map(
+    const { page, limit, offset } = parsePaginationFromRequest(req);
+    const { items, total } = await workflowService.getAllPaginated(
+      req.actor,
+      limit,
+      offset,
+    );
+
+    const formattedWorkflows = items.map(
       ({ workflow, latestWorkflowVersion, status }) => {
         return {
           id: workflow.id,
@@ -40,15 +50,11 @@ export const workflowGroupController = {
       },
     );
 
-    res.status(200).json({
-      workflows: formattedWorkflows,
-      pagination: {
-        total: formattedWorkflows.length,
-        page: 1,
-        limit: formattedWorkflows.length,
-        totalPages: 1,
-      },
-    });
+    res
+      .status(200)
+      .json(
+        buildPaginatedResponse("workflows", formattedWorkflows, total, page, limit),
+      );
   },
 
   update: async (req: Request, res: Response) => {

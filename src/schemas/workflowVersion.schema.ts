@@ -11,6 +11,11 @@ export const WorkflowVersionCreateSchema = z.object({
   actor: ActorSchema,
 });
 
+export const WorkflowVersionListSchema = z.object({
+  workflowId: z.uuidv4(),
+  actor: ActorSchema,
+});
+
 export const WorkflowVersionDetailSchema = z.object({
   workflowId: z.uuidv4(),
   version: z.coerce.number().min(1),

@@ -46,6 +46,44 @@ export const workflowVersionRepository = {
     }
   },
 
+  findByWorkflowIdPaginated: async (
+    workflowId: string,
+    limit: number,
+    offset: number,
+    transaction?: Transaction<DB>,
+  ): Promise<{ items: WorkflowVersionModel[]; total: number }> => {
+    try {
+      const dbConn = transaction ?? db;
+
+      const items = await dbConn
+        .selectFrom("workflow_version")
+        .selectAll()
+        .where("workflow_id", "=", workflowId)
+        .where("is_deleted", "=", false)
+        .orderBy("version", "desc")
+        .limit(limit)
+        .offset(offset)
+        .execute();
+
+      const countResult = await dbConn
+        .selectFrom("workflow_version")
+        .select((eb) => eb.fn.count<number>("id").as("count"))
+        .where("workflow_id", "=", workflowId)
+        .where("is_deleted", "=", false)
+        .executeTakeFirstOrThrow();
+
+      return {
+        items,
+        total: countResult.count,
+      };
+    } catch (err) {
+      throw new RepositoryError(
+        `Workflow versions paginated search failed for workflowId=${workflowId}`,
+        err,
+      );
+    }
+  },
+
   findByWorkflowIdAndVersion: async (
     workflowId: string,
     version: number,

@@ -227,4 +227,86 @@ export const userTaskExecutionRepository = {
       },
     };
   },
+
+  findByEnvironmentIdAndStatusPaginated: async (
+    environmentId: string,
+    status: TaskStatus,
+    limit: number,
+    offset: number,
+    transaction?: Transaction<DB>,
+  ): Promise<{
+    items: PendingUserTaskList[];
+    total: number;
+  }> => {
+    try {
+      const items = await (transaction ?? db)
+        .selectFrom("user_task_execution")
+        .innerJoin("task", "task.id", "user_task_execution.task_id")
+        .innerJoin("instance", "instance.id", "task.instance_id")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .select((eb) => [
+          eb.ref("user_task_execution.id").as("user_task_execution_id"),
+          eb.ref("user_task_execution.title").as("user_task_execution_title"),
+          eb
+            .ref("user_task_execution.assignee")
+            .as("user_task_execution_assignee"),
+          eb
+            .ref("user_task_execution.created_on")
+            .as("user_task_execution_created_on"),
+
+          eb.ref("task.instance_id").as("instance_id"),
+          eb.ref("workflow.id").as("workflow_id"),
+          eb.ref("workflow.name").as("workflow_name"),
+          eb.ref("workflow_version.version").as("workflow_version"),
+        ])
+        .where("user_task_execution.status", "=", status)
+        .where("workflow.environment_id", "=", environmentId)
+        .orderBy("user_task_execution.created_on", "desc")
+        .limit(limit)
+        .offset(offset)
+        .execute();
+
+      const countResult = await (transaction ?? db)
+        .selectFrom("user_task_execution")
+        .innerJoin("task", "task.id", "user_task_execution.task_id")
+        .innerJoin("instance", "instance.id", "task.instance_id")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .select((eb) => eb.fn.count<number>("user_task_execution.id").as("count"))
+        .where("user_task_execution.status", "=", status)
+        .where("workflow.environment_id", "=", environmentId)
+        .executeTakeFirstOrThrow();
+
+      const formattedItems = items.map((row) => ({
+        id: row.user_task_execution_id,
+        title: row.user_task_execution_title,
+        assignee: row.user_task_execution_assignee,
+        createdAt: row.user_task_execution_created_on,
+
+        workflow: {
+          instanceId: row.instance_id,
+          id: row.workflow_id,
+          name: row.workflow_name,
+          version: row.workflow_version,
+        },
+      }));
+
+      return {
+        items: formattedItems,
+        total: countResult.count,
+      };
+    } catch (err) {
+      throw new RepositoryError("Find pending user tasks with pagination failed", err);
+    }
+  },
 };
+

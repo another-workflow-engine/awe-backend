@@ -24,6 +24,20 @@ export const workflowService = {
       environment.id,
     );
   },
+  
+  getAllPaginated: async (
+    actor: ActorModel,
+    limit: number,
+    offset: number,
+  ) => {
+    const environment = await environmentService.getByActor(actor);
+
+    return await workflowRepository.findByEnvironmentIdWithLatestVersionPaginated(
+      environment.id,
+      limit,
+      offset,
+    );
+  },
 
   get: async (workflowId: string, actor: ActorModel) => {
     const [workflow, versions] = await Promise.all([

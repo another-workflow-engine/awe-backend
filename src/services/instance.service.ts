@@ -16,6 +16,7 @@ import type { Transaction } from "kysely";
 import { executionEngine } from "../engine/ExecutionEngine.js";
 import { taskRepository } from "../repositories/task.repository.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
+import { workflowService } from "./workflow.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -58,6 +59,10 @@ export const instanceService = {
       );
     }
 
+    const workflow_name = await workflowService.getWorkflowName(
+      workflowVersion.workflow_id,
+    );
+
     const task = await taskRepository.findLatestByInstanceId(instance.id);
     if (!task) {
       return { instance, workflowVersion, node: null, task: null };
@@ -68,13 +73,10 @@ export const instanceService = {
       throw new DataIntegrityError(`Node does not exist id = ${task.node_id}`);
     }
 
-    return { instance, workflowVersion, node, task };
+    return { instance, workflow_name, workflowVersion, node, task };
   },
 
-  advanceInstance: async (
-    instanceId: string,
-    actor: ActorModel,
-  ) => {
+  advanceInstance: async (instanceId: string, actor: ActorModel) => {
     const instance = await instanceRepository.findById(instanceId);
     if (!instance)
       throw new NotFoundError(`Instance id=${instanceId} not found`);

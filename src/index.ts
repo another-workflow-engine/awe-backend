@@ -6,5 +6,5 @@ const PORT = process.env.PORT ?? 3000;
 app.listen(PORT, async () => {
   console.log(`server is running on port ${PORT}`);
   queueService.startWorker();
-  await queueService.obliterate();
+  // await queueService.obliterate();
 });

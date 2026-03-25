@@ -34,10 +34,8 @@ export const instanceController = {
 
   get: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const { instance, workflowVersion, node, task } = await instanceService.get(
-      instanceId,
-      req.actor.id,
-    );
+    const { instance, workflow_name, workflowVersion, node, task } =
+      await instanceService.get(instanceId, req.actor.id);
     return res.json({
       id: instance.id,
       inputVariables: instance.input_variables,
@@ -48,6 +46,7 @@ export const instanceController = {
       endedAt: instance.ended_on,
       autoAdvance: instance.auto_advance,
       workflow: {
+        name: workflow_name,
         id: workflowVersion.workflow_id,
         version: workflowVersion.version,
       },

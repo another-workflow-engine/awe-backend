@@ -1,4 +1,5 @@
 import { NotFoundError } from "../errors/NotFoundError.js";
+import { RepositoryError } from "../errors/RepositoryError.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import type { ActorModel } from "../types/models.js";
@@ -74,5 +75,13 @@ export const workflowService = {
       deleted_on: new Date(),
       deleted_by: actor.id,
     });
+  },
+
+  getWorkflowName: async (workflowId: string): Promise<string> => {
+    const workflow = await workflowRepository.findById(workflowId);
+    if (!workflow) {
+      throw new RepositoryError("Workflow not found");
+    }
+    return workflow.name;
   },
 };

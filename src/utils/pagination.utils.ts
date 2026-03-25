@@ -38,3 +38,4 @@ export const buildPaginatedResponse = <T>(
     pagination: calculatePagination(total, page, limit),
   };
 };
+

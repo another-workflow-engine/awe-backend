@@ -57,7 +57,6 @@ export function validateFeelExpression(
   if (!expression || !expression.trim()) {
     return { valid: false, error: "Expression is empty" };
   }
-
   const operatorError = checkDisallowedOperators(expression);
   if (operatorError) {
     return { valid: false, error: operatorError };
@@ -98,16 +97,20 @@ export function validateUrlExpression(value: string): FeelValidationResult {
 
   const trimmed = value.trim();
 
-  if (isStaticUrl(trimmed)) {
-    try {
-      new URL(trimmed);
-      return { valid: true };
-    } catch {
-      return { valid: false, error: "Invalid URL format" };
-    }
+  const result = validateFeelExpression(trimmed);
+  if (result.valid) {
+    return result;
   }
 
-  return validateFeelExpression(trimmed);
+  if (isStaticUrl(trimmed)) {
+    return {
+      valid: false,
+      error:
+        "URL must be a FEEL expression. Use a FEEL string literal like \"https://api.example.com\" or a dynamic FEEL expression.",
+    };
+  }
+
+  return result;
 }
 
 export function validateConditionExpression(

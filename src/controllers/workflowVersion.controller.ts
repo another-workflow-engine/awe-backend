@@ -3,12 +3,47 @@ import { workflowVersionService } from "../services/workflowVersion.service.js";
 import {
   WorkflowVersionCreateSchema,
   WorkflowVersionDetailSchema,
+  WorkflowVersionListSchema,
   WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
 } from "../schemas/workflowVersion.schema.js";
+import {
+  buildPaginatedResponse,
+  parsePaginationFromRequest,
+} from "../utils/pagination.utils.js";
+import { WorkflowVersionStatuses } from "../types/enums.js";
 
 export const workflowVersionController = {
+  list: async (req: Request, res: Response) => {
+    const data = WorkflowVersionListSchema.parse({
+      ...req.params,
+      actor: req.actor,
+    });
+    const { page, limit, offset } = parsePaginationFromRequest(req);
+
+    const { items, total } = await workflowVersionService.listPaginated(
+      data,
+      limit,
+      offset,
+    );
+
+    const versions = items.map((version) => ({
+      id: version.id,
+      workflowId: version.workflow_id,
+      versionNumber: version.version,
+      status: version.status,
+      description: version.description,
+      publishedAt: version.published_on,
+      createdAt: version.created_on,
+      updatedAt: version.modified_on,
+    }));
+
+    return res
+      .status(200)
+      .json(buildPaginatedResponse("versions", versions, total, page, limit));
+  },
+
   create: async (req: Request, res: Response) => {
     const data = WorkflowVersionCreateSchema.parse({
       ...req.body,
@@ -103,4 +138,37 @@ export const workflowVersionController = {
       updatedAt: workflowVersion.modified_on,
     });
   },
+
+  publish: async (req: Request, res: Response) => {
+    const data = WorkflowVersionUpdateStatusSchema.parse({
+      ...req.params,
+      status: WorkflowVersionStatuses.PUBLISHED,
+      actor: req.actor,
+    });
+    const workflowVersion = await workflowVersionService.changeStatus(data);
+    return res.status(200).json({
+      id: workflowVersion.id,
+      workflowId: workflowVersion.workflow_id,
+      version: workflowVersion.version,
+      status: workflowVersion.status,
+      publishedAt: workflowVersion.published_on,
+    });
+  },
+
+  activate: async (req: Request, res: Response) => {
+    const data = WorkflowVersionUpdateStatusSchema.parse({
+      ...req.params,
+      status: WorkflowVersionStatuses.ACTIVE,
+      actor: req.actor,
+    });
+    const workflowVersion = await workflowVersionService.changeStatus(data);
+    return res.status(200).json({
+      id: workflowVersion.id,
+      workflowId: workflowVersion.workflow_id,
+      version: workflowVersion.version,
+      status: workflowVersion.status,
+      publishedAt: workflowVersion.published_on,
+    });
+  }
+
 };

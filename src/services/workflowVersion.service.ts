@@ -11,6 +11,7 @@ import { nodeService } from "./node.services.js";
 import {
   WorkflowVersionCreateSchema,
   WorkflowVersionDetailSchema,
+  WorkflowVersionListSchema,
   WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
@@ -33,10 +34,23 @@ export type StatusPartialUpdateInput = z.infer<
 export type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
+export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
 
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 
 export const workflowVersionService = {
+  listPaginated: async (
+    data: ListVersionInput,
+    limit: number,
+    offset: number,
+  ) => {
+    return await workflowVersionRepository.findByWorkflowIdPaginated(
+      data.workflowId,
+      limit,
+      offset,
+    );
+  },
+
   getActiveVersionByWorkflowId: async (
     workflowId: string,
     transaction?: Transaction<DB>,
@@ -213,7 +227,7 @@ export const workflowVersionService = {
         data.workflowId,
         data.version,
       );
-
+    
     const currentStatus = workflowVersion.status;
     const newStatus = data.status;
 

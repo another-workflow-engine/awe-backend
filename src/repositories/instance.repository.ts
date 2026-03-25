@@ -37,6 +37,57 @@ export const instanceRepository = {
     }
   },
 
+  findWithPagination: async (
+    actorId: string,
+    limit: number,
+    offset: number,
+  ): Promise<{
+    items: InstanceListItem[];
+    total: number;
+  }> => {
+    try {
+      const items = (await db
+        .selectFrom("instance")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .selectAll("instance")
+        .select((eb) => [
+          eb.ref("workflow_version.version").as("version_number"),
+          eb.ref("workflow.name").as("workflow_name"),
+        ])
+        .where("workflow.created_by", "=", actorId)
+        .where("instance.is_deleted", "=", false)
+        .orderBy("instance.created_on", "desc")
+        .limit(limit)
+        .offset(offset)
+        .execute()) as unknown as InstanceListItem[];
+
+      const countResult = await db
+        .selectFrom("instance")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .select((eb) => eb.fn.count<number>("instance.id").as("count"))
+        .where("workflow.created_by", "=", actorId)
+        .where("instance.is_deleted", "=", false)
+        .executeTakeFirstOrThrow();
+
+      return {
+        items,
+        total: countResult.count,
+      };
+    } catch (err) {
+      throw new RepositoryError("Find instances with pagination failed", err);
+    }
+  },
+
   findById: async (
     id: string,
     transaction?: Transaction<DB>,

@@ -9,17 +9,16 @@ import { contextUtils } from "../../utils/context.utils.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
-import { JDoodleService } from "../../services/jdoodle.service.js";
+import { GeminiService } from "../../services/gemini.service.js";
 
-function getValueByPath(obj:any,path:string) {
-  return path.split(".").reduce((acc,key)=> acc?.[key],obj);
-}
 export class ScriptNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
     transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
+    console.log(" Executing Script Node...");
+
     const parsed = ScriptNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {
       throw new DataIntegrityError(
@@ -37,20 +36,20 @@ export class ScriptNodeExecutor extends BaseExecutor {
         evaluate(parameter.valueExpression, evaluatedContext).value,
     );
 
+    console.log(" Parameters:", parameters);
+
     let parsedOutput;
 
     try {
-      const response = await JDoodleService.executeScript(
+      const response = await GeminiService.executeScript(
         configuration.sourceCode,
         configuration.entryFunctionName,
         parameters,
       );
-
-      parsedOutput = response.parsedOutput;
-
-      console.log("RAW:", response.rawOutput);
-      console.log("PARSED:", parsedOutput);
+      parsedOutput = response;
     } catch (error: any) {
+      console.error(" Gemini Error:", error.message);
+
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
@@ -59,22 +58,17 @@ export class ScriptNodeExecutor extends BaseExecutor {
       };
     }
 
-    if(!parsedOutput){
-      return{
-        status:TaskStatuses.FAILED,
-        outputVariables:{},
-        error:"Script execution returned empty output",
-        nextNodeId:null,
-      };
-    }
-
-    if (parsedOutput?.error) {
+    if (!parsedOutput || parsedOutput?.error) {
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
-        error: parsedOutput.error,
+        error: parsedOutput?.error || "No response from Gemini",
         nextNodeId: null,
       };
+    }
+
+    function getValueByPath(obj: any, path: string) {
+      return path.split(".").reduce((acc, key) => acc?.[key], obj);
     }
 
     let outputVariables: Record<string, unknown> = {};
@@ -82,9 +76,11 @@ export class ScriptNodeExecutor extends BaseExecutor {
     configuration.responseMap.forEach(({ jsonPath, contextVariableName }) => {
       outputVariables[contextVariableName] =
         typeof parsedOutput === "object"
-          ?getValueByPath(parsedOutput,jsonPath)
+          ? getValueByPath(parsedOutput, jsonPath)
           : parsedOutput;
     });
+
+    console.log(" Output Variables:", outputVariables);
 
     const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
       node.id,

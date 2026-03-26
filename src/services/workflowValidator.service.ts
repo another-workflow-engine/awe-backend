@@ -1,4 +1,6 @@
 import { NodeTypes } from "../types/enums.js";
+import { v4 as uuidv4 } from "uuid";
+import { nodeSchemaService } from "./nodeSchema.service.js";
 import type { EdgeModel, NodeModel } from "../types/models.js";
 import {
   DecisionNodeConfigurationSchema,
@@ -1054,5 +1056,70 @@ export const workflowValidatorService = {
     }
 
     return errors;
+  },
+
+  validateDefinition: (nodes: any[], edges: any[]): ValidationResult => {
+    const clientIdToIdMap = new Map<string, string>();
+
+    const nodeModels: NodeModel[] = nodes.map((node) => {
+      const id = uuidv4();
+      clientIdToIdMap.set(node.id, id);
+
+      const { inputSchema, outputSchema } =
+        nodeSchemaService.getInputOutputSchemas(node);
+
+      return {
+        id,
+        client_id: node.id,
+        configuration: converterUtils.objectToJsonValue(node.configuration),
+        type: node.type,
+        input_schema: converterUtils.objectToJsonValue(inputSchema),
+        output_schema: converterUtils.objectToJsonValue(outputSchema),
+        created_on: new Date(),
+        modified_on: new Date(),
+        created_by: "system",
+        modified_by: "system",
+        is_deleted: false,
+        max_attempts: 1,
+        name: node.label ?? null,
+        workflow_version_id: "preview",
+        description: node.description ?? null,
+        x_coordinate: node.position?.x ?? null,
+        y_coordinate: node.position?.y ?? null,
+      } as NodeModel;
+    });
+
+    const edgeModels: EdgeModel[] = edges.map((edge) => {
+      const sourceId = clientIdToIdMap.get(edge.sourceNodeId) ?? "";
+      const destId = edge.targetNodeId
+        ? clientIdToIdMap.get(edge.targetNodeId) ?? null
+        : null;
+
+      let condition_expression: string | null = null;
+      const sourceNode = nodes.find((n) => n.id === edge.sourceNodeId);
+      if (sourceNode && sourceNode.type === NodeTypes.DECISION) {
+        const config = sourceNode.configuration as any;
+        if (edge.ruleId !== "default" && edge.ruleId !== config.defaultRule?.id) {
+          const rule = config.rules?.find((r: any) => r.id === edge.ruleId);
+          if (rule) {
+            condition_expression = rule.conditionExpression;
+          }
+        }
+      }
+
+      return {
+        id: uuidv4(),
+        client_id: edge.id,
+        source_node_id: sourceId,
+        destination_node_id: destId,
+        condition_expression,
+        created_by: "system",
+        modified_by: "system",
+        is_deleted: false,
+        name: edge.label ?? null,
+      } as EdgeModel;
+    });
+
+    return workflowValidatorService.validate(nodeModels, edgeModels);
   },
 };

@@ -9,7 +9,7 @@ workflowRouter.post("/", authenticateRequest, workflowGroupController.create);
 
 workflowRouter.get("/", authenticateRequest, workflowGroupController.list);
 
-workflowRouter.post("/validate", workflowGroupController.validate);
+workflowRouter.post("/validate", authenticateRequest, workflowGroupController.validate);
 
 workflowRouter.get(
   "/:workflowId",

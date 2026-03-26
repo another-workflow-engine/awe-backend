@@ -1,10 +1,12 @@
 import type { Request, Response } from "express";
 import { workflowService } from "../services/workflow.service.js";
 import {
+  WorkflowDefinitionValidateSchema,
   WorkflowGroupCreateSchema,
   WorkflowGroupUpdateSchema,
   WorkflowIdSchema,
 } from "../schemas/workflow.schema.js";
+import { workflowValidatorService } from "../services/workflowValidator.service.js";
 import {
   buildPaginatedResponse,
   parsePaginationFromRequest,
@@ -113,6 +115,8 @@ export const workflowGroupController = {
   },
 
   validate: (req: Request, res: Response) => {
-    res.status(200).json({ valid: true, errors: [] });
+    const data = WorkflowDefinitionValidateSchema.parse(req.body);
+    const result = workflowValidatorService.validateDefinition(data.nodes, data.edges);
+    res.status(200).json(result);
   },
 };

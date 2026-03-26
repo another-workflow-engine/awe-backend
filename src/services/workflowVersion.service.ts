@@ -284,7 +284,7 @@ validateById: async ({ versionId, actor }: any) => {
   
   return await workflowVersionService.validate({
     workflowId: version.workflow_id,
-    version: Number(version.version),
+    version:version.version,
     actor,
   });
 },

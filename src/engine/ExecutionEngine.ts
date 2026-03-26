@@ -75,8 +75,8 @@ function getUpdatedInstanceContext(
       ...instanceContext.constants,
       ...executionOuputVariables,
     },
-    fetchables: {},
-    urls: {},
+    fetchables: {...instanceContext.fetchables},
+    urls: {...instanceContext.urls},
   };
 }
 
@@ -361,7 +361,8 @@ export const executionEngine = {
       });
       return;
     }
-
+    console.log("user task", node)
+    console.log(getExecutionContext(node, instance))
     await userTaskService.createNew(
       node,
       task,

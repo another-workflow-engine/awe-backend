@@ -361,8 +361,6 @@ export const executionEngine = {
       });
       return;
     }
-    console.log("user task", node)
-    console.log(getExecutionContext(node, instance))
     await userTaskService.createNew(
       node,
       task,

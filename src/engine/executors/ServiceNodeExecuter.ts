@@ -136,15 +136,15 @@ export class ServiceNodeExecutor extends BaseExecutor {
           );
       }
     } catch (error) {
-      const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
-        node.id,
-        transaction,
-      );
-
+      let error_message = "Unknown error";
+      if(error instanceof Error){
+        error_message = `Service node failed: ${error.message}`;
+      }
       return {
-        status: TaskStatuses.COMPLETED,
+        status: TaskStatuses.FAILED,
+        error: error_message,
         outputVariables: {},
-        nextNodeId: nextNode ?? null,
+        nextNodeId: null,
       };
     }
 

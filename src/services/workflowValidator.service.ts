@@ -1,13 +1,5 @@
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { NodeTypes } from "../types/enums.js";
-import type { NodeModel, EdgeModel } from "../types/models.js";
-import { graphUtils } from "../utils/graph.utils.js";
-import {
-  validateFeelExpression,
-  validateUrlExpression,
-  validateConditionExpression,
-} from "../utils/feel.utils.js";
-import { converterUtils } from "../utils/converter.utils.js";
+import type { EdgeModel, NodeModel } from "../types/models.js";
 import {
   DecisionNodeConfigurationSchema,
   EndNodeConfigurationSchema,
@@ -16,6 +8,14 @@ import {
   StartNodeConfigurationSchema,
   UserNodeConfigurationSchema,
 } from "../schemas/node.schema.js";
+import { converterUtils } from "../utils/converter.utils.js";
+import {
+  validateConditionExpression,
+  validateFeelExpression,
+  validateUrlExpression,
+} from "../utils/feel.utils.js";
+import { graphUtils } from "../utils/graph.utils.js";
+import { parser as pythonParser } from "@lezer/python";
 
 export type ValidationError = {
   code: number;
@@ -48,9 +48,237 @@ export enum ValidationErrorCode {
   DECISION_NODE_MISSING_RULES,
   DECISION_MISSING_DEFAULT_EDGE,
   DECISION_RULES_EDGE_MISMATCH,
+
+  EDGE_REFERENCED_NODE_MISSING,
+  INVALID_CONTEXT_VARIABLE_REFERENCE,
+  INVALID_JSON_PATH,
+  INVALID_PYTHON_CODE,
+  SCRIPT_ENTRY_FUNCTION_MISSING,
+  SCRIPT_PARAM_INVALID,
+  OUTPUT_SCHEMA_VARIABLE_UNASSIGNED,
+  INVALID_OUTGOING_EDGE_COUNT,
 }
 
 type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
+
+const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
+const JSON_PATH_PART_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractContextReferences(expression: string): string[] {
+  const refs = new Set<string>();
+  for (const match of expression.matchAll(CONTEXT_REFERENCE_REGEX)) {
+    if (match[1]) refs.add(match[1]);
+  }
+  return [...refs];
+}
+
+function getNodeInputVariables(node: NodeModel): Set<string> {
+  if (!node.input_schema) {
+    return new Set<string>();
+  }
+
+  const parsedSchema = converterUtils.jsonValueToNodeInputSchema(
+    node.input_schema,
+  );
+  return new Set(parsedSchema.variableNames);
+}
+
+function getNodeOutputVariables(node: NodeModel): Set<string> {
+  if (!node.output_schema) {
+    return new Set<string>();
+  }
+
+  const parsedSchema = converterUtils.jsonValueToNodeInputSchema(
+    node.output_schema,
+  );
+  return new Set(parsedSchema.variableNames);
+}
+
+function validateContextReferences(
+  expression: string | undefined,
+  nodeId: string,
+  messagePrefix: string,
+  inputVariables: Set<string>,
+  errors: ValidationError[],
+): void {
+  if (!expression?.trim()) return;
+
+  const missing = extractContextReferences(expression).filter(
+    (name) => !inputVariables.has(name),
+  );
+
+  if (missing.length > 0) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_CONTEXT_VARIABLE_REFERENCE,
+      message: `${messagePrefix} - unknown context variable(s): ${missing.join(", ")}`,
+      nodeId,
+    });
+  }
+}
+
+function isStrictJsonPath(path: string): boolean {
+  const parts = path.split(".").filter(Boolean);
+  if (parts.length === 0) return false;
+  return parts.every((part) => JSON_PATH_PART_REGEX.test(part));
+}
+
+function validateJsonPath(
+  jsonPath: string | undefined,
+  nodeId: string,
+  message: string,
+  errors: ValidationError[],
+): boolean {
+  if (!jsonPath?.trim()) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_JSON_PATH,
+      message,
+      nodeId,
+    });
+    return false;
+  }
+
+  if (!isStrictJsonPath(jsonPath)) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_JSON_PATH,
+      message: `${message} - must be a dot-separated identifier path (e.g. a.b.c)`,
+      nodeId,
+    });
+    return false;
+  }
+
+  return true;
+}
+
+function validateBodyJsonPath(
+  jsonPath: string | undefined,
+  nodeId: string,
+  message: string,
+  errors: ValidationError[],
+): boolean {
+  if (!jsonPath?.trim()) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_JSON_PATH,
+      message,
+      nodeId,
+    });
+    return false;
+  }
+  const parts = jsonPath.split(".").filter(Boolean);
+  if (parts.length === 0) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_JSON_PATH,
+      message: `${message} - path must not be empty`,
+      nodeId,
+    });
+    return false;
+  }
+  return true;
+}
+
+function validateOutputAssignments(
+  node: NodeModel,
+  assignedVariables: Set<string>,
+  errors: ValidationError[],
+): void {
+  const outputVariables = getNodeOutputVariables(node);
+  if (outputVariables.size === 0) return;
+
+  const missing = [...outputVariables].filter(
+    (name) => !assignedVariables.has(name),
+  );
+  if (missing.length > 0) {
+    errors.push({
+      code: ValidationErrorCode.OUTPUT_SCHEMA_VARIABLE_UNASSIGNED,
+      message: `Output schema variable(s) are not assigned: ${missing.join(", ")}`,
+      nodeId: node.client_id,
+    });
+  }
+}
+
+function validatePythonSourceCodeSyntax(sourceCode: string): string | null {
+  if (!sourceCode.trim()) {
+    return "Source code is empty";
+  }
+
+  try {
+    const tree = pythonParser.parse(sourceCode);
+    const cursor = tree.cursor();
+
+    do {
+      if (!cursor.type.isError) {
+        continue;
+      }
+
+      const line = sourceCode.slice(0, cursor.from).split(/\r?\n/).length;
+      return `Invalid Python syntax near line ${line}`;
+    } while (cursor.next());
+
+    return null;
+  } catch (error) {
+    return error instanceof Error
+      ? `Invalid Python syntax: ${error.message}`
+      : "Invalid Python syntax";
+  }
+}
+
+function getPythonFunctionInfo(
+  sourceCode: string,
+  functionName: string,
+): { params: string[]; body: string } | null {
+  const pattern = new RegExp(
+    String.raw`(^|\n)([ \t]*)def\s+${escapeRegExp(functionName)}\s*\(([^)]*)\)\s*:`,
+    "m",
+  );
+  const match = pattern.exec(sourceCode);
+  if (!match) return null;
+
+  const signature = match[3] ?? "";
+  const params = signature
+    .split(",")
+    .map((part) =>
+      part
+        .trim()
+        .replace(/^\*\*?/, "")
+        .split("=")[0]
+        ?.split(":")[0]
+        ?.trim(),
+    )
+    .filter((part): part is string => Boolean(part));
+
+  const indent = (match[2] ?? "").length;
+  const afterDef = sourceCode.slice((match.index ?? 0) + match[0].length);
+  const lines = afterDef.split(/\r?\n/);
+  const bodyLines: string[] = [];
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      bodyLines.push(line);
+      continue;
+    }
+
+    const lineIndent = (line.match(/^[ \t]*/) ?? [""])[0].length;
+    if (lineIndent <= indent) {
+      break;
+    }
+
+    bodyLines.push(line);
+  }
+
+  return {
+    params,
+    body: bodyLines.join("\n"),
+  };
+}
+
+function isIdentifierUsedInBody(identifier: string, body: string): boolean {
+  if (!identifier.trim()) return false;
+  const regex = new RegExp(`\\b${escapeRegExp(identifier)}\\b`, "m");
+  return regex.test(body);
+}
 
 function validateExpression(
   expression: string | undefined,
@@ -58,6 +286,7 @@ function validateExpression(
   messagePrefix: string,
   errors: ValidationError[],
   validator: ExpressionValidator = validateFeelExpression,
+  inputVariables?: Set<string>,
 ): void {
   if (!expression?.trim()) return;
 
@@ -68,6 +297,17 @@ function validateExpression(
       message: `${messagePrefix} - ${result.error}`,
       nodeId,
     });
+    return;
+  }
+
+  if (inputVariables) {
+    validateContextReferences(
+      expression,
+      nodeId,
+      messagePrefix,
+      inputVariables,
+      errors,
+    );
   }
 }
 
@@ -93,6 +333,7 @@ function validateHeaders(
   nodeId: string,
   messagePrefix: string,
   errors: ValidationError[],
+  inputVariables?: Set<string>,
 ): void {
   headers?.forEach((header, index) => {
     validateExpression(
@@ -100,68 +341,124 @@ function validateHeaders(
       nodeId,
       `${messagePrefix} header ${index + 1}: invalid value expression`,
       errors,
+      validateFeelExpression,
+      inputVariables,
     );
   });
 }
 
-function validateValueExpressions(
-  items: Array<{ valueExpression: string }> | undefined,
-  nodeId: string,
-  messagePrefix: string,
-  errors: ValidationError[],
-): void {
-  items?.forEach((item, index) => {
-    validateExpression(
-      item.valueExpression,
-      nodeId,
-      `${messagePrefix} ${index + 1}: invalid value expression`,
-      errors,
-    );
-  });
+function calculateDataFlow(
+  nodes: NodeModel[],
+  edges: EdgeModel[],
+): Map<string, Set<string>> {
+  const graph = graphUtils.buildGraph(nodes, edges);
+
+  const incomingEdges = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!edge.destination_node_id) continue;
+    const list = incomingEdges.get(edge.destination_node_id) ?? [];
+    list.push(edge.source_node_id);
+    incomingEdges.set(edge.destination_node_id, list);
+  }
+
+  const queue: string[] = [];
+  const inDegree = new Map(graph.incoming);
+
+  for (const [id, count] of inDegree) {
+    if (count === 0) queue.push(id);
+  }
+
+  const nodeOutputs = new Map<string, Set<string>>();
+  for (const node of nodes) {
+    nodeOutputs.set(node.id, getNodeOutputVariables(node));
+  }
+
+  const nodeInputs = new Map<string, Set<string>>();
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+
+    const incomings = incomingEdges.get(nodeId) ?? [];
+    let availableIncoming = new Set<string>();
+
+    if (incomings.length > 0) {
+      const incomingSets = incomings.map((inc) => {
+        const provided = new Set(nodeInputs.get(inc) ?? new Set<string>());
+        const outputs = nodeOutputs.get(inc) ?? new Set<string>();
+        for (const out of outputs) provided.add(out);
+        return provided;
+      });
+
+      availableIncoming = new Set(Array.from(incomingSets[0]!));
+      for (let i = 1; i < incomingSets.length; i++) {
+        const nextSet = incomingSets[i]!;
+        for (const item of availableIncoming) {
+          if (!nextSet.has(item)) availableIncoming.delete(item);
+        }
+      }
+    }
+
+    nodeInputs.set(nodeId, availableIncoming);
+
+    for (const next of graph.adjacency.get(nodeId) ?? []) {
+      const count = (inDegree.get(next) ?? 0) - 1;
+      inDegree.set(next, count);
+      if (count === 0) queue.push(next);
+    }
+  }
+
+  return nodeInputs;
 }
 
-function validateStartNode(node: NodeModel): ValidationError[] {
+function validateStartNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
+  const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
     StartNodeConfigurationSchema,
     node.configuration,
   );
 
   config.inputDataMap.forEach((entry, index) => {
-    validateRequired(
+    validateJsonPath(
       entry.jsonPath,
       node.client_id,
-      `Start node input ${index + 1}: jsonPath must not be empty`,
+      `Start node input ${index + 1}: jsonPath is invalid`,
       errors,
     );
-    validateRequired(
+
+    const hasContextName = validateRequired(
       entry.contextVariableName,
       node.client_id,
       `Start node input ${index + 1}: context variable name must not be empty`,
       errors,
     );
+    if (hasContextName) {
+      assignedOutputs.add(entry.contextVariableName.trim());
+    }
   });
 
-  config.fetchables.forEach((fetchable, fIndex) => {
+  config.fetchables.forEach((fetchable, index) => {
     validateExpression(
       fetchable.urlExpression,
       node.client_id,
-      `Start node fetchable ${fIndex + 1}: invalid URL expression`,
+      `Start node fetchable ${index + 1}: invalid URL expression`,
       errors,
       validateUrlExpression,
+      inputVariables,
     );
     validateHeaders(
       fetchable.headers,
       node.client_id,
-      `Start node fetchable ${fIndex + 1}`,
+      `Start node fetchable ${index + 1}`,
       errors,
+      inputVariables,
     );
   });
-
+  validateOutputAssignments(node, assignedOutputs, errors);
   return errors;
 }
 
-function validateEndNode(node: NodeModel): ValidationError[] {
+function validateEndNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     EndNodeConfigurationSchema,
@@ -189,6 +486,8 @@ function validateEndNode(node: NodeModel): ValidationError[] {
         node.client_id,
         `End node result ${index + 1}: invalid value expression`,
         errors,
+        validateFeelExpression,
+        inputVariables,
       );
     }
   });
@@ -196,8 +495,9 @@ function validateEndNode(node: NodeModel): ValidationError[] {
   return errors;
 }
 
-function validateUserNode(node: NodeModel): ValidationError[] {
+function validateUserNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
+  const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
     UserNodeConfigurationSchema,
     node.configuration,
@@ -217,6 +517,8 @@ function validateUserNode(node: NodeModel): ValidationError[] {
         node.client_id,
         `User task request field ${index + 1}: invalid value expression`,
         errors,
+        validateFeelExpression,
+        inputVariables,
       );
     }
   });
@@ -229,12 +531,24 @@ function validateUserNode(node: NodeModel): ValidationError[] {
       errors,
     );
 
-    entry.options?.forEach((option, optIndex) => {
+    const hasContextName = validateRequired(
+      entry.contextVariableName,
+      node.client_id,
+      `User task response field ${index + 1}: context variable name must not be empty`,
+      errors,
+    );
+    if (hasContextName) {
+      assignedOutputs.add(entry.contextVariableName.trim());
+    }
+
+    entry.options?.forEach((option, optionIndex) => {
       validateExpression(
         option.valueExpression,
         node.client_id,
-        `User task response field ${index + 1} option ${optIndex + 1}: invalid value expression`,
+        `User task response field ${index + 1} option ${optionIndex + 1}: invalid value expression`,
         errors,
+        validateFeelExpression,
+        inputVariables,
       );
     });
   });
@@ -244,13 +558,18 @@ function validateUserNode(node: NodeModel): ValidationError[] {
     node.client_id,
     "User task: invalid assignee expression",
     errors,
+    validateFeelExpression,
+    inputVariables,
   );
+
+  validateOutputAssignments(node, assignedOutputs, errors);
 
   return errors;
 }
 
-function validateServiceNode(node: NodeModel): ValidationError[] {
+function validateServiceNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
+  const assignedOutputs = new Set<string>();
 
   const config = converterUtils.parseOrThrow(
     ServiceNodeConfigurationSchema,
@@ -271,53 +590,197 @@ function validateServiceNode(node: NodeModel): ValidationError[] {
       "Service task: invalid URL expression",
       errors,
       validateUrlExpression,
+      inputVariables,
     );
   }
 
-  validateValueExpressions(
-    config.body,
+  config.body?.forEach((entry, index) => {
+    validateBodyJsonPath(
+      entry.jsonPath,
+      node.client_id,
+      `Service task body field ${index + 1}: jsonPath is invalid`,
+      errors,
+    );
+
+    validateExpression(
+      entry.valueExpression,
+      node.client_id,
+      `Service task body field ${index + 1}: invalid value expression`,
+      errors,
+      validateFeelExpression,
+      inputVariables,
+    );
+  });
+
+  validateHeaders(
+    config.headers,
     node.client_id,
-    "Service task body field",
+    "Service task",
     errors,
+    inputVariables,
   );
 
-  validateHeaders(config.headers, node.client_id, "Service task", errors);
+  config.responseMap.forEach((entry, index) => {
+    validateJsonPath(
+      entry.jsonPath,
+      node.client_id,
+      `Service task response field ${index + 1}: jsonPath is invalid`,
+      errors,
+    );
+
+    const hasContextName = validateRequired(
+      entry.contextVariableName,
+      node.client_id,
+      `Service task response field ${index + 1}: context variable name must not be empty`,
+      errors,
+    );
+
+    if (hasContextName) {
+      assignedOutputs.add(entry.contextVariableName.trim());
+    }
+  });
+
+  validateOutputAssignments(node, assignedOutputs, errors);
 
   return errors;
 }
 
-function validateScriptNode(node: NodeModel): ValidationError[] {
+function validateScriptNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
+  const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
     ScriptNodeConfigurationSchema,
     node.configuration,
   );
 
-  validateRequired(
+  const hasSourceCode = validateRequired(
     config.sourceCode,
     node.client_id,
     "Script task source code must not be empty",
     errors,
   );
 
-  validateRequired(
+  const hasEntryFunction = validateRequired(
     config.entryFunctionName,
     node.client_id,
     "Script task entry function name must not be empty",
     errors,
   );
 
-  validateValueExpressions(
-    config.parameterMap,
-    node.client_id,
-    "Script task parameter",
-    errors,
-  );
+  if (hasSourceCode) {
+    const syntaxError = validatePythonSourceCodeSyntax(config.sourceCode);
+    if (syntaxError) {
+      errors.push({
+        code: ValidationErrorCode.INVALID_PYTHON_CODE,
+        message: `Script task source code is not syntactically valid: ${syntaxError}`,
+        nodeId: node.client_id,
+      });
+    }
+  }
+
+  let functionInfo: { params: string[]; body: string } | null = null;
+  if (hasSourceCode && hasEntryFunction) {
+    functionInfo = getPythonFunctionInfo(
+      config.sourceCode,
+      config.entryFunctionName,
+    );
+
+    if (!functionInfo) {
+      errors.push({
+        code: ValidationErrorCode.SCRIPT_ENTRY_FUNCTION_MISSING,
+        message: `Script task entry function '${config.entryFunctionName}' does not exist in source code`,
+        nodeId: node.client_id,
+      });
+    }
+  }
+
+  const mappedParams = new Set<string>();
+  config.parameterMap.forEach((parameter, index) => {
+    const hasName = validateRequired(
+      parameter.name,
+      node.client_id,
+      `Script task parameter ${index + 1}: name must not be empty`,
+      errors,
+    );
+
+    const hasValue = validateRequired(
+      parameter.valueExpression,
+      node.client_id,
+      `Script task parameter ${index + 1}: value expression must not be empty`,
+      errors,
+    );
+
+    if (hasValue) {
+      validateExpression(
+        parameter.valueExpression,
+        node.client_id,
+        `Script task parameter ${index + 1}: invalid value expression`,
+        errors,
+        validateFeelExpression,
+        inputVariables,
+      );
+    }
+
+    if (!hasName) return;
+
+    const paramName = parameter.name.trim();
+    mappedParams.add(paramName);
+
+    if (functionInfo && !functionInfo.params.includes(paramName)) {
+      errors.push({
+        code: ValidationErrorCode.SCRIPT_PARAM_INVALID,
+        message: `Script task parameter '${paramName}' is not defined in entry function '${config.entryFunctionName}'`,
+        nodeId: node.client_id,
+      });
+    }
+
+    if (functionInfo && !isIdentifierUsedInBody(paramName, functionInfo.body)) {
+      errors.push({
+        code: ValidationErrorCode.SCRIPT_PARAM_INVALID,
+        message: `Script task parameter '${paramName}' is not used in entry function body`,
+        nodeId: node.client_id,
+      });
+    }
+  });
+
+  if (functionInfo) {
+    for (const functionParam of functionInfo.params) {
+      if (!mappedParams.has(functionParam)) {
+        errors.push({
+          code: ValidationErrorCode.SCRIPT_PARAM_INVALID,
+          message: `Script task entry function parameter '${functionParam}' has no parameterMap mapping`,
+          nodeId: node.client_id,
+        });
+      }
+    }
+  }
+
+  config.responseMap.forEach((entry, index) => {
+    validateJsonPath(
+      entry.jsonPath,
+      node.client_id,
+      `Script task response field ${index + 1}: jsonPath is invalid`,
+      errors,
+    );
+
+    const hasContextName = validateRequired(
+      entry.contextVariableName,
+      node.client_id,
+      `Script task response field ${index + 1}: context variable name must not be empty`,
+      errors,
+    );
+
+    if (hasContextName) {
+      assignedOutputs.add(entry.contextVariableName.trim());
+    }
+  });
+
+  validateOutputAssignments(node, assignedOutputs, errors);
 
   return errors;
 }
 
-function validateDecisionNode(node: NodeModel): ValidationError[] {
+function validateDecisionNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     DecisionNodeConfigurationSchema,
@@ -348,6 +811,7 @@ function validateDecisionNode(node: NodeModel): ValidationError[] {
         `Decision node rule ${index + 1}: invalid condition expression`,
         errors,
         validateConditionExpression,
+        inputVariables,
       );
     }
   });
@@ -358,7 +822,7 @@ function validateDecisionNode(node: NodeModel): ValidationError[] {
 export const workflowValidatorService = {
   validate: (nodes: NodeModel[], edges: EdgeModel[]): ValidationResult => {
     const errors = [
-      ...workflowValidatorService.validateAllNodes(nodes),
+      ...workflowValidatorService.validateAllNodes(nodes, edges),
       ...workflowValidatorService.validateAllEdges(nodes, edges),
     ];
 
@@ -372,12 +836,14 @@ export const workflowValidatorService = {
     return { valid: errors.length === 0, errors };
   },
 
-  validateAllNodes: (nodes: NodeModel[]): ValidationError[] => {
+  validateAllNodes: (nodes: NodeModel[], edges: EdgeModel[]): ValidationError[] => {
     const errors: ValidationError[] = [];
     let startNodes = 0;
     let endNodes = 0;
 
-    const validators: Record<string, (node: NodeModel) => ValidationError[]> = {
+    const availableVariables = calculateDataFlow(nodes, edges);
+
+    const validators: Record<string, (node: NodeModel, vars: Set<string>) => ValidationError[]> = {
       [NodeTypes.START]: validateStartNode,
       [NodeTypes.END]: validateEndNode,
       [NodeTypes.USER]: validateUserNode,
@@ -387,12 +853,13 @@ export const workflowValidatorService = {
     };
 
     for (const node of nodes) {
-      if (node.type === NodeTypes.START) startNodes++;
-      if (node.type === NodeTypes.END) endNodes++;
+      if (node.type === NodeTypes.START) startNodes += 1;
+      if (node.type === NodeTypes.END) endNodes += 1;
 
       const validator = validators[node.type];
       if (validator) {
-        errors.push(...validator(node));
+        const inputVars = availableVariables.get(node.id) ?? new Set<string>();
+        errors.push(...validator(node, inputVars));
       }
     }
 
@@ -418,7 +885,7 @@ export const workflowValidatorService = {
     edges: EdgeModel[],
   ): ValidationError[] => {
     const errors: ValidationError[] = [];
-    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
 
     for (const edge of edges) {
       if (!edge.destination_node_id) {
@@ -432,9 +899,12 @@ export const workflowValidatorService = {
 
       const targetNode = nodeMap.get(edge.destination_node_id);
       if (!targetNode) {
-        throw new DataIntegrityError(
-          `Target node id=${edge.destination_node_id} does not exist`,
-        );
+        errors.push({
+          code: ValidationErrorCode.EDGE_REFERENCED_NODE_MISSING,
+          message: `Edge target node does not exist: ${edge.destination_node_id}`,
+          edgeId: edge.client_id,
+        });
+        continue;
       }
 
       if (targetNode.type === NodeTypes.START) {
@@ -456,9 +926,12 @@ export const workflowValidatorService = {
 
       const sourceNode = nodeMap.get(edge.source_node_id);
       if (!sourceNode) {
-        throw new DataIntegrityError(
-          `Source node id=${edge.source_node_id} does not exist`,
-        );
+        errors.push({
+          code: ValidationErrorCode.EDGE_REFERENCED_NODE_MISSING,
+          message: `Edge source node does not exist: ${edge.source_node_id}`,
+          edgeId: edge.client_id,
+        });
+        continue;
       }
 
       if (sourceNode.type === NodeTypes.END) {
@@ -497,9 +970,8 @@ export const workflowValidatorService = {
       const nodeOutgoingEdges = outgoingEdges.get(node.id) ?? [];
 
       const defaultEdgeCount = nodeOutgoingEdges.filter(
-        (e) => e.condition_expression === null,
+        (edge) => edge.condition_expression === null,
       ).length;
-
       if (defaultEdgeCount !== 1) {
         errors.push({
           code: ValidationErrorCode.DECISION_MISSING_DEFAULT_EDGE,
@@ -512,9 +984,8 @@ export const workflowValidatorService = {
       }
 
       const conditionalEdgeCount = nodeOutgoingEdges.filter(
-        (e) => e.condition_expression !== null,
+        (edge) => edge.condition_expression !== null,
       ).length;
-
       if (conditionalEdgeCount !== config.rules.length) {
         errors.push({
           code: ValidationErrorCode.DECISION_RULES_EDGE_MISMATCH,
@@ -541,11 +1012,10 @@ export const workflowValidatorService = {
       });
     }
 
-    const startNode = nodes.find((n) => n.type === NodeTypes.START);
+    const startNode = nodes.find((node) => node.type === NodeTypes.START);
     if (!startNode) return errors;
 
     const reachable = graphUtils.reachableFrom(startNode.id, graph);
-
     for (const node of nodes) {
       if (!reachable.has(node.id)) {
         errors.push({
@@ -557,13 +1027,27 @@ export const workflowValidatorService = {
     }
 
     for (const node of nodes) {
-      if (node.type === NodeTypes.END) continue;
-
       const out = graph.adjacency.get(node.id) ?? [];
-      if (out.length === 0) {
+
+      if (node.type === NodeTypes.END) {
+        continue;
+      }
+
+      if (node.type === NodeTypes.DECISION) {
+        if (out.length === 0) {
+          errors.push({
+            code: ValidationErrorCode.DEAD_END_NODE,
+            message: "Decision node has no outgoing edges",
+            nodeId: node.client_id,
+          });
+        }
+        continue;
+      }
+
+      if (out.length !== 1) {
         errors.push({
-          code: ValidationErrorCode.DEAD_END_NODE,
-          message: "Node has no outgoing edges",
+          code: ValidationErrorCode.INVALID_OUTGOING_EDGE_COUNT,
+          message: `Node must have exactly one outgoing edge, found ${out.length}`,
           nodeId: node.client_id,
         });
       }

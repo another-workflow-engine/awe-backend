@@ -75,8 +75,8 @@ function getUpdatedInstanceContext(
       ...instanceContext.constants,
       ...executionOuputVariables,
     },
-    fetchables: {},
-    urls: {},
+    fetchables: {...instanceContext.fetchables},
+    urls: {...instanceContext.urls},
   };
 }
 
@@ -361,7 +361,6 @@ export const executionEngine = {
       });
       return;
     }
-
     await userTaskService.createNew(
       node,
       task,

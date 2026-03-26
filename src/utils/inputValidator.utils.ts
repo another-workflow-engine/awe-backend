@@ -170,7 +170,7 @@ export async function evaluateValidationExpression(
   contextVariables: ContextVariables = EMPTY_CONTEXT,
 ): Promise<InputValidationResult> {
   try {
-    const feelContext = await contextUtils.buildFeelContext(contextVariables);
+    const feelContext = await contextUtils.evaluateContext(contextVariables);
 
     const result = evaluate(validationExpression, feelContext);
 

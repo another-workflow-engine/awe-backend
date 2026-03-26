@@ -63,6 +63,7 @@ export const InstanceTransitionTypes = {
 
 export const TaskTransitionTypes = {
   COMPLETED: "completed",
+  CREATED: "created",
   FAILED: "failed",
   TERMINATED: "terminated",
   STARTED: "started",

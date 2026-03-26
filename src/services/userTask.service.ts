@@ -7,51 +7,43 @@ import { converterUtils } from "../utils/converter.utils.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
-import { TaskStatuses, InstanceStatuses, NodeTypes } from "../types/enums.js";
+import {
+  TaskStatuses,
+  InstanceStatuses,
+  TaskTransitionTypes,
+} from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
 import { instanceService } from "./instance.service.js";
 import type { ContextVariables } from "../types/engine.js";
 import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
-import { AppError } from "../errors/AppError.js";
 import type {
   ActorModel,
-  NodeModel,
   TaskModel,
+  UserNodeModel,
   UserTaskExecutionModel,
 } from "../types/models.js";
 import { contextUtils } from "../utils/context.utils.js";
-import type { Transaction } from "kysely";
-import type { DB } from "../types/database.js";
 import { environmentService } from "./environment.services.js";
 import type { PendingUserTaskList } from "../types/userTask.js";
-import { executionEngine } from "../engine/ExecutionEngine.js";
 import { nodeService } from "./node.services.js";
+import { transitionLogService } from "./transitionLog.service.js";
+import { taskService } from "./task.service.js";
 
 export const userTaskService = {
-  createNew: async (
-    node: NodeModel,
+  create: async (
+    node: UserNodeModel,
     task: TaskModel,
     executionContext: ContextVariables,
-    transaction?: Transaction<DB>,
   ) => {
-    if (node.type !== NodeTypes.USER) {
-      throw new AppError("Node is not of type USER");
-    }
-
     const configObject = converterUtils.jsonValueToObject(node.configuration);
-    const parsed = UserNodeConfigurationSchema.safeParse(configObject);
-
-    if (!parsed.success) {
-      throw new DataIntegrityError(
-        `Invalid user task node configuration in node id = ${node.id}`,
-      );
-    }
-
-    const configuration = parsed.data;
+    const configuration = converterUtils.parseOrThrow(
+      UserNodeConfigurationSchema,
+      configObject,
+    );
 
     const evaluatedContext =
-      await contextUtils.buildFeelContext(executionContext);
+      await contextUtils.evaluateContext(executionContext);
 
     const assignee = configuration.assignee
       ? contextUtils.getEvaluatedValue(
@@ -62,17 +54,29 @@ export const userTaskService = {
       : null;
     const title = configuration.title ?? null;
 
-    return await userTaskExecutionRepository.insert(
-      {
-        status: TaskStatuses.IN_PROGRESS,
-        task_id: task.id,
-        started_on: new Date(),
-        assignee,
-        title,
-        request_variables: converterUtils.objectToJsonValue(executionContext),
-      },
-      transaction,
-    );
+    return await db.transaction().execute(async (transaction) => {
+      const userTask = await userTaskExecutionRepository.insert(
+        {
+          status: TaskStatuses.IN_PROGRESS,
+          task_id: task.id,
+          started_on: new Date(),
+          assignee,
+          title,
+          request_variables: converterUtils.objectToJsonValue(executionContext),
+        },
+        transaction,
+      );
+      await transitionLogService.createTaskLog(
+        {
+          taskId: task.id,
+          type: TaskTransitionTypes.STARTED,
+          details: { userTaskExecutionId: userTask.id },
+        },
+        transaction,
+      );
+
+      return userTask;
+    });
   },
 
   getPending: async (actor: ActorModel): Promise<PendingUserTaskList[]> => {
@@ -100,16 +104,12 @@ export const userTaskService = {
     const nodeContext = converterUtils.jsonValueToContextVariables(
       userTaskExecution.request_variables,
     );
-    const evaluatedContext = await contextUtils.buildFeelContext(nodeContext);
+    const evaluatedContext = await contextUtils.evaluateContext(nodeContext);
 
-    const parsed = UserNodeConfigurationSchema.safeParse(node.configuration);
-    if (!parsed.success) {
-      throw new DataIntegrityError(
-        `Invalid user node configuration node id = ${node.id}`,
-      );
-    }
-
-    const configuration = parsed.data;
+    const configuration = converterUtils.parseOrThrow(
+      UserNodeConfigurationSchema,
+      node.configuration,
+    );
 
     const requestData: Record<string, unknown> = {};
     configuration.requestMap.forEach((data) => {
@@ -174,13 +174,10 @@ export const userTaskService = {
       );
     }
 
-    const parsed = UserNodeConfigurationSchema.safeParse(node.configuration);
-    if (!parsed.success)
-      throw new DataIntegrityError(
-        `User node configuration invalid for node id=${node.id}`,
-      );
-
-    const configuration = parsed.data;
+    const configuration = converterUtils.parseOrThrow(
+      UserNodeConfigurationSchema,
+      node.configuration,
+    );
 
     const executionContext = converterUtils.jsonValueToContextVariables(
       userTaskExecution.request_variables,
@@ -258,11 +255,7 @@ export const userTaskService = {
       }
 
       if (instance.auto_advance) {
-        await executionEngine.createNextTask(
-          nextNode,
-          updatedInstance,
-          transaction,
-        );
+        await taskService.create(nextNode, updatedInstance);
       }
 
       return returnUserTask;

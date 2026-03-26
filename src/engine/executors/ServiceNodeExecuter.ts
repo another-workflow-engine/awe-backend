@@ -37,7 +37,7 @@ export class ServiceNodeExecutor extends BaseExecutor {
 
     const configuration = parsed.data;
 
-    const feelContext = await contextUtils.buildFeelContext(inputVariables);
+    const feelContext = await contextUtils.evaluateContext(inputVariables);
 
     const urlResult = evaluate(configuration.urlExpression, feelContext);
     if (

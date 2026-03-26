@@ -40,7 +40,7 @@ export class DecisionNodeExecutor extends BaseExecutor {
       );
     }
 
-    const feelContext = await contextUtils.buildFeelContext(inputVariables);
+    const feelContext = await contextUtils.evaluateContext(inputVariables);
 
     let matchedEdge: EdgeModel | null = null;
 

@@ -7,7 +7,7 @@ import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { InstanceStatuses } from "../types/enums.js";
+import { InstanceStatuses, InstanceTransitionTypes } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
@@ -16,6 +16,8 @@ import type { Transaction } from "kysely";
 import { executionEngine } from "../engine/ExecutionEngine.js";
 import { taskRepository } from "../repositories/task.repository.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
+import { transitionLogService } from "./transitionLog.service.js";
+import { taskService } from "./task.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -33,12 +35,47 @@ export const instanceService = {
       throw new NotFoundError("No active workflow version found");
     }
 
-    const instance = await executionEngine.startInstance(
-      workflowVersion.id,
-      data.autoAdvance,
-      data.context,
-      actor.id,
+    let instance = await db.transaction().execute(async (transaction) => {
+      const instance = await instanceRepository.insert(
+        {
+          workflow_version_id: workflowVersion.id,
+          status: data.autoAdvance
+            ? InstanceStatuses.IN_PROGRESS
+            : InstanceStatuses.PAUSED,
+          auto_advance: data.autoAdvance,
+          created_by: actor.id,
+        },
+        transaction,
+      );
+
+      await transitionLogService.createInstanceLog(
+        {
+          instanceId: instance.id,
+          actorId: actor.id,
+          type: InstanceTransitionTypes.STARTED,
+        },
+        transaction,
+      );
+
+      return instance;
+    });
+
+    const startNode = await nodeService.getByStartNodeByWorkflowVersionId(
+      instance.workflow_version_id,
     );
+
+    if (!startNode) {
+      await instanceService.fail(instance.id, "Start node not found.", {});
+      throw new DataIntegrityError(
+        `No start node for workflow version id=${instance.workflow_version_id}`,
+      );
+    }
+
+    try {
+      await taskService.create(startNode, instance);
+    } catch (err) {
+      instance = await instanceService.fail(instance.id, "Task failed.", {});
+    }
 
     return { instance, workflowVersion };
   },
@@ -71,10 +108,7 @@ export const instanceService = {
     return { instance, workflowVersion, node, task };
   },
 
-  advanceInstance: async (
-    instanceId: string,
-    actor: ActorModel,
-  ) => {
+  advanceInstance: async (instanceId: string, actor: ActorModel) => {
     const instance = await instanceRepository.findById(instanceId);
     if (!instance)
       throw new NotFoundError(`Instance id=${instanceId} not found`);
@@ -100,9 +134,7 @@ export const instanceService = {
       );
     }
 
-    db.transaction().execute(async (transaction) => {
-      await executionEngine.createNextTask(nextNode, instance, transaction);
-    });
+    await taskService.create(nextNode, instance);
   },
 
   updateContext: async (
@@ -137,21 +169,90 @@ export const instanceService = {
     );
   },
 
+  fail: async (
+    instanceId: string,
+    message: string,
+    details: object,
+    transaction?: Transaction<DB>,
+  ): Promise<InstanceModel> => {
+    if (transaction) {
+      const [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          {
+            status: InstanceStatuses.FAILED,
+            ended_on: new Date(),
+            current_node_id: null,
+          },
+          transaction,
+        ),
+
+        await transitionLogService.createInstanceLog(
+          {
+            type: InstanceTransitionTypes.FAILED,
+            instanceId,
+            message,
+            details,
+          },
+          transaction,
+        ),
+      ]);
+
+      return instance;
+    }
+
+    return await db.transaction().execute(async (transaction) => {
+      const [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          {
+            status: InstanceStatuses.FAILED,
+            ended_on: new Date(),
+            current_node_id: null,
+          },
+          transaction,
+        ),
+
+        await transitionLogService.createInstanceLog(
+          {
+            type: InstanceTransitionTypes.FAILED,
+            instanceId,
+            message,
+            details,
+          },
+          transaction,
+        ),
+      ]);
+
+      return instance;
+    });
+  },
+
   end: async (
     instanceId: string,
     status: InstanceStatus,
     outputVariables: object,
-    transaction?: Transaction<DB>,
+    transaction: Transaction<DB>,
+    message?: string,
+    details?: object,
   ): Promise<InstanceModel> => {
-    return instanceRepository.updateById(
+    const instance = await instanceRepository.updateById(
       instanceId,
       {
-        status,
+        status: status,
         output_variables: converterUtils.objectToJsonValue(outputVariables),
-        ended_on: new Date(),
-        current_node_id: null,
       },
       transaction,
     );
+
+    await transitionLogService.createInstanceLog(
+      {
+        instanceId: instanceId,
+        type: InstanceTransitionTypes.COMPLETED,
+      },
+      transaction,
+    );
+
+    return instance;
   },
 };

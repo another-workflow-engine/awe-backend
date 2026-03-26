@@ -24,8 +24,7 @@ export class EndNodeExecutor extends BaseExecutor {
     const configuration = parsed.data;
     let outputVariables: Record<string, unknown> = {};
 
-    const evaluatedContext =
-      await contextUtils.buildFeelContext(inputVariables);
+    const evaluatedContext = await contextUtils.evaluateContext(inputVariables);
 
     configuration.resultMap.forEach((rm) => {
       const result = evaluate(rm.valueExpression, evaluatedContext);

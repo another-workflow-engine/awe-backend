@@ -78,7 +78,7 @@ export const nodeService = {
     );
   },
 
-  getByStartNodeByWorkflowVersionIdOrThrow: async (
+  getByStartNodeByWorkflowVersionId: async (
     workflowVersionId: string,
     transaction?: Transaction<DB>,
   ) => {
@@ -87,12 +87,6 @@ export const nodeService = {
       NodeTypes.START,
       transaction,
     );
-
-    if (nodes.length === 0 || !nodes[0]) {
-      throw new DataIntegrityError(
-        `No start node for workflow version id=${workflowVersionId}`,
-      );
-    }
 
     return nodes[0];
   },

@@ -8,23 +8,14 @@ import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { ScriptNodeExecutor } from "./executors/ScriptNodeExecutor.js";
 import { taskService } from "../services/task.service.js";
-import { taskExecutionService } from "../services/taskExecution.service.js";
 import { instanceService } from "../services/instance.service.js";
 import type { DB, InstanceStatus, NodeType } from "../types/database.js";
-import type {
-  InstanceModel,
-  NodeModel,
-  TaskExecutionModel,
-} from "../types/models.js";
+import type { InstanceModel, NodeModel } from "../types/models.js";
 import type { ContextVariables, ExecutorResult } from "../types/engine.js";
-import { instanceRepository } from "../repositories/instance.repository.js";
-import { contextUtils } from "../utils/context.utils.js";
 import { nodeService } from "../services/node.services.js";
-import { userTaskService } from "../services/userTask.service.js";
-import { queueService } from "../services/queue.service.js";
 import { EngineError } from "../errors/EngineError.js";
-import type { Transaction } from "kysely";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
+import type { Transaction } from "kysely";
 
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
@@ -33,30 +24,6 @@ const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.SCRIPT]: new ScriptNodeExecutor(),
   [NodeTypes.SERVICE]: new ServiceNodeExecutor(),
 };
-
-function getExecutionContext(node: NodeModel, instance: InstanceModel) {
-  let instanceContext: ContextVariables = {
-    constants: {},
-    fetchables: {},
-    urls: {},
-  };
-
-  if (node.type === NodeTypes.START) {
-    instanceContext.constants = converterUtils.jsonValueToObject(
-      instance.input_variables,
-    );
-  } else {
-    instanceContext = converterUtils.jsonValueToContextVariables(
-      instance.current_variables,
-    );
-  }
-
-  const nodeInputSchema = converterUtils.jsonValueToNodeInputSchema(
-    node.input_schema,
-  );
-
-  return contextUtils.getTaskExecutionContext(instanceContext, nodeInputSchema);
-}
 
 function getUpdatedInstanceContext(
   node: NodeModel,
@@ -82,15 +49,12 @@ function getUpdatedInstanceContext(
 
 function getUpdatedInstanceStatus(
   isAutoAdvance: boolean,
-  executionThrew: boolean,
   result: ExecutorResult,
   nodeType: NodeType,
 ) {
   let instanceStatus: InstanceStatus;
 
-  if (executionThrew) {
-    instanceStatus = InstanceStatuses.FAILED;
-  } else if (
+  if (
     result.status === TaskStatuses.IN_PROGRESS &&
     nodeType === NodeTypes.USER
   ) {
@@ -113,17 +77,9 @@ function getUpdatedInstanceStatus(
   return instanceStatus;
 }
 
-async function getNextNode(
-  nextNodeId: string | null,
-  nodeType: NodeType,
-  executionThrew: boolean,
-) {
-  if (nodeType === NodeTypes.END || executionThrew === true) {
-    return undefined;
-  }
-
-  if (nextNodeId === null) {
-    throw new EngineError(`No next node for node id = ${nextNodeId}`);
+async function getNextNode(nextNodeId: string, currentNodeType: NodeType) {
+  if (currentNodeType === NodeTypes.END) {
+    return null;
   }
 
   const nextNode = await nodeService.getById(nextNodeId);
@@ -135,42 +91,6 @@ async function getNextNode(
 }
 
 export const executionEngine = {
-  startInstance: async (
-    workflowVersionId: string,
-    isAutoAdvance: boolean,
-    inputVariables: Record<string, unknown>,
-    actorId: string,
-  ): Promise<InstanceModel> => {
-    return await db.transaction().execute(async (transaction) => {
-      const startNode =
-        await nodeService.getByStartNodeByWorkflowVersionIdOrThrow(
-          workflowVersionId,
-          transaction,
-        );
-
-      const instance = await instanceRepository.insert(
-        {
-          workflow_version_id: workflowVersionId,
-          started_on: new Date(),
-          status: isAutoAdvance
-            ? InstanceStatuses.IN_PROGRESS
-            : InstanceStatuses.PAUSED,
-          input_variables: converterUtils.objectToJsonValue(inputVariables),
-          auto_advance: isAutoAdvance,
-          created_by: actorId,
-          current_node_id: startNode.id,
-        },
-        transaction,
-      );
-
-      if (instance.auto_advance) {
-        await executionEngine.createNextTask(startNode, instance, transaction);
-      }
-
-      return instance;
-    });
-  },
-
   validateInstanceCanExecuteOrThrow: (instance: InstanceModel) => {
     if (
       instance.status === InstanceStatuses.FAILED ||
@@ -200,23 +120,26 @@ export const executionEngine = {
 
     console.log("Executing:", node.type);
 
-    let executionThrew = false;
+    const executionContext = taskService.getTaskContext(instance, node);
+    const taskExecution = await taskService.start(task.id, executionContext);
+    if (!taskExecution) {
+      await instanceService.fail(
+        instance.id,
+        `Failed to start execution of task id = ${taskId}`,
+        {},
+      );
+      return;
+    }
+
     const executor = executors[node.type];
     if (!executor) {
-      await db.transaction().execute(async (transaction) => {
-        await instanceService.updateStatus(
-          instance.id,
-          InstanceStatuses.FAILED,
-          transaction,
-        );
-        await taskService.updateStatus(
-          task.id,
-          TaskStatuses.FAILED,
-          transaction,
-        );
-      });
-
-      throw new EngineError(`Executor for node type="${node.type}" not found`);
+      await taskService.fail(taskExecution.task_id, "Executor not found", {});
+      await instanceService.fail(
+        instance.id,
+        `Executor for node type="${node.type}" not found`,
+        {},
+      );
+      return;
     }
 
     let result: ExecutorResult = {
@@ -225,53 +148,42 @@ export const executionEngine = {
       nextNodeId: null,
     };
 
-    let taskExecution: TaskExecutionModel;
+    let updateInstanceContext = null;
+    let nextNode = null;
 
     try {
       executionEngine.validateInstanceCanExecuteOrThrow(instance);
 
-      const executionContext = getExecutionContext(node, instance);
-
-      taskExecution = await taskExecutionService.startNew(
-        task.id,
-        TaskStatuses.IN_PROGRESS,
-        executionContext,
-      );
+      const executionContext = taskService.getTaskContext(instance, node);
 
       result = await executor.execute(node, executionContext);
+
+      updateInstanceContext = getUpdatedInstanceContext(
+        node,
+        result.outputVariables,
+        instance,
+      );
+
+      if (result.nextNodeId !== null) {
+        nextNode = await getNextNode(result.nextNodeId, node.type);
+      }
     } catch (err) {
       console.error(err);
-      executionThrew = true;
       let message = "Unknown error";
 
       if (err instanceof Error) {
         message = err.message;
       }
-      result = {
-        status: TaskStatuses.FAILED,
-        outputVariables: {},
-        error: message,
-        nextNodeId: null,
-      };
+
+      await taskService.fail(task.id, message, { err });
+      await instanceService.fail(instance.id, message, { err });
+      return;
     }
 
     const updateInstanceStatus = getUpdatedInstanceStatus(
       instance.auto_advance,
-      executionThrew,
       result,
       node.type,
-    );
-
-    const updateInstanceContext = getUpdatedInstanceContext(
-      node,
-      result.outputVariables,
-      instance,
-    );
-
-    const nextNode = await getNextNode(
-      result.nextNodeId,
-      node.type,
-      executionThrew,
     );
 
     await db.transaction().execute(async (transaction) => {
@@ -279,94 +191,54 @@ export const executionEngine = {
 
       if (
         node.type === NodeTypes.END &&
-        !executionThrew &&
-        nextNode === undefined
+        result.status === TaskStatuses.COMPLETED &&
+        nextNode === null
       ) {
-        instanceUpdateCallback = instanceService.end(
-          instance.id,
-          updateInstanceStatus,
+        instanceUpdateCallback = async (transaction: Transaction<DB>) => {
+          return await instanceService.end(
+            instance.id,
+            updateInstanceStatus,
+            result.outputVariables,
+            transaction,
+          );
+        };
+      } else if (
+        updateInstanceStatus === InstanceStatuses.FAILED ||
+        nextNode === null
+      ) {
+        instanceUpdateCallback = async (transaction: Transaction<DB>) => {
+          return await instanceService.fail(
+            instance.id,
+            result.error ?? "",
+            {},
+            transaction,
+          );
+        };
+      } else {
+        instanceUpdateCallback = async (transaction: Transaction<DB>) => {
+          return await instanceService.updateContext(
+            instance.id,
+            updateInstanceStatus,
+            updateInstanceContext ?? {},
+            nextNode.id,
+            transaction,
+          );
+        };
+      }
+
+      const [updatedTask, updatedInstance] = await Promise.all([
+        taskService.end(
+          taskExecution,
+          result.status,
           result.outputVariables,
           transaction,
-        );
-      } else if (updateInstanceStatus === InstanceStatuses.FAILED) {
-        instanceUpdateCallback = instanceService.end(
-          instance.id,
-          updateInstanceStatus,
-          {},
-          transaction,
-        );
-      } else {
-        instanceUpdateCallback = instanceService.updateContext(
-          instance.id,
-          updateInstanceStatus,
-          updateInstanceContext,
-          result.nextNodeId,
-          transaction,
-        );
-      }
-
-      const [updatedtaskExecution, updatedtask, updatedInstance] =
-        await Promise.all([
-          taskExecution
-            ? taskExecutionService.end(
-                taskExecution.id,
-                result.status,
-                result.outputVariables,
-                transaction,
-              )
-            : Promise.resolve(),
-          taskService.updateStatus(task.id, result.status, transaction),
-          instanceUpdateCallback,
-        ]);
+        ),
+        instanceUpdateCallback(transaction),
+      ]);
 
       if (nextNode && instance.auto_advance) {
-        await executionEngine.createNextTask(
-          nextNode,
-          updatedInstance,
-          transaction,
-        );
+        await taskService.create(nextNode, updatedInstance);
       }
     });
-  },
-
-  createNextTask: async (
-    node: NodeModel,
-    instance: InstanceModel,
-    transaction: Transaction<DB>,
-  ) => {
-    let instanceStatus: InstanceStatus;
-
-    if (instance.auto_advance || node.type === NodeTypes.USER) {
-      instanceStatus = InstanceStatuses.IN_PROGRESS;
-    } else {
-      instanceStatus = InstanceStatuses.PAUSED;
-    }
-
-    const updatedInstance = await instanceService.updateStatus(
-      instance.id,
-      instanceStatus,
-      transaction,
-    );
-
-    const task = await taskService.createNew(
-      updatedInstance.id,
-      node.id,
-      TaskStatuses.IN_PROGRESS,
-      transaction,
-    );
-
-    if (node.type !== NodeTypes.USER) {
-      await queueService.enqueue({
-        taskId: task.id,
-      });
-      return;
-    }
-
-    await userTaskService.createNew(
-      node,
-      task,
-      getExecutionContext(node, instance),
-      transaction,
-    );
   },
 };

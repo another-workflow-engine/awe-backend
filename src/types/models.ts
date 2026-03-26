@@ -16,6 +16,7 @@ import type {
   WorkflowVersion,
 } from "./database.js";
 import type {} from "./workflow.js";
+import { NodeTypes } from "./enums.js";
 
 export type ActorModel = Selectable<Actor>;
 
@@ -33,7 +34,39 @@ export type WorkflowModel = Selectable<Workflow>;
 
 export type WorkflowVersionModel = Selectable<WorkflowVersion>;
 
-export type NodeModel = Selectable<Node>;
+type BaseNodeModel = Omit<Selectable<Node>, "type">;
+
+export type StartNodeModel = BaseNodeModel & {
+  type: typeof NodeTypes.START;
+};
+
+export type DecisionNodeModel = BaseNodeModel & {
+  type: typeof NodeTypes.DECISION;
+};
+
+export type EndNodeModel = BaseNodeModel & {
+  type: typeof NodeTypes.END;
+};
+
+export type ScriptNodeModel = BaseNodeModel & {
+  type: typeof NodeTypes.SCRIPT;
+};
+
+export type ServiceNodeModel = BaseNodeModel & {
+  type: typeof NodeTypes.SERVICE;
+};
+
+export type UserNodeModel = BaseNodeModel & {
+  type: typeof NodeTypes.USER;
+};
+
+export type NodeModel =
+  | StartNodeModel
+  | DecisionNodeModel
+  | EndNodeModel
+  | ScriptNodeModel
+  | ServiceNodeModel
+  | UserNodeModel;
 
 export type EdgeModel = Selectable<Edge>;
 

@@ -57,7 +57,7 @@ export type StorageBuckettype = "ANALYTICS" | "STANDARD" | "VECTOR";
 
 export type TaskStatus = "completed" | "failed" | "in_progress" | "terminated";
 
-export type TaskTransitionType = "completed" | "failed" | "retried" | "started" | "terminated";
+export type TaskTransitionType = "completed" | "created" | "failed" | "retried" | "started" | "terminated";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
@@ -721,7 +721,7 @@ export interface TaskTransitionLog {
   details: Json | null;
   id: Generated<string>;
   message: string | null;
-  task_execution_id: string;
+  task_id: string;
   transition_type: TaskTransitionType;
 }
 

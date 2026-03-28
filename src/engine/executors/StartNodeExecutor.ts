@@ -72,7 +72,7 @@ export class StartNodeExecutor extends BaseExecutor {
         return {
           status: TaskStatuses.FAILED,
           outputVariables,
-          error: `"${dataMap.jsonPath}" is missing`,
+          errorMessage: `"${dataMap.jsonPath}" is missing`,
           nextNodeId: null,
         };
       }
@@ -83,7 +83,7 @@ export class StartNodeExecutor extends BaseExecutor {
             return {
               status: TaskStatuses.FAILED,
               outputVariables,
-              error: `"${dataMap.jsonPath}" must be an array`,
+              errorMessage: `"${dataMap.jsonPath}" must be an array`,
               nextNodeId: null,
             };
           }
@@ -93,7 +93,7 @@ export class StartNodeExecutor extends BaseExecutor {
             return {
               status: TaskStatuses.FAILED,
               outputVariables,
-              error: `"${dataMap.jsonPath}" must be null`,
+              errorMessage: `"${dataMap.jsonPath}" must be null`,
               nextNodeId: null,
             };
           }
@@ -107,7 +107,7 @@ export class StartNodeExecutor extends BaseExecutor {
             return {
               status: TaskStatuses.FAILED,
               outputVariables,
-              error: `"${dataMap.jsonPath}" must be an object`,
+              errorMessage: `"${dataMap.jsonPath}" must be an object`,
               nextNodeId: null,
             };
           }
@@ -117,7 +117,7 @@ export class StartNodeExecutor extends BaseExecutor {
             return {
               status: TaskStatuses.FAILED,
               outputVariables,
-              error: `"${dataMap.jsonPath}" must be of type ${dataMap.dataType}`,
+              errorMessage: `"${dataMap.jsonPath}" must be of type ${dataMap.dataType}`,
               nextNodeId: null,
             };
           }

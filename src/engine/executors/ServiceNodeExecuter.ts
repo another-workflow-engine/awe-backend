@@ -141,7 +141,7 @@ export class ServiceNodeExecutor extends BaseExecutor {
       }
       return {
         status: TaskStatuses.FAILED,
-        error: error_message,
+        errorMessage: error_message,
         outputVariables: {},
         nextNodeId: null,
       };

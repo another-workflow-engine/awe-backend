@@ -31,6 +31,10 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type InstanceEntityType = "instance" | "task" | "task_execution" | "user_task_execution";
+
+export type InstanceEventType = "completed" | "failed" | "paused" | "resumed" | "retried" | "started" | "terminated";
+
 export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
 export type InstanceTransitionType = "completed" | "created" | "failed" | "paused" | "resumed" | "started" | "terminated";
@@ -510,6 +514,17 @@ export interface Instance {
   workflow_version_id: string;
 }
 
+export interface InstanceLog {
+  created_by: string | null;
+  created_on: Generated<Timestamp>;
+  details: Json | null;
+  entity_id: string;
+  entity_type: InstanceEntityType;
+  event_type: InstanceEventType;
+  id: Generated<string>;
+  instance_id: string;
+}
+
 export interface InstanceTransitionLog {
   created_by: string | null;
   created_on: Generated<Timestamp>;
@@ -817,6 +832,7 @@ export interface DB {
   "extensions.pg_stat_statements": ExtensionsPgStatStatements;
   "extensions.pg_stat_statements_info": ExtensionsPgStatStatementsInfo;
   instance: Instance;
+  instance_log: InstanceLog;
   instance_transition_log: InstanceTransitionLog;
   node: Node;
   organization: Organization;

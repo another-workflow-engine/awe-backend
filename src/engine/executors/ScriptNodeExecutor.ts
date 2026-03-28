@@ -52,7 +52,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
-        error: error.message,
+        errorMessage: error.message,
         nextNodeId: null,
       };
     }
@@ -61,7 +61,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
-        error: "Script execution returned empty output",
+        errorMessage: "Script execution returned empty output",
         nextNodeId: null,
       };
     }
@@ -70,7 +70,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
-        error: parsedOutput.error,
+        errorMessage: parsedOutput.error,
         nextNodeId: null,
       };
     }

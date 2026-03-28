@@ -5,6 +5,7 @@ import type {
   Edge,
   Environment,
   Instance,
+  InstanceLog,
   Node,
   Organization,
   RefreshToken,
@@ -77,3 +78,5 @@ export type TaskModel = Selectable<Task>;
 export type TaskExecutionModel = Selectable<TaskExecution>;
 
 export type UserTaskExecutionModel = Selectable<UserTaskExecution>;
+
+export type InstanceLogModel = Selectable<InstanceLog>;

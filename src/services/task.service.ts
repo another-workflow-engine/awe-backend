@@ -13,6 +13,7 @@ import { instanceRepository } from "../repositories/instance.repository.js";
 import { nodeRepository } from "../repositories/node.repository.js";
 import { db } from "../database.js";
 import {
+  LogEventTypes,
   NodeTypes,
   TaskStatuses,
   TaskTransitionTypes,
@@ -20,12 +21,23 @@ import {
 import { queueService } from "./queue.service.js";
 import { userTaskService } from "./userTask.service.js";
 import type { ContextVariables } from "../types/engine.js";
-import { transitionLogService } from "./transitionLog.service.js";
+import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { contextUtils } from "../utils/context.utils.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
+import { getLogger } from "../logger.js";
+import type { LogDetailSchema } from "../types/instanceLog.js";
 
 export const taskService = {
+  getById: async (taskId: string): Promise<TaskModel> => {
+    const task = await taskRepository.findById(taskId);
+    if (!task) {
+      throw new NotFoundError("Task");
+    }
+
+    return task;
+  },
+
   getAllTaskDetails: async (
     taskId: string,
   ): Promise<{ instance: InstanceModel; node: NodeModel; task: TaskModel }> => {
@@ -54,6 +66,8 @@ export const taskService = {
     instance: InstanceModel,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
+    const logger = getLogger();
+
     const executeCallback = async (transaction: Transaction<DB>) => {
       const task = await taskRepository.insert(
         {
@@ -64,8 +78,12 @@ export const taskService = {
         transaction,
       );
 
-      await transitionLogService.createTaskLog(
-        { taskId: task.id, type: TaskTransitionTypes.CREATED },
+      await eventLogService.createTaskLog(
+        instance.id,
+        task.id,
+        LogEventTypes.STARTED,
+        undefined,
+        undefined,
         transaction,
       );
 
@@ -79,13 +97,21 @@ export const taskService = {
     if (node.type !== NodeTypes.USER) {
       return await queueService
         .enqueue({
+          instanceId: instance.id,
           taskId: task.id,
+          nodeId: node.id,
         })
         .then(() => task)
-        .catch(async (err) => {
-          return await taskService.fail(task.id, "Failed to enqueue task.", {
+        .catch(async (err: Error) => {
+          return await taskService.fail(
+            instance.id,
+            task.id,
+            {
+              message: "Failed to enqueue task",
+              error: err,
+            },
             err,
-          });
+          );
         });
     }
 
@@ -94,24 +120,43 @@ export const taskService = {
 
     try {
       executionContext = taskService.getTaskContext(instance, node);
-      taskExecution = await taskService.start(task, executionContext);
+      taskExecution = await taskService.startNewExecution(
+        task,
+        executionContext,
+      );
     } catch (err) {
-      return await taskService.fail(task.id, "Failed to execute task.", {
-        err,
-      });
+      let message = "Unknown error";
+      let error;
+
+      if (err instanceof Error) {
+        message = err.message;
+        error = err;
+      }
+
+      return await taskService.fail(
+        instance.id,
+        task.id,
+        {
+          message,
+        },
+        error,
+      );
     }
 
     return await userTaskService
       .create(node, taskExecution, executionContext)
       .then(() => task)
-      .catch(async (err) => {
-        return await taskService.fail(task.id, "Failed to create user task.", {
+      .catch(async (err: Error) => {
+        return await taskService.fail(
+          instance.id,
+          task.id,
+          { message: err.message },
           err,
-        });
+        );
       });
   },
 
-  start: async (
+  startNewExecution: async (
     task: TaskModel,
     inputVariables: ContextVariables,
   ): Promise<TaskExecutionModel> => {
@@ -126,8 +171,12 @@ export const taskService = {
         transaction,
       );
 
-      await transitionLogService.createTaskLog(
-        { taskId: task.id, type: TaskTransitionTypes.STARTED },
+      await eventLogService.createTaskExecutionLog(
+        task.instance_id,
+        taskExecution.id,
+        LogEventTypes.STARTED,
+        undefined,
+        undefined,
         transaction,
       );
 
@@ -159,37 +208,41 @@ export const taskService = {
     return contextUtils.getTaskContext(instanceContext, nodeInputSchema);
   },
 
-  end: async (
-    taskExecution: TaskExecutionModel,
-    status: TaskStatus,
-    outputVariables: object,
+  complete: async (
+    task: TaskModel,
     transaction: Transaction<DB>,
   ): Promise<TaskModel> => {
-    await taskExecutionRepository.updateById(
-      taskExecution.id,
-      {
-        status,
-        output_variables: converterUtils.objectToJsonValue(outputVariables),
-        ended_on: new Date(),
-      },
-      transaction,
-    );
+    const [updatedTask] = await Promise.all([
+      taskRepository.updateById(
+        task.id,
+        {
+          status: TaskStatuses.COMPLETED,
+        },
+        transaction,
+      ),
 
-    return await taskRepository.updateById(
-      taskExecution.task_id,
-      {
-        status,
-      },
-      transaction,
-    );
+      eventLogService.createTaskLog(
+        task.instance_id,
+        task.id,
+        LogEventTypes.COMPLETED,
+        undefined,
+        undefined,
+        transaction,
+      ),
+    ]);
+    return updatedTask;
   },
 
   fail: async (
+    instanceId: string,
     taskId: string,
-    message: string,
-    details: object,
+    details: LogDetailSchema,
+    error?: Error,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
+    const logger = getLogger();
+    logger.info({ details, error }, `[Task] ${details.message}`);
+
     const executeCallback = async (transaction: Transaction<DB>) => {
       const [task] = await Promise.all([
         taskRepository.updateById(
@@ -200,12 +253,14 @@ export const taskService = {
           transaction,
         ),
 
-        transitionLogService.createTaskLog({
-          type: TaskTransitionTypes.FAILED,
+        eventLogService.createTaskLog(
+          instanceId,
           taskId,
-          message,
+          LogEventTypes.FAILED,
           details,
-        }),
+          undefined,
+          transaction,
+        ),
       ]);
 
       return task;

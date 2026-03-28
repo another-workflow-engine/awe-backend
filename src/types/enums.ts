@@ -1,6 +1,8 @@
 import type {
   ActorType,
   EnvironmentType,
+  InstanceEntityType,
+  InstanceEventType,
   InstanceStatus,
   InstanceTransitionType,
   NodeType,
@@ -69,6 +71,23 @@ export const TaskTransitionTypes = {
   STARTED: "started",
   RETRIED: "retried",
 } as const satisfies Record<string, TaskTransitionType>;
+
+export const InstanceEntityTypes = {
+  INSTANCE: "instance",
+  TASK: "task",
+  TASK_EXECUTION: "task_execution",
+  USER_TASK_EXECUTION: "user_task_execution",
+} as const satisfies Record<string, InstanceEntityType>;
+
+export const LogEventTypes = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  PAUSED: "paused",
+  TERMINATED: "terminated",
+  RESUMED: "resumed",
+  STARTED: "started",
+  RETRIED: "retried",
+} as const satisfies Record<string, InstanceEventType>;
 
 export enum FeelDataType {
   NUMBER = "number",

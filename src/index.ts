@@ -1,10 +1,21 @@
 import app from "./app.js";
+import Config from "./config.js";
+import { checkDb } from "./database.js";
+import { getLogger } from "./logger.js";
 import { queueService } from "./services/queue.service.js";
 
-const PORT = process.env.PORT ?? 3000;
+app.listen(Config.SERVER_PORT, async () => {
+  const logger = getLogger();
 
-app.listen(PORT, async () => {
-  console.log(`server is running on port ${PORT}`);
+  try {
+    await checkDb();
+    logger.info("Database connection established");
+  } catch (err) {
+    logger.error({ err }, "Failed to connect to database. Exiting.");
+    process.exit(1);
+  }
+
+  logger.info(`server is running on port ${Config.SERVER_PORT}`);
   queueService.startWorker();
   // await queueService.obliterate();
 });

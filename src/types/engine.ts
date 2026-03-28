@@ -21,12 +21,14 @@ export interface ContextVariables {
 export interface ExecutorResult {
   status: TaskStatus;
   outputVariables: Record<string, unknown>; // variableName: value
-  error?: string;
   nextNodeId: string | null;
+  errorMessage?: string;
 }
 
 export interface QueueJobData {
+  instanceId: string;
   taskId: string;
+  nodeId: string;
 }
 
 export type NodeRunResult = { nextNodeIds: string[] };

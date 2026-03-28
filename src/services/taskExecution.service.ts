@@ -1,31 +1,34 @@
-import { Transaction } from "kysely";
-import { taskExecutionRepository } from "../repositories/taskExecution.repository";
-import type { DB, TaskStatus } from "../types/database";
-import { converterUtils } from "../utils/converter.utils";
-import type { TaskExecutionModel } from "../types/models";
-import { transitionLogService } from "./transitionLog.service";
-import { TaskStatuses, TaskTransitionTypes } from "../types/enums";
 import { db } from "../database";
+import { taskExecutionRepository } from "../repositories/taskExecution.repository";
+import type { ContextVariables } from "../types/engine";
+import { LogEventTypes, TaskStatuses } from "../types/enums";
+import type { LogDetailSchema } from "../types/instanceLog";
+import type { TaskExecutionModel, TaskModel } from "../types/models";
+import { converterUtils } from "../utils/converter.utils";
+import { eventLogService } from "./eventLog.service";
 
 export const taskExecutionService = {
-  createAndStart: async (
-    taskId: string,
-    status: TaskStatus,
-    inputVariables: object,
+  create: async (
+    task: TaskModel,
+    inputVariables: ContextVariables,
   ): Promise<TaskExecutionModel> => {
     return await db.transaction().execute(async (transaction) => {
-      const taskExecution = taskExecutionRepository.insert(
+      const taskExecution = await taskExecutionRepository.insert(
         {
-          task_id: taskId,
-          status,
+          task_id: task.id,
+          status: TaskStatuses.IN_PROGRESS,
           input_variables: converterUtils.objectToJsonValue(inputVariables),
           started_on: new Date(),
         },
         transaction,
       );
 
-      await transitionLogService.createTaskLog(
-        { taskId: taskId, type: TaskTransitionTypes.STARTED },
+      await eventLogService.createTaskExecutionLog(
+        task.instance_id,
+        taskExecution.id,
+        LogEventTypes.STARTED,
+        undefined,
+        undefined,
         transaction,
       );
 
@@ -33,31 +36,64 @@ export const taskExecutionService = {
     });
   },
 
-  fail: async (
+  complete: async (
+    instanceId: string,
     taskExecutionId: string,
-    transaction?: Transaction<DB>,
+    outputVariables: object,
   ): Promise<TaskExecutionModel> => {
-    return taskExecutionRepository.updateById(
-      taskExecutionId,
-      {
-        status: TaskStatuses.FAILED,
-        ended_on: new Date(),
-      },
-      transaction,
-    );
+    return await db.transaction().execute(async (transaction) => {
+      const [taskExecution] = await Promise.all([
+        taskExecutionRepository.updateById(
+          taskExecutionId,
+          {
+            status: TaskStatuses.COMPLETED,
+            output_variables: converterUtils.objectToJsonValue(outputVariables),
+            ended_on: new Date(),
+          },
+          transaction,
+        ),
+
+        eventLogService.createTaskExecutionLog(
+          instanceId,
+          taskExecutionId,
+          LogEventTypes.COMPLETED,
+          undefined,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return taskExecution;
+    });
   },
 
-  updateStatus: async (
-    taskId: string,
-    status: TaskStatus,
-    transaction?: Transaction<DB>,
+  fail: async (
+    instanceId: string,
+    taskExecutionId: string,
+    details: LogDetailSchema,
+    error?: Error,
   ): Promise<TaskExecutionModel> => {
-    return taskExecutionRepository.updateById(
-      taskId,
-      {
-        status,
-      },
-      transaction,
-    );
+    return await db.transaction().execute(async (transaction) => {
+      const [taskExecution] = await Promise.all([
+        taskExecutionRepository.updateById(
+          taskExecutionId,
+          {
+            status: TaskStatuses.FAILED,
+          },
+          transaction,
+        ),
+
+        eventLogService.createTaskExecutionLog(
+          instanceId,
+          taskExecutionId,
+          LogEventTypes.FAILED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return taskExecution;
+    });
   },
 };

@@ -4,6 +4,9 @@ import { evaluate } from "@bpmn-io/feelin";
 import type { NodeInputSchema } from "../types/workflow.js";
 import { EngineError } from "../errors/EngineError.js";
 import { httpRequestService } from "../services/httpRequest.service.js";
+import type { InstanceModel, NodeModel } from "../types/models.js";
+import { NodeTypes } from "../types/enums.js";
+import { converterUtils } from "./converter.utils.js";
 
 type DataTypeMap = {
   string: string;
@@ -39,7 +42,7 @@ export const contextUtils = {
     }, data);
   },
 
-  async buildFeelContext(
+  async evaluateContext(
     contextVariables: ContextVariables,
   ): Promise<{ context: Record<string, unknown> }> {
     const { constants, fetchables, urls } = contextVariables;
@@ -121,21 +124,21 @@ export const contextUtils = {
     return result.value as DataTypeMap[T];
   },
 
-  getTaskExecutionContext(
-    contextVariables: ContextVariables,
+  getTaskContext(
+    instanceContext: ContextVariables,
     inputSchema: NodeInputSchema,
   ): ContextVariables {
-    const { constants, fetchables, urls } = contextVariables;
-    const returnContext: ContextVariables = {
+    const { constants, fetchables, urls } = instanceContext;
+    const taskContext: ContextVariables = {
       constants: {},
       fetchables: {},
       urls: {},
     };
 
-    for (const variableName of inputSchema.variableNames) {
+    inputSchema.variableNames.forEach((variableName) => {
       if (variableName in constants) {
-        returnContext.constants[variableName] = constants[variableName];
-        continue;
+        taskContext.constants[variableName] = constants[variableName];
+        return;
       }
 
       const fetchable = fetchables[variableName];
@@ -146,7 +149,7 @@ export const contextUtils = {
         );
       }
 
-      returnContext.fetchables[variableName] = fetchable;
+      taskContext.fetchables[variableName] = fetchable;
 
       const urlSettings = urls[fetchable.urlId];
       if (!urlSettings) {
@@ -155,9 +158,9 @@ export const contextUtils = {
         );
       }
 
-      returnContext.urls[fetchable.urlId] = urlSettings;
-    }
+      taskContext.urls[fetchable.urlId] = urlSettings;
+    });
 
-    return returnContext;
+    return taskContext;
   },
 };

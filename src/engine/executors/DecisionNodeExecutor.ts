@@ -1,5 +1,3 @@
-import type { Transaction } from "kysely";
-import type { DB } from "../../types/database.js";
 import type { NodeModel, EdgeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
 import { DecisionNodeConfigurationSchema } from "../../schemas/node.schema.js";
@@ -19,7 +17,6 @@ export class DecisionNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = DecisionNodeConfigurationSchema.safeParse(
       node.configuration,
@@ -32,7 +29,7 @@ export class DecisionNodeExecutor extends BaseExecutor {
 
     const configuration = parsed.data;
 
-    const edges = await edgeService.getBySourceNodeId(node.id, transaction);
+    const edges = await edgeService.getBySourceNodeId(node.id);
 
     if (edges.length === 0) {
       throw new StateTransitionError(
@@ -40,7 +37,7 @@ export class DecisionNodeExecutor extends BaseExecutor {
       );
     }
 
-    const feelContext = await contextUtils.buildFeelContext(inputVariables);
+    const feelContext = await contextUtils.evaluateContext(inputVariables);
 
     let matchedEdge: EdgeModel | null = null;
 

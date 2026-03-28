@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { userTaskService } from "../services/userTask.service.js";
+import { userTaskService } from "../services/userTaskExecution.service.js";
 import { UserTaskParamsSchema } from "../schemas/task.schema.js";
 import {
   buildPaginatedResponse,
@@ -26,14 +26,11 @@ export const userTaskController = {
 
   completeUserTask: async (req: Request, res: Response) => {
     const { taskId } = UserTaskParamsSchema.parse(req.params);
-    const execution = await userTaskService.completeUserTask(
-      taskId,
-      req.body ?? {},
-      req.actor,
-    );
+    const { userTaskExecution, taskExecution } =
+      await userTaskService.completeUserTask(taskId, req.body ?? {}, req.actor);
     return res.json({
-      status: execution.status,
-      completedAt: execution.ended_on,
+      status: taskExecution.status,
+      completedAt: taskExecution.ended_on,
     });
   },
 };

@@ -5,6 +5,7 @@ import type {
   FetchableSettings,
   UrlSettings,
 } from "../types/engine";
+import type { LogDetailSchema } from "../types/instanceLog";
 import type { NodeInputSchema } from "../types/workflow";
 import { z } from "zod";
 
@@ -52,6 +53,19 @@ export const converterUtils = {
       throw new DataIntegrityError("Invalid node input schema");
     }
     return value;
+  },
+
+  jsonValueToLogDetailSchema: (value: JsonValue): LogDetailSchema => {
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value) &&
+      typeof value.message === "string"
+    ) {
+      return { message: value.message };
+    }
+
+    throw new DataIntegrityError("Invalid Instance Log Detail schema");
   },
 
   objectToContextVariables: (

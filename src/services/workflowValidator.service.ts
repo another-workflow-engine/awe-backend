@@ -410,7 +410,10 @@ function calculateDataFlow(
   return nodeInputs;
 }
 
-function validateStartNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateStartNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -433,7 +436,9 @@ function validateStartNode(node: NodeModel, inputVariables: Set<string>): Valida
       errors,
     );
     if (hasContextName) {
-      assignedOutputs.add(entry.contextVariableName.trim());
+      const contextVariableName = entry.contextVariableName.trim();
+      assignedOutputs.add(contextVariableName);
+      inputVariables.add(contextVariableName);
     }
   });
 
@@ -458,7 +463,10 @@ function validateStartNode(node: NodeModel, inputVariables: Set<string>): Valida
   return errors;
 }
 
-function validateEndNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateEndNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     EndNodeConfigurationSchema,
@@ -495,7 +503,10 @@ function validateEndNode(node: NodeModel, inputVariables: Set<string>): Validati
   return errors;
 }
 
-function validateUserNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateUserNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -567,7 +578,10 @@ function validateUserNode(node: NodeModel, inputVariables: Set<string>): Validat
   return errors;
 }
 
-function validateServiceNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateServiceNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
 
@@ -645,7 +659,10 @@ function validateServiceNode(node: NodeModel, inputVariables: Set<string>): Vali
   return errors;
 }
 
-function validateScriptNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateScriptNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -780,7 +797,10 @@ function validateScriptNode(node: NodeModel, inputVariables: Set<string>): Valid
   return errors;
 }
 
-function validateDecisionNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateDecisionNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     DecisionNodeConfigurationSchema,
@@ -836,14 +856,20 @@ export const workflowValidatorService = {
     return { valid: errors.length === 0, errors };
   },
 
-  validateAllNodes: (nodes: NodeModel[], edges: EdgeModel[]): ValidationError[] => {
+  validateAllNodes: (
+    nodes: NodeModel[],
+    edges: EdgeModel[],
+  ): ValidationError[] => {
     const errors: ValidationError[] = [];
     let startNodes = 0;
     let endNodes = 0;
 
     const availableVariables = calculateDataFlow(nodes, edges);
 
-    const validators: Record<string, (node: NodeModel, vars: Set<string>) => ValidationError[]> = {
+    const validators: Record<
+      string,
+      (node: NodeModel, vars: Set<string>) => ValidationError[]
+    > = {
       [NodeTypes.START]: validateStartNode,
       [NodeTypes.END]: validateEndNode,
       [NodeTypes.USER]: validateUserNode,

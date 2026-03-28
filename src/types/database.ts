@@ -31,9 +31,11 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
-export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
+export type InstanceEntityType = "instance" | "task" | "task_execution" | "user_task_execution";
 
-export type InstanceTransitionType = "completed" | "created" | "failed" | "paused" | "resumed" | "started" | "terminated";
+export type InstanceEventType = "completed" | "failed" | "paused" | "resumed" | "retried" | "started" | "terminated";
+
+export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
 export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
 
@@ -56,8 +58,6 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 export type StorageBuckettype = "ANALYTICS" | "STANDARD" | "VECTOR";
 
 export type TaskStatus = "completed" | "failed" | "in_progress" | "terminated";
-
-export type TaskTransitionType = "completed" | "failed" | "retried" | "started" | "terminated";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
@@ -510,14 +510,15 @@ export interface Instance {
   workflow_version_id: string;
 }
 
-export interface InstanceTransitionLog {
+export interface InstanceLog {
   created_by: string | null;
   created_on: Generated<Timestamp>;
   details: Json | null;
+  entity_id: string;
+  entity_type: InstanceEntityType;
+  event_type: InstanceEventType;
   id: Generated<string>;
   instance_id: string;
-  message: string | null;
-  transition_type: InstanceTransitionType;
 }
 
 export interface Node {
@@ -715,26 +716,11 @@ export interface TaskExecution {
   task_id: string;
 }
 
-export interface TaskTransitionLog {
-  created_by: string | null;
-  created_on: Generated<Timestamp>;
-  details: Json | null;
-  id: Generated<string>;
-  message: string | null;
-  task_execution_id: string;
-  transition_type: TaskTransitionType;
-}
-
 export interface UserTaskExecution {
   assignee: string | null;
   created_on: Generated<Timestamp>;
-  ended_on: Timestamp | null;
   id: Generated<string>;
-  request_variables: Json | null;
-  response_variables: Json | null;
-  started_on: Timestamp | null;
-  status: TaskStatus;
-  task_id: string;
+  task_execution_id: string;
   title: string | null;
 }
 
@@ -822,7 +808,7 @@ export interface DB {
   "extensions.pg_stat_statements": ExtensionsPgStatStatements;
   "extensions.pg_stat_statements_info": ExtensionsPgStatStatementsInfo;
   instance: Instance;
-  instance_transition_log: InstanceTransitionLog;
+  instance_log: InstanceLog;
   node: Node;
   organization: Organization;
   "realtime.messages": RealtimeMessages;
@@ -840,7 +826,6 @@ export interface DB {
   system: System;
   task: Task;
   task_execution: TaskExecution;
-  task_transition_log: TaskTransitionLog;
   user_task_execution: UserTaskExecution;
   "vault.decrypted_secrets": VaultDecryptedSecrets;
   "vault.secrets": VaultSecrets;

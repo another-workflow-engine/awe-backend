@@ -1,5 +1,3 @@
-import type { Transaction } from "kysely";
-import type { DB } from "../../types/database.js";
 import type { NodeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
 import { ServiceNodeConfigurationSchema } from "../../schemas/node.schema.js";
@@ -26,7 +24,6 @@ export class ServiceNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = ServiceNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {
@@ -37,7 +34,7 @@ export class ServiceNodeExecutor extends BaseExecutor {
 
     const configuration = parsed.data;
 
-    const feelContext = await contextUtils.buildFeelContext(inputVariables);
+    const feelContext = await contextUtils.evaluateContext(inputVariables);
 
     const urlResult = evaluate(configuration.urlExpression, feelContext);
     if (
@@ -137,12 +134,12 @@ export class ServiceNodeExecutor extends BaseExecutor {
       }
     } catch (error) {
       let error_message = "Unknown error";
-      if(error instanceof Error){
+      if (error instanceof Error) {
         error_message = `Service node failed: ${error.message}`;
       }
       return {
         status: TaskStatuses.FAILED,
-        error: error_message,
+        errorMessage: error_message,
         outputVariables: {},
         nextNodeId: null,
       };
@@ -156,7 +153,6 @@ export class ServiceNodeExecutor extends BaseExecutor {
 
     const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
       node.id,
-      transaction,
     );
 
     return {

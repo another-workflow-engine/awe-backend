@@ -1,5 +1,3 @@
-import type { Transaction } from "kysely";
-import type { DB } from "../../types/database.js";
 import type { NodeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
 import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
@@ -11,14 +9,13 @@ import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { JDoodleService } from "../../services/jdoodle.service.js";
 
-function getValueByPath(obj:any,path:string) {
-  return path.split(".").reduce((acc,key)=> acc?.[key],obj);
+function getValueByPath(obj: any, path: string) {
+  return path.split(".").reduce((acc, key) => acc?.[key], obj);
 }
 export class ScriptNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = ScriptNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {
@@ -29,8 +26,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
 
     const configuration = parsed.data;
 
-    const evaluatedContext =
-      await contextUtils.buildFeelContext(inputVariables);
+    const evaluatedContext = await contextUtils.evaluateContext(inputVariables);
 
     const parameters = configuration.parameterMap.map(
       (parameter) =>
@@ -54,17 +50,17 @@ export class ScriptNodeExecutor extends BaseExecutor {
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
-        error: error.message,
+        errorMessage: error.message,
         nextNodeId: null,
       };
     }
 
-    if(!parsedOutput){
-      return{
-        status:TaskStatuses.FAILED,
-        outputVariables:{},
-        error:"Script execution returned empty output",
-        nextNodeId:null,
+    if (!parsedOutput) {
+      return {
+        status: TaskStatuses.FAILED,
+        outputVariables: {},
+        errorMessage: "Script execution returned empty output",
+        nextNodeId: null,
       };
     }
 
@@ -72,7 +68,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
-        error: parsedOutput.error,
+        errorMessage: parsedOutput.error,
         nextNodeId: null,
       };
     }
@@ -82,7 +78,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
     configuration.responseMap.forEach(({ jsonPath, contextVariableName }) => {
       outputVariables[contextVariableName] =
         typeof parsedOutput === "object"
-          ?getValueByPath(parsedOutput,jsonPath)
+          ? getValueByPath(parsedOutput, jsonPath)
           : parsedOutput;
     });
 

@@ -1,5 +1,3 @@
-import type { Transaction } from "kysely";
-import type { DB } from "../../types/database.js";
 import type { NodeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
 import { EndNodeConfigurationSchema } from "../../schemas/node.schema.js";
@@ -13,7 +11,6 @@ export class EndNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = EndNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {
@@ -24,8 +21,7 @@ export class EndNodeExecutor extends BaseExecutor {
     const configuration = parsed.data;
     let outputVariables: Record<string, unknown> = {};
 
-    const evaluatedContext =
-      await contextUtils.buildFeelContext(inputVariables);
+    const evaluatedContext = await contextUtils.evaluateContext(inputVariables);
 
     configuration.resultMap.forEach((rm) => {
       const result = evaluate(rm.valueExpression, evaluatedContext);
@@ -43,9 +39,7 @@ export class EndNodeExecutor extends BaseExecutor {
     }
 
     return {
-      status: configuration.success
-        ? TaskStatuses.COMPLETED
-        : TaskStatuses.FAILED,
+      status: TaskStatuses.COMPLETED,
       outputVariables,
       nextNodeId: null,
     };

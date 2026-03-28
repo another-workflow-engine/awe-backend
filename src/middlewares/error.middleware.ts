@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../errors/AppError.js";
 import { ValidationError } from "../errors/ValidationError.js";
 import { ZodError } from "zod";
+import { getLogger } from "../logger.js";
 
 export const errorHandler = (
   err: Error,
@@ -9,7 +10,16 @@ export const errorHandler = (
   res: Response,
   next: NextFunction,
 ) => {
-  console.error(err);
+  const logger = getLogger();
+  logger.error(err);
+
+  if (err instanceof SyntaxError && "body" in err) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid JSON payload",
+      details: err.message,
+    });
+  }
 
   if (err instanceof ValidationError) {
     return res.status(err.statusCode).json({

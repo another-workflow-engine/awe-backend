@@ -20,3 +20,11 @@ export function isDbError(
 ): err is { code: string; constraint?: string } {
   return typeof err === "object" && err !== null && "code" in err;
 }
+
+export async function checkDb() {
+  await db
+    .selectFrom("extensions.pg_stat_statements")
+    .select("dbid")
+    .limit(1)
+    .execute();
+}

@@ -14,6 +14,7 @@ import { NodeTypes } from "../types/enums.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
 
 export const nodeService = {
   createMany: async (
@@ -78,7 +79,7 @@ export const nodeService = {
     );
   },
 
-  getByStartNodeByWorkflowVersionIdOrThrow: async (
+  getByStartNodeByWorkflowVersionId: async (
     workflowVersionId: string,
     transaction?: Transaction<DB>,
   ) => {
@@ -88,16 +89,19 @@ export const nodeService = {
       transaction,
     );
 
-    if (nodes.length === 0 || !nodes[0]) {
-      throw new DataIntegrityError(
-        `No start node for workflow version id=${workflowVersionId}`,
-      );
-    }
-
     return nodes[0];
   },
 
   getById: async (id: string, transaction?: Transaction<DB>) => {
     return await nodeRepository.findById(id, transaction);
+  },
+
+  getByIdOrThrow: async (nodeId: string): Promise<NodeModel> => {
+    const node = await nodeRepository.findById(nodeId);
+    if (!node) {
+      throw new NotFoundError("Node");
+    }
+
+    return node;
   },
 };

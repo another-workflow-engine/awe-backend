@@ -1,11 +1,33 @@
 import { Worker, type Job } from "bullmq";
 import type { ConnectionOptions, Queue } from "bullmq";
-import { executionEngine } from "../ExecutionEngine.js";
 import Config from "../../config.js";
-import type { QueueJobData } from "../../types/engine.js";
+import type {
+  ContextVariables,
+  ExecutorResult,
+  QueueJobData,
+} from "../../types/engine.js";
+import { getLogger } from "../../logger.js";
+import { taskService } from "../../services/task.service.js";
+import {
+  InstanceStatuses,
+  NodeTypes,
+  TaskStatuses,
+} from "../../types/enums.js";
+import { EngineError } from "../../errors/EngineError.js";
+import { engineUtils } from "../../utils/engine.utils.js";
+import { instanceService } from "../../services/instance.service.js";
+import { nodeService } from "../../services/node.services.js";
+import TaskExecutor from "../executors/TaskExecutor.js";
+import { db } from "../../database.js";
+import type { DB, InstanceStatus, NodeType } from "../../types/database.js";
+import type { InstanceModel, NodeModel } from "../../types/models.js";
+import { converterUtils } from "../../utils/converter.utils.js";
+import type { Transaction } from "kysely";
+import type { Logger } from "pino";
 
 export class ExecutionWorker {
   private readonly worker: Worker<QueueJobData>;
+  private logger: Logger;
 
   constructor(
     private readonly queue: Queue<QueueJobData>,
@@ -17,15 +39,17 @@ export class ExecutionWorker {
       { connection, concurrency: 10 },
     );
 
+    this.logger = getLogger();
+
     this.worker.on("failed", (job, err) => {
-      console.error(`[Worker] BullMQ job ${job?.id} failed:`, err.message);
+      this.logger.error(err, `[Worker] BullMQ job ${job?.id} failed.`);
     });
 
     this.worker.on("completed", (job) => {
-      console.log(`[Worker] BullMQ job ${job.id} completed`);
+      this.logger.info(`[Worker] BullMQ job ${job.id} completed`);
     });
 
-    console.log(
+    this.logger.info(
       `[Worker] ExecutionWorker started, listening on queue "${Config.EXECUTION_QUEUE_NAME}" (concurrency=10)`,
     );
   }
@@ -35,7 +59,28 @@ export class ExecutionWorker {
   }
 
   private async processJob(job: Job<QueueJobData>): Promise<void> {
-    const { taskId } = job.data;
-    await executionEngine.executeTask(taskId);
+    const { instanceId, taskId, nodeId } = job.data;
+    const [instance, task, node] = await Promise.all([
+      instanceService.getById(instanceId),
+      taskService.getById(taskId),
+      nodeService.getByIdOrThrow(nodeId),
+    ]);
+
+    let result;
+
+    try {
+      engineUtils.validateInstanceCanExecuteOrThrow(instance);
+      const executionContext = taskService.getTaskContext(instance, node);
+
+      const executor = new TaskExecutor(task, node);
+      this.logger.info(node.configuration, `Executing ${node.type} node`);
+
+      result = await executor.run(executionContext);
+    } catch (err) {
+      await engineUtils.onExecutionFailure(err, task);
+      return;
+    }
+
+    await engineUtils.updateInstanceAndTask(instance, node, task, result);
   }
 }

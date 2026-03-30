@@ -129,6 +129,7 @@ export const ScriptNodeConfigurationSchema = z.object({
   maxAttempts: z.number().optional().default(1),
   sourceCode: z.string(),
   entryFunctionName: z.string(),
+  executionService: z.enum(["jdoodle", "gemini"]).default("jdoodle"),
 
   parameterMap: z.array(
     z.object({

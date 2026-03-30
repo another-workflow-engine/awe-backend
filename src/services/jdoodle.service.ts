@@ -1,5 +1,6 @@
 import axios from "axios";
 import { JDoodleConfig } from "../config/jdoodle.config";
+import type { ScriptExecutionResult } from "../types/script.execution";
 
 export interface JDoodleResponse {
   output: string;
@@ -9,13 +10,11 @@ export interface JDoodleResponse {
 }
 
 export class JDoodleService {
-
   static async executeScript(
     sourceCode: string,
     entryFunctionName: string,
-    parameters: any[]
-  ): Promise<{parsedOutput:any,rawOutput:string}> {
-
+    parameters: any[],
+  ): Promise<ScriptExecutionResult> {
     const stdin = JSON.stringify({ params: parameters });
 
     const wrappedScript = `${sourceCode}
@@ -83,9 +82,9 @@ if __name__ == "__main__":
 
       try {
         const rawOutput = response.data.output || "";
-        const trimmed=rawOutput.trim();
+        const trimmed = rawOutput.trim();
         const lastLine = rawOutput.split("\n").pop();
-        parsedOutput = lastLine?JSON.parse(lastLine): null;
+        parsedOutput = lastLine ? JSON.parse(lastLine) : null;
       } catch {
         parsedOutput = response.data.output;
       }
@@ -94,7 +93,6 @@ if __name__ == "__main__":
         parsedOutput,
         rawOutput: response.data.output,
       };
-
     } catch (error: any) {
       console.error("JDoodle Error:", error?.response?.data || error.message);
       throw new Error(error?.response?.data?.error || "Code execution failed");

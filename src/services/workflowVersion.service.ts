@@ -26,19 +26,22 @@ import { nodeSchemaService } from "./nodeSchema.service.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
-
-export type StatusPartialUpdateInput = z.infer<
-  typeof WorkflowVersionUpdateStatusSchema
->;
-
+export type StatusPartialUpdateInput = z.infer<typeof WorkflowVersionUpdateStatusSchema>;
 export type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
-
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
 export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
-
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 
+const getVersionOrThrow = async (versionId: string) => {
+  const version = await workflowVersionRepository.findById(versionId);
+  if (!version) {
+    throw new Error("Workflow version not found");
+  }
+  return version;
+};
+
 export const workflowVersionService = {
+
   listPaginated: async (
     data: ListVersionInput,
     limit: number,
@@ -62,11 +65,7 @@ export const workflowVersionService = {
   },
 
   getDetail: async (data: DetailInput) => {
-    const workflowVersion =
-      await workflowVersionRepository.findByWorkflowIdAndVersion(
-        data.workflowId,
-        data.version,
-      );
+    const workflowVersion = await getVersionOrThrow(data.versionId);
 
     const nodeModels = await nodeService.getByWorkflowVersion(workflowVersion);
     const edgeModels = await edgeService.getByNodes(nodeModels);
@@ -74,12 +73,15 @@ export const workflowVersionService = {
     const nodes = nodeModels.map((node) =>
       nodeSchemaService.getNodeSchema(node),
     );
+
     const edges = edgeModels.map((edge) =>
       edgeService.toEdgeSchema(edge, nodeModels),
     );
 
     const startVariables: { jsonPath: string; dataType: FeelDataType }[] = [];
+
     const startNode = nodes.find((node) => node.type === NodeTypes.START);
+
     if (
       !startNode &&
       workflowVersion.status !== WorkflowVersionStatuses.DRAFT
@@ -105,19 +107,20 @@ export const workflowVersionService = {
 
   update: async (data: UpdateVersionInput): Promise<WorkflowVersionModel> => {
     return db.transaction().execute(async (transaction) => {
-      const workflowVersion =
-        await workflowVersionRepository.findByWorkflowIdAndVersion(
-          data.workflowId,
-          data.version,
-          transaction,
-        );
+      const workflowVersion = await workflowVersionRepository.findById(
+        data.versionId,
+      );
+
+      if (!workflowVersion) {
+        throw new Error("Workflow version not found");
+      }
 
       if (
         workflowVersion.status === WorkflowVersionStatuses.PUBLISHED ||
         workflowVersion.status === WorkflowVersionStatuses.ACTIVE
       ) {
         throw new StateTransitionError(
-          `Workflow version ${data.version} cannot be updated because it is in ${workflowVersion.status} status`,
+          `Workflow version ${workflowVersion.id} cannot be updated because it is in ${workflowVersion.status} status`,
         );
       }
 
@@ -125,6 +128,7 @@ export const workflowVersionService = {
         workflowVersion,
         transaction,
       );
+
       await edgeService.deleteByNodes(existingNodes, transaction);
       await nodeService.deleteByWorkflowVersion(workflowVersion, transaction);
 
@@ -134,6 +138,7 @@ export const workflowVersionService = {
         workflowVersion,
         transaction,
       );
+
       await edgeService.createMany(
         data.edges,
         newNodes,
@@ -160,28 +165,30 @@ export const workflowVersionService = {
     data: CreateVersionInput,
   ): Promise<WorkflowVersionModel> => {
     return db.transaction().execute(async (transaction) => {
-      
-      const doesDraftOrValidVersionExists = await workflowVersionRepository.doesDraftOrValidVersionExists(
-        data.workflowId,
-        transaction,
-      );
 
-      if (doesDraftOrValidVersionExists) {
+      const exists =
+        await workflowVersionRepository.doesDraftOrValidVersionExists(
+          data.workflowId,
+          transaction,
+        );
+
+      if (exists) {
         throw new InvalidOperationError(
           "DRAFT or VALID version already exists for this workflow.",
         );
       }
 
-      const workflowVersion = await workflowVersionRepository.insertNextVersion(
-        {
-          description: data.description ?? null,
-          created_by: data.actor.id,
-          modified_by: data.actor.id,
-          status: WorkflowVersionStatuses.DRAFT,
-          workflow_id: data.workflowId,
-        },
-        transaction,
-      );
+      const workflowVersion =
+        await workflowVersionRepository.insertNextVersion(
+          {
+            description: data.description ?? null,
+            created_by: data.actor.id,
+            modified_by: data.actor.id,
+            status: WorkflowVersionStatuses.DRAFT,
+            workflow_id: data.workflowId,
+          },
+          transaction,
+        );
 
       const nodes = await nodeService.createMany(
         data.nodes,
@@ -190,22 +197,24 @@ export const workflowVersionService = {
         transaction,
       );
 
-      await edgeService.createMany(data.edges, nodes, data.actor, transaction);
+      await edgeService.createMany(
+        data.edges,
+        nodes,
+        data.actor,
+        transaction,
+      );
 
       return workflowVersion;
     });
   },
 
   validate: async (data: ValidateInput) => {
-    let workflowVersion =
-      await workflowVersionRepository.findByWorkflowIdAndVersion(
-        data.workflowId,
-        data.version,
-      );
+    let workflowVersion = await getVersionOrThrow(data.versionId);
 
     if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
       return { result: { valid: true, errors: [] }, workflowVersion };
     }
+
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
     const edges = await edgeService.getByNodes(nodes);
 
@@ -222,12 +231,8 @@ export const workflowVersionService = {
   },
 
   changeStatus: async (data: StatusPartialUpdateInput) => {
-    let workflowVersion =
-      await workflowVersionRepository.findByWorkflowIdAndVersion(
-        data.workflowId,
-        data.version,
-      );
-    
+    let workflowVersion = await getVersionOrThrow(data.versionId);
+
     const currentStatus = workflowVersion.status;
     const newStatus = data.status;
 
@@ -242,9 +247,10 @@ export const workflowVersionService = {
     }
 
     return db.transaction().execute(async (transaction) => {
+
       if (newStatus === WorkflowVersionStatuses.ACTIVE) {
         await workflowVersionRepository.demoteActiveVersionToPublished(
-          data.workflowId,
+          workflowVersion.workflow_id,
           transaction,
         );
       }

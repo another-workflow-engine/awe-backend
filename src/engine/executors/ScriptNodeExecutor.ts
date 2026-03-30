@@ -8,6 +8,7 @@ import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { JDoodleService } from "../../services/jdoodle.service.js";
+import { GeminiService } from "../../services/gemini.service.js";
 
 function getValueByPath(obj: any, path: string) {
   return path.split(".").reduce((acc, key) => acc?.[key], obj);
@@ -36,11 +37,26 @@ export class ScriptNodeExecutor extends BaseExecutor {
     let parsedOutput;
 
     try {
-      const response = await JDoodleService.executeScript(
-        configuration.sourceCode,
-        configuration.entryFunctionName,
-        parameters,
-      );
+      const executionService = configuration.executionService;
+      let response;
+
+      switch (executionService) {
+        case "gemini":
+          response = await GeminiService.executeScript(
+            configuration.sourceCode,
+            configuration.entryFunctionName,
+            parameters,
+          );
+          break;
+        case "jdoodle":
+        default:
+          response = await JDoodleService.executeScript(
+            configuration.sourceCode,
+            configuration.entryFunctionName,
+            parameters,
+          );
+          break;
+      }
 
       parsedOutput = response.parsedOutput;
 

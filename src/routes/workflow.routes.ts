@@ -5,85 +5,45 @@ import { workflowVersionController } from "../controllers/workflowVersion.contro
 
 export const workflowRouter = Router();
 
-workflowRouter.post("/", authenticateRequest, workflowGroupController.create);
-
+// WORKFLOWS
 workflowRouter.get("/", authenticateRequest, workflowGroupController.list);
 
-workflowRouter.post("/validate", workflowGroupController.validate);
+workflowRouter.post("/", authenticateRequest, workflowGroupController.create);
 
-workflowRouter.get(
-  "/:workflowId",
-  authenticateRequest,
-  workflowGroupController.get,
-);
-
-workflowRouter.patch(
-  "/:workflowId",
-  authenticateRequest,
-  workflowGroupController.update,
-);
-
-workflowRouter.delete(
-  "/:workflowId",
-  authenticateRequest,
-  workflowGroupController.delete,
-);
-
-workflowRouter.patch(
-  "/:workflowId/status",
-  workflowGroupController.changeStatus,
-);
-
+// CREATE VERSION
 workflowRouter.post(
   "/:workflowId/versions",
   authenticateRequest,
   workflowVersionController.create,
 );
 
-workflowRouter.get(
-  "/:workflowId/versions",
-  authenticateRequest,
-  workflowVersionController.list,
-);
-
-workflowRouter.get(
-  "/:workflowId/versions/:version",
-  authenticateRequest,
-  workflowVersionController.get,
-);
-
+// VERSION BASED ROUTES (NOW USING versionId)
 workflowRouter.post(
-  "/:workflowId/versions/:version/validate",
+  "/versions/:versionId/validate",
   authenticateRequest,
   workflowVersionController.validate,
 );
 
-workflowRouter.patch(
-  "/:workflowId/versions/:version/status",
-  authenticateRequest,
-  workflowVersionController.updateStatus,
-);
-
 workflowRouter.post(
-  "/:workflowId/versions/:version/publish",
+  "/versions/:versionId/publish",
   authenticateRequest,
   workflowVersionController.publish,
 );
 
 workflowRouter.post(
-  "/:workflowId/versions/:version/activate",
+  "/versions/:versionId/activate",
   authenticateRequest,
   workflowVersionController.activate,
 );
 
 workflowRouter.post(
-  "/:workflowId/versions/:version/deactivate",
+  "/versions/:versionId/deactivate",
   authenticateRequest,
   workflowVersionController.publish,
 );
 
 workflowRouter.patch(
-  "/:workflowId/versions/:version",
+  "/versions/:versionId",
   authenticateRequest,
   workflowVersionController.update,
 );

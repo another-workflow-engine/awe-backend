@@ -51,8 +51,6 @@ export const workflowVersionController = {
       actor: req.actor,
     });
 
-    
-
     const workflowVersion = await workflowVersionService.createNew(data);
 
     return res.status(201).json({
@@ -66,7 +64,7 @@ export const workflowVersionController = {
 
   validate: async (req: Request, res: Response) => {
     const data = WorkflowVersionValidateSchema.parse({
-      ...req.params,
+      versionId: req.params.versionId,
       actor: req.actor,
     });
 
@@ -82,7 +80,7 @@ export const workflowVersionController = {
 
   get: async (req: Request, res: Response) => {
     const data = WorkflowVersionDetailSchema.parse({
-      ...req.params,
+      versionId: req.params.versionId,
       actor: req.actor,
     });
 
@@ -105,7 +103,7 @@ export const workflowVersionController = {
 
   updateStatus: async (req: Request, res: Response) => {
     const data = WorkflowVersionUpdateStatusSchema.parse({
-      ...req.params,
+      versionId: req.params.versionId,
       ...req.body,
       actor: req.actor,
     });
@@ -124,7 +122,7 @@ export const workflowVersionController = {
 
   update: async (req: Request, res: Response) => {
     const data = WorkflowVersionUpdateSchema.parse({
-      ...req.params,
+      versionId: req.params.versionId,
       ...req.body,
       actor: req.actor,
     });
@@ -141,7 +139,7 @@ export const workflowVersionController = {
 
   publish: async (req: Request, res: Response) => {
     const data = WorkflowVersionUpdateStatusSchema.parse({
-      ...req.params,
+      versionId: req.params.versionId,
       status: WorkflowVersionStatuses.PUBLISHED,
       actor: req.actor,
     });
@@ -157,7 +155,7 @@ export const workflowVersionController = {
 
   activate: async (req: Request, res: Response) => {
     const data = WorkflowVersionUpdateStatusSchema.parse({
-      ...req.params,
+      versionId: req.params.versionId,
       status: WorkflowVersionStatuses.ACTIVE,
       actor: req.actor,
     });
@@ -169,6 +167,5 @@ export const workflowVersionController = {
       status: workflowVersion.status,
       publishedAt: workflowVersion.published_on,
     });
-  }
-
+  },
 };

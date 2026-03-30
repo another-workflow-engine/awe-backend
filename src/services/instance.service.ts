@@ -113,6 +113,7 @@ export const instanceService = {
       }
       instance = await instanceService.fail(instance.id, {
         message,
+        error: err
       });
     }
 

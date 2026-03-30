@@ -14,6 +14,9 @@ const Config = {
   REDIS_PASSWORD: process.env.REDIS_PASSWORD,
   EXECUTION_QUEUE_NAME: process.env.EXECUTION_QUEUE_NAME,
   PINO_LOG_LEVEL: process.env.PINO_LOG_LEVEL,
+  JDOODLE_CLIENT_ID: process.env.JDOODLE_CLIENT_ID,
+  JDOODLE_CLIENT_SECRET: process.env.JDOODLE_CLIENT_SECRET,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
 };
 
 function validateConfig(config: Record<string, string | undefined>) {

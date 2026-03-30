@@ -1,38 +1,23 @@
 import { Worker, type Job } from "bullmq";
-import type { ConnectionOptions, Queue } from "bullmq";
+import type { ConnectionOptions } from "bullmq";
 import Config from "../../config.js";
-import type {
-  ContextVariables,
-  ExecutorResult,
-  QueueJobData,
-} from "../../types/engine.js";
+import type { ExecutorResult, QueueJobData } from "../../types/engine.js";
 import { getLogger } from "../../logger.js";
 import { taskService } from "../../services/task.service.js";
-import {
-  InstanceStatuses,
-  NodeTypes,
-  TaskStatuses,
-} from "../../types/enums.js";
-import { EngineError } from "../../errors/EngineError.js";
 import { engineUtils } from "../../utils/engine.utils.js";
 import { instanceService } from "../../services/instance.service.js";
 import { nodeService } from "../../services/node.services.js";
 import TaskExecutor from "../executors/TaskExecutor.js";
-import { db } from "../../database.js";
-import type { DB, InstanceStatus, NodeType } from "../../types/database.js";
-import type { InstanceModel, NodeModel } from "../../types/models.js";
-import { converterUtils } from "../../utils/converter.utils.js";
-import type { Transaction } from "kysely";
 import type { Logger } from "pino";
+import { NodeTypes, TaskStatuses } from "../../types/enums.js";
+import { NodeSchema } from "../../schemas/node.schema.js";
+import { converterUtils } from "../../utils/converter.utils.js";
 
 export class ExecutionWorker {
   private readonly worker: Worker<QueueJobData>;
   private logger: Logger;
 
-  constructor(
-    private readonly queue: Queue<QueueJobData>,
-    connection: ConnectionOptions,
-  ) {
+  constructor(connection: ConnectionOptions) {
     this.worker = new Worker<QueueJobData>(
       Config.EXECUTION_QUEUE_NAME,
       (job: Job<QueueJobData>) => this.processJob(job),
@@ -66,9 +51,26 @@ export class ExecutionWorker {
       nodeService.getByIdOrThrow(nodeId),
     ]);
 
-    let result;
+    let result: ExecutorResult = {
+      status: TaskStatuses.FAILED,
+      outputVariables: {},
+      nextNodeId: null,
+    };
+    let executionThrew = false;
+    let isLastAttempt = true;
 
     try {
+      let maxAttempts = 1;
+      const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
+      if (
+        nodeSchema.type === NodeTypes.SCRIPT ||
+        nodeSchema.type === NodeTypes.SERVICE
+      ) {
+        maxAttempts = nodeSchema.configuration.maxAttempts;
+      }
+
+      isLastAttempt = job.attemptsMade >= maxAttempts - 1;
+
       engineUtils.validateInstanceCanExecuteOrThrow(instance);
       const executionContext = taskService.getTaskContext(instance, node);
 
@@ -77,10 +79,29 @@ export class ExecutionWorker {
 
       result = await executor.run(executionContext);
     } catch (err) {
-      await engineUtils.onExecutionFailure(err, task);
-      return;
+      if (isLastAttempt) {
+        await engineUtils.onExecutionFailure(err, task);
+        return;
+      }
+
+      this.logger.warn(
+        { error: err },
+        `[Worker] Job ${job.id} failed on attempt ${job.attemptsMade + 1}/${node.max_attempts}`,
+      );
+
+      executionThrew = true;
     }
 
-    await engineUtils.updateInstanceAndTask(instance, node, task, result);
+    await engineUtils.updateInstanceAndTask(
+      instance,
+      node,
+      task,
+      result,
+      isLastAttempt,
+    );
+
+    if (result.status !== TaskStatuses.COMPLETED || executionThrew === true) {
+      throw new Error();
+    }
   }
 }

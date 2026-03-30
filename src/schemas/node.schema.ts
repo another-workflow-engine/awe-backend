@@ -104,13 +104,21 @@ const ServiceResponseSchema = z.object({
   contextVariableName: z.string(),
 });
 
+const BackoffSchema = z
+  .object({
+    type: z.enum(["fixed", "exponential"]),
+    delayMs: z.number().positive(),
+  })
+  .optional()
+  .default({ type: "fixed", delayMs: 1000 });
+
 export const ServiceNodeConfigurationSchema = z.object({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   urlExpression: z.string(),
 
   maxAttempts: z.number().optional().default(1),
   timeoutMs: z.number().optional(),
-  retryDelayMs: z.number().optional(),
+  backoff: BackoffSchema,
 
   body: z.array(ServiceBodySchema).optional(),
   headers: z.array(HttpHeaderSchema).optional(),
@@ -121,6 +129,7 @@ export const ServiceNodeConfigurationSchema = z.object({
 export const ScriptNodeConfigurationSchema = z.object({
   runtime: z.literal("python3"),
   maxAttempts: z.number().optional().default(1),
+  backoff: BackoffSchema,
   sourceCode: z.string(),
   entryFunctionName: z.string(),
   executionService: z.enum(["jdoodle", "gemini"]).default("jdoodle"),

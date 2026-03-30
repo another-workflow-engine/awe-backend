@@ -7,15 +7,17 @@ const bullMQQueue = new BullMQQueue(redisConnectionOptions);
 let workerInstance: ExecutionWorker | null = null;
 
 export const queueService = {
-  enqueue: async (job: QueueJobData): Promise<void> => {
-    await bullMQQueue.enqueue(job);
+  enqueue: async (
+    job: QueueJobData,
+    maxAttempts: number = 1,
+    backoffType: string,
+    backoffDelay: number,
+  ): Promise<void> => {
+    await bullMQQueue.enqueue(job, maxAttempts, backoffType, backoffDelay);
   },
 
   startWorker: (): void => {
-    workerInstance = new ExecutionWorker(
-      bullMQQueue.queue,
-      redisConnectionOptions,
-    );
+    workerInstance = new ExecutionWorker(redisConnectionOptions);
   },
 
   obliterate: async (): Promise<void> => {

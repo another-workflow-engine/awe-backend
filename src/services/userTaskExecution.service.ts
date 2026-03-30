@@ -221,7 +221,7 @@ export const userTaskService = {
       nextNodeId: nextNodeId ?? null,
     };
 
-    await engineUtils.updateInstanceAndTask(instance, node, task, result);
+    await engineUtils.updateInstanceAndTask(instance, node, task, result, true);
 
     return { taskExecution: updatedtaskExecution, userTaskExecution };
   },

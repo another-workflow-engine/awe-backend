@@ -1,10 +1,10 @@
-import { converterUtils } from "../utils/converter.utils";
-import type { DB, InstanceEventType } from "../types/database";
+import { converterUtils } from "../utils/converter.utils.js";
+import type { DB, InstanceEventType } from "../types/database.js";
 import type { Transaction } from "kysely";
-import { instanceLogRepository } from "../repositories/instanceLog.repository";
-import { InstanceEntityTypes } from "../types/enums";
-import type { LogDetailSchema as LogDetailSchema } from "../types/instanceLog";
-import fi from "zod/v4/locales/fi.cjs";
+import { instanceLogRepository } from "../repositories/instanceLog.repository.js";
+import { InstanceEntityTypes } from "../types/enums.js";
+import type { LogDetailSchema } from "../types/instanceLog.js";
+import type { ActorModel } from "../types/models.js";
 
 export const eventLogService = {
   createInstanceLog: async (
@@ -69,7 +69,23 @@ export const eventLogService = {
     );
   },
 
-  getLogsByInstanceId: async (instanceId: string, filters: any = {}, sortOrder: "asc" | "desc" = "asc") => {
-    return await instanceLogRepository.getInstanceHistory(instanceId, filters, sortOrder);
-  }
+  getLogsByInstanceId: async (
+    instanceId: string,
+    filters: {
+      entityTypes?: string[];
+      createdBy?: string;
+      eventTypes?: string[];
+    } = {},
+    sortOrder: "asc" | "desc" = "asc",
+  ) => {
+    return await instanceLogRepository.getInstanceHistory(
+      instanceId,
+      filters as any,
+      sortOrder,
+    );
+  },
+
+  getInstanceAudit: async (instanceId: string, actor: ActorModel) => {
+    return await instanceLogRepository.getInstanceAudit(instanceId, actor);
+  },
 };

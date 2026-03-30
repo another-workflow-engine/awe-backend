@@ -116,7 +116,7 @@ export const workflowGroupController = {
 
   validate: (req: Request, res: Response) => {
     const data = WorkflowDefinitionValidateSchema.parse(req.body);
-    const result = workflowValidatorService.validateDefinition(data.nodes, data.edges);
+    const result = workflowValidatorService.validateDefinition(data.nodes as any, data.edges as any);
     res.status(200).json(result);
   },
 };

@@ -17,14 +17,12 @@ export const WorkflowVersionListSchema = z.object({
 });
 
 export const WorkflowVersionDetailSchema = z.object({
-  workflowId: z.uuidv4(),
-  version: z.coerce.number().min(1),
+  versionId: z.uuidv4(),
   actor: ActorSchema,
 });
 
 export const WorkflowVersionUpdateStatusSchema = z.object({
-  workflowId: z.uuidv4(),
-  version: z.coerce.number().min(1),
+  versionId: z.uuidv4(),
   actor: ActorSchema,
   status: z.enum([
     WorkflowVersionStatuses.PUBLISHED,
@@ -33,14 +31,12 @@ export const WorkflowVersionUpdateStatusSchema = z.object({
 });
 
 export const WorkflowVersionValidateSchema = z.object({
-  workflowId: z.uuidv4(),
-  version: z.coerce.number().min(1),
+  versionId: z.uuidv4(),
   actor: ActorSchema,
 });
 
 export const WorkflowVersionUpdateSchema = z.object({
-  workflowId: z.uuidv4(),
-  version: z.coerce.number().min(1),
+  versionId: z.uuidv4(),
   actor: ActorSchema,
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),

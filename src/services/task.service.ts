@@ -84,7 +84,10 @@ export const taskService = {
         max: 1,
       };
 
-      if (nodeSchema.type === NodeTypes.SERVICE) {
+      if (
+        nodeSchema.type === NodeTypes.SERVICE ||
+        nodeSchema.type === NodeTypes.SCRIPT
+      ) {
         attempts.delay = nodeSchema.configuration.backoff.delayMs;
         attempts.type = nodeSchema.configuration.backoff.type;
         attempts.max = nodeSchema.configuration.maxAttempts;

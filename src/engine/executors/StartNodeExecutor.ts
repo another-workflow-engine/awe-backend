@@ -11,20 +11,17 @@ import type {
   UrlSettings,
 } from "../../types/engine.js";
 import { contextUtils } from "../../utils/context.utils.js";
+import { converterUtils } from "../../utils/converter.utils.js";
 
 export class StartNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
   ): Promise<ExecutorResult> {
-    const parsed = StartNodeConfigurationSchema.safeParse(node.configuration);
-    if (!parsed.success) {
-      throw new DataIntegrityError(
-        `Start node configuration is invalid in node id=${node.id}`,
-      );
-    }
-
-    const configuration = parsed.data;
+    const configuration = converterUtils.parseOrThrow(
+      StartNodeConfigurationSchema,
+      node.configuration,
+    );
     const inputJson = inputVariables.constants;
 
     let constants: Record<string, unknown> = {};
@@ -64,7 +61,7 @@ export class StartNodeExecutor extends BaseExecutor {
         continue;
       }
 
-      const value = contextUtils.getByPath(inputJson, dataMap.jsonPath);
+      const value = contextUtils.getByJsonPath(inputJson, dataMap.jsonPath);
 
       if (value === undefined) {
         return {

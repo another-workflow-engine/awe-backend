@@ -10,9 +10,6 @@ import { edgeService } from "../../services/edge.services.js";
 import { JDoodleService } from "../../services/jdoodle.service.js";
 import { GeminiService } from "../../services/gemini.service.js";
 
-function getValueByPath(obj: any, path: string) {
-  return path.split(".").reduce((acc, key) => acc?.[key], obj);
-}
 export class ScriptNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
@@ -94,7 +91,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
     configuration.responseMap.forEach(({ jsonPath, contextVariableName }) => {
       outputVariables[contextVariableName] =
         typeof parsedOutput === "object"
-          ? getValueByPath(parsedOutput, jsonPath)
+          ? contextUtils.getByJsonPath(parsedOutput, jsonPath)
           : parsedOutput;
     });
 

@@ -9,17 +9,6 @@ import { edgeService } from "../../services/edge.services.js";
 import { httpRequestService } from "../../services/httpRequest.service.js";
 import { contextUtils } from "../../utils/context.utils.js";
 
-function getByPath(data: unknown, path: string): unknown {
-  const parts = path.split(".").filter(Boolean);
-
-  return parts.reduce<unknown>((acc, key) => {
-    if (acc === null || acc === undefined) {
-      return undefined;
-    }
-    return (acc as Record<string, unknown>)[key];
-  }, data);
-}
-
 export class ServiceNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
@@ -147,7 +136,10 @@ export class ServiceNodeExecutor extends BaseExecutor {
 
     const outputVariables: Record<string, unknown> = {};
     for (const responseItem of configuration.responseMap) {
-      const value = getByPath(responseBody, responseItem.jsonPath);
+      const value = contextUtils.getByJsonPath(
+        responseBody,
+        responseItem.jsonPath,
+      );
       outputVariables[responseItem.contextVariableName] = value;
     }
 

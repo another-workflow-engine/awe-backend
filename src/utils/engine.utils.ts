@@ -100,10 +100,12 @@ async function applyInstanceUpdate(
   transaction: Transaction<DB>,
 ): Promise<InstanceModel> {
   if (node.type === NodeTypes.END && result.status === TaskStatuses.COMPLETED) {
+    const details = { message: `Instance completed: End Message - ${result.outputVariables?.message || "no message"}` };
     return await instanceService.complete(
       instance.id,
       result.outputVariables,
       transaction,
+      details,
     );
   }
 

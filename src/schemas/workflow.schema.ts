@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { EdgeSchema, NodeSchema } from "./node.schema.js";
+
+export const WorkflowDefinitionValidateSchema = z.object({
+  nodes: z.array(NodeSchema),
+  edges: z.array(EdgeSchema),
+});
 
 export const WorkflowGroupCreateSchema = z.object({
   name: z.string().max(255),

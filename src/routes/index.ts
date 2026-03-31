@@ -7,13 +7,12 @@ import { taskRouter } from "./task.routes.js";
 import { auditRouter } from "./audit.routes.js";
 export const router = Router();
 
-router.use(
-  "/api/v1",
-  router
-    .use("/systems", systemRouter)
-    .use("/auth", authRouter)
-    .use("/workflows", workflowRouter)
-    .use("/instances", instanceRouter)
-    .use("/tasks", taskRouter)
-    .use("/audit", auditRouter),
-);
+const apiRouter = Router();
+apiRouter.use("/systems", systemRouter);
+apiRouter.use("/auth", authRouter);
+apiRouter.use("/workflows", workflowRouter);
+apiRouter.use("/instances", instanceRouter);
+apiRouter.use("/tasks", taskRouter);
+apiRouter.use("/audit", auditRouter);
+
+router.use("/api/v1", apiRouter);

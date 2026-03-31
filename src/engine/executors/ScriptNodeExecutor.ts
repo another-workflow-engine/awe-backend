@@ -46,7 +46,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
         { nodeId: node.id, executionService },
         `Executing script using ${executionService} service`,
       );
-      const executionService = configuration.executionService;
+
       let response;
 
       switch (executionService) {
@@ -67,24 +67,8 @@ export class ScriptNodeExecutor extends BaseExecutor {
           break;
       }
 
-      if (executionService === "gemini") {
-        // Use GeminiService
-        parsedOutput = await GeminiService.executeScript(
-          configuration.sourceCode,
-          configuration.entryFunctionName,
-          parameters,
-        );
-        rawOutput = JSON.stringify(parsedOutput);
-      } else {
-        // Default to JDoodleService
-        const response = await JDoodleService.executeScript(
-          configuration.sourceCode,
-          configuration.entryFunctionName,
-          parameters,
-        );
-        parsedOutput = response.parsedOutput;
-        rawOutput = response.rawOutput;
-      }
+      parsedOutput = response.parsedOutput;
+      rawOutput = response.rawOutput;
 
       console.log("RAW:", rawOutput);
       console.log("PARSED:", parsedOutput);

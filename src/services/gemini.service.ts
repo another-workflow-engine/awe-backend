@@ -1,13 +1,15 @@
 import { GoogleGenAI } from "@google/genai";
+import Config from "../config";
+import type { ScriptExecutionResult } from "../types/script.execution";
 
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+const genAI = new GoogleGenAI({ apiKey: Config.GEMINI_API_KEY! });
 
 export class GeminiService {
   static async executeScript(
     sourceCode: string,
     entryFunctionName: string,
     parameters: any[],
-  ): Promise<any> {
+  ): Promise<ScriptExecutionResult> {
     const prompt = `
 You are a STRICT Python execution engine.
 
@@ -102,6 +104,9 @@ RULES:
       parsedOutput = parsedOutput.result;
     }
 
-    return parsedOutput;
+    return {
+      parsedOutput,
+      rawOutput: cleanJson,
+    };
   }
 }

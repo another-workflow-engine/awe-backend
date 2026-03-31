@@ -46,6 +46,26 @@ export class ScriptNodeExecutor extends BaseExecutor {
         { nodeId: node.id, executionService },
         `Executing script using ${executionService} service`,
       );
+      const executionService = configuration.executionService;
+      let response;
+
+      switch (executionService) {
+        case "gemini":
+          response = await GeminiService.executeScript(
+            configuration.sourceCode,
+            configuration.entryFunctionName,
+            parameters,
+          );
+          break;
+        case "jdoodle":
+        default:
+          response = await JDoodleService.executeScript(
+            configuration.sourceCode,
+            configuration.entryFunctionName,
+            parameters,
+          );
+          break;
+      }
 
       if (executionService === "gemini") {
         // Use GeminiService

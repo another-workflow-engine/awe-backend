@@ -63,6 +63,7 @@ function getUpdatedInstanceStatus(
   isAutoAdvance: boolean,
   result: ExecutorResult,
   nodeType: NodeType,
+  wasLastAttempt: boolean,
 ) {
   let instanceStatus: InstanceStatus;
 
@@ -76,8 +77,8 @@ function getUpdatedInstanceStatus(
   } else if (nodeType === NodeTypes.END) {
     instanceStatus = InstanceStatuses.COMPLETED;
   } else if (
-    result.nextNodeId === null ||
-    result.status === TaskStatuses.FAILED
+    wasLastAttempt &&
+    (result.nextNodeId === null || result.status === TaskStatuses.FAILED)
   ) {
     instanceStatus = InstanceStatuses.FAILED;
   } else {
@@ -95,19 +96,22 @@ async function applyInstanceUpdate(
   result: ExecutorResult,
   instanceStatus: InstanceStatus,
   instanceContext: ContextVariables,
+  wasLastAttempt: boolean,
   transaction: Transaction<DB>,
 ): Promise<InstanceModel> {
   if (node.type === NodeTypes.END && result.status === TaskStatuses.COMPLETED) {
+    const details = { message: `Instance completed: End Message - ${result.outputVariables?.message || "no message"}` };
     return await instanceService.complete(
       instance.id,
       result.outputVariables,
       transaction,
+      details,
     );
   }
 
   if (
-    instanceStatus === InstanceStatuses.FAILED ||
-    result.nextNodeId === null
+    wasLastAttempt &&
+    (instanceStatus === InstanceStatuses.FAILED || result.nextNodeId === null)
   ) {
     return await instanceService.fail(
       instance.id,
@@ -156,6 +160,11 @@ export const engineUtils = {
       error = err;
     }
 
+    getLogger().error(
+      { error: err, task: task },
+      `[Execution failure] ${message}`,
+    );
+
     await db.transaction().execute(async (transaction) => {
       await taskService.fail(
         task.instance_id,
@@ -173,6 +182,7 @@ export const engineUtils = {
     node: NodeModel,
     task: TaskModel,
     result: ExecutorResult,
+    wasLastAttempt: boolean,
   ) => {
     let updatedInstance;
 
@@ -181,6 +191,7 @@ export const engineUtils = {
         instance.auto_advance,
         result,
         node.type,
+        wasLastAttempt,
       );
 
       const instanceContext = getUpdatedInstanceContext(
@@ -192,7 +203,7 @@ export const engineUtils = {
       updatedInstance = await db.transaction().execute(async (transaction) => {
         if (result.status === TaskStatuses.COMPLETED) {
           await taskService.complete(task, transaction);
-        } else {
+        } else if (wasLastAttempt) {
           await taskService.fail(instance.id, task.id, {
             message: `Execution ${result.status}`,
           });
@@ -204,6 +215,7 @@ export const engineUtils = {
           result,
           instanceStatus,
           instanceContext,
+          wasLastAttempt,
           transaction,
         );
       });
@@ -212,7 +224,10 @@ export const engineUtils = {
       return;
     }
 
-    if (updatedInstance.auto_advance === false) {
+    if (
+      updatedInstance.auto_advance === false ||
+      updatedInstance.status !== InstanceStatuses.IN_PROGRESS
+    ) {
       return;
     }
 
@@ -220,7 +235,7 @@ export const engineUtils = {
       engineUtils.validateInstanceCanExecuteOrThrow(updatedInstance);
       await handleNextNode(updatedInstance, node.type, result.nextNodeId);
     } catch (err) {
-      getLogger().info("Cannot go to next node");
+      getLogger().info({ error: err }, "Cannot go to next node");
       return;
     }
   },

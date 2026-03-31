@@ -1,5 +1,6 @@
 import axios from "axios";
 import { JDoodleConfig } from "../config/jdoodle.config";
+import type { ScriptExecutionResult } from "../types/script.execution";
 
 export interface JDoodleResponse {
   output: string;
@@ -13,7 +14,7 @@ export class JDoodleService {
     sourceCode: string,
     entryFunctionName: string,
     parameters: any[],
-  ): Promise<{ parsedOutput: any; rawOutput: string }> {
+  ): Promise<ScriptExecutionResult> {
     const stdin = JSON.stringify({ params: parameters });
 
     const wrappedScript = `${sourceCode}

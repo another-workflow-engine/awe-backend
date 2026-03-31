@@ -12,10 +12,19 @@ export class BullMQQueue {
     });
   }
 
-  async enqueue(jobData: QueueJobData): Promise<void> {
+  async enqueue(
+    jobData: QueueJobData,
+    maxAttempts: number,
+    backoffType: string,
+    backoffDelay: number,
+  ): Promise<void> {
     await this.queue.add("execute-node", jobData, {
       jobId: jobData.taskId,
-      attempts: 1,
+      attempts: maxAttempts,
+      backoff: {
+        type: backoffType,
+        delay: backoffDelay,
+      },
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 5000 },
     });

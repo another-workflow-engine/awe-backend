@@ -18,6 +18,7 @@ import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { EngineError } from "../errors/EngineError.js";
 import { taskExecutionService } from "./taskExecution.service.js";
+import { NodeSchema } from "../schemas/node.schema.js";
 
 export const taskService = {
   getById: async (taskId: string): Promise<TaskModel> => {
@@ -76,13 +77,34 @@ export const taskService = {
         transaction,
       );
 
+      const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
+      const attempts = {
+        type: "fixed",
+        delay: 1000,
+        max: 1,
+      };
+
+      if (
+        nodeSchema.type === NodeTypes.SERVICE ||
+        nodeSchema.type === NodeTypes.SCRIPT
+      ) {
+        attempts.delay = nodeSchema.configuration.backoff.delayMs;
+        attempts.type = nodeSchema.configuration.backoff.type;
+        attempts.max = nodeSchema.configuration.maxAttempts;
+      }
+
       if (node.type !== NodeTypes.USER) {
         await queueService
-          .enqueue({
-            instanceId: instance.id,
-            taskId: task.id,
-            nodeId: node.id,
-          })
+          .enqueue(
+            {
+              instanceId: instance.id,
+              taskId: task.id,
+              nodeId: node.id,
+            },
+            attempts.max,
+            attempts.type,
+            attempts.delay,
+          )
           .then(() => task)
           .catch(async (err: Error) => {
             await engineUtils.onExecutionFailure(err, task);
@@ -109,7 +131,6 @@ export const taskService = {
             throw new EngineError("Unable to create task.");
           });
       } catch (err) {
-        console.log(err);
         await engineUtils.onExecutionFailure(err, task);
         throw new EngineError("Unable to create task.");
       }

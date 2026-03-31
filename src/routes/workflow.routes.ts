@@ -17,7 +17,7 @@ workflowRouter.post(
   workflowVersionController.create,
 );
 
-// VERSION BASED ROUTES (NOW USING versionId)
+// VERSION BASED ROUTES
 workflowRouter.post(
   "/versions/:versionId/validate",
   authenticateRequest,
@@ -46,4 +46,31 @@ workflowRouter.patch(
   "/versions/:versionId",
   authenticateRequest,
   workflowVersionController.update,
+);
+
+// GET version detail 
+workflowRouter.get(
+  "/versions/:versionId",
+  authenticateRequest,
+  workflowVersionController.get,
+);
+
+// LIST versions for a workflow
+workflowRouter.get(
+  "/:workflowId/versions",
+  authenticateRequest,
+  workflowVersionController.list,
+);
+
+// GET single workflow
+workflowRouter.get(
+  "/:workflowId",
+  authenticateRequest,
+  workflowGroupController.get,
+);
+
+workflowRouter.delete(
+  "/:workflowId",
+  authenticateRequest,
+  workflowGroupController.delete,
 );

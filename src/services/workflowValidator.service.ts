@@ -1,4 +1,6 @@
 import { NodeTypes } from "../types/enums.js";
+import { v4 as uuidv4 } from "uuid";
+import { nodeSchemaService } from "./nodeSchema.service.js";
 import type { EdgeModel, NodeModel } from "../types/models.js";
 import {
   DecisionNodeConfigurationSchema,
@@ -410,10 +412,7 @@ function calculateDataFlow(
   return nodeInputs;
 }
 
-function validateStartNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateStartNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -436,9 +435,7 @@ function validateStartNode(
       errors,
     );
     if (hasContextName) {
-      const contextVariableName = entry.contextVariableName.trim();
-      assignedOutputs.add(contextVariableName);
-      inputVariables.add(contextVariableName);
+      assignedOutputs.add(entry.contextVariableName.trim());
     }
   });
 
@@ -463,10 +460,7 @@ function validateStartNode(
   return errors;
 }
 
-function validateEndNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateEndNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     EndNodeConfigurationSchema,
@@ -503,10 +497,7 @@ function validateEndNode(
   return errors;
 }
 
-function validateUserNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateUserNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -578,10 +569,7 @@ function validateUserNode(
   return errors;
 }
 
-function validateServiceNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateServiceNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
 
@@ -659,10 +647,7 @@ function validateServiceNode(
   return errors;
 }
 
-function validateScriptNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateScriptNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -797,10 +782,7 @@ function validateScriptNode(
   return errors;
 }
 
-function validateDecisionNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateDecisionNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     DecisionNodeConfigurationSchema,
@@ -856,20 +838,14 @@ export const workflowValidatorService = {
     return { valid: errors.length === 0, errors };
   },
 
-  validateAllNodes: (
-    nodes: NodeModel[],
-    edges: EdgeModel[],
-  ): ValidationError[] => {
+  validateAllNodes: (nodes: NodeModel[], edges: EdgeModel[]): ValidationError[] => {
     const errors: ValidationError[] = [];
     let startNodes = 0;
     let endNodes = 0;
 
     const availableVariables = calculateDataFlow(nodes, edges);
 
-    const validators: Record<
-      string,
-      (node: NodeModel, vars: Set<string>) => ValidationError[]
-    > = {
+    const validators: Record<string, (node: NodeModel, vars: Set<string>) => ValidationError[]> = {
       [NodeTypes.START]: validateStartNode,
       [NodeTypes.END]: validateEndNode,
       [NodeTypes.USER]: validateUserNode,
@@ -1080,5 +1056,9 @@ export const workflowValidatorService = {
     }
 
     return errors;
+  },
+
+  validateDefinition: (nodes: NodeModel[], edges: EdgeModel[]): ValidationResult => {
+    return workflowValidatorService.validate(nodes, edges);
   },
 };

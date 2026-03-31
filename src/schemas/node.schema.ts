@@ -132,7 +132,7 @@ export const ScriptNodeConfigurationSchema = z.object({
   backoff: BackoffSchema,
   sourceCode: z.string(),
   entryFunctionName: z.string(),
-  executionService: z.enum(["jdoodle", "gemini"]).default("jdoodle"),
+  executionService: z.enum(["jdoodle", "gemini"]).optional().default("jdoodle"),
 
   parameterMap: z.array(
     z.object({

@@ -58,13 +58,25 @@ RULES:
     }
 
     if (!rawOutput) {
-      throw new Error("No output received from Gemini");
+      throw new Error(
+        JSON.stringify({
+          errorSource: "Gemini",
+          message: "No output received from Gemini",
+          details: "Empty response from Gemini API",
+        }),
+      );
     }
 
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
-      throw new Error("Invalid Gemini output: " + rawOutput);
+      throw new Error(
+        JSON.stringify({
+          errorSource: "Gemini",
+          message: "Invalid Gemini output format",
+          details: rawOutput,
+        }),
+      );
     }
 
     const cleanJson = jsonMatch[0];
@@ -74,7 +86,22 @@ RULES:
     try {
       parsedOutput = JSON.parse(cleanJson);
     } catch (err) {
-      throw new Error("JSON parsing failed: " + cleanJson);
+      throw new Error(
+        JSON.stringify({
+          errorSource: "Gemini",
+          message: "JSON parsing failed for Gemini output",
+          details: cleanJson,
+        }),
+      );
+    }
+
+    // Unwrap result field to match JDoodle format
+    if (
+      parsedOutput &&
+      typeof parsedOutput === "object" &&
+      "result" in parsedOutput
+    ) {
+      parsedOutput = parsedOutput.result;
     }
 
     return {

@@ -95,7 +95,19 @@ if __name__ == "__main__":
       };
     } catch (error: any) {
       console.error("JDoodle Error:", error?.response?.data || error.message);
-      throw new Error(error?.response?.data?.error || "Code execution failed");
+      const errorMessage =
+        error?.response?.data?.error ||
+        error.message ||
+        "Code execution failed";
+
+      // Throw structured error for proper classification
+      throw new Error(
+        JSON.stringify({
+          errorSource: "JDoodle",
+          message: errorMessage,
+          details: error?.response?.data || error.message,
+        }),
+      );
     }
   }
 }

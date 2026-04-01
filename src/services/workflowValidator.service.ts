@@ -604,7 +604,7 @@ function validateServiceNode(node: NodeModel, inputVariables: Set<string>): Vali
   }
 
   config.body?.forEach((entry, index) => {
-    validateBodyJsonPath(
+    validateJsonPath(
       entry.jsonPath,
       node.client_id,
       `Service task body field ${index + 1}: jsonPath is invalid`,

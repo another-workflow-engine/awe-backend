@@ -1,6 +1,10 @@
 import axios from "axios";
 import { JDoodleConfig } from "../config/jdoodle.config";
 import type { ScriptExecutionResult } from "../types/script.execution";
+import {
+  buildJDoodleStdin,
+  wrapScriptForJDoodle,
+} from "../utils/scriptExecution.utils";
 
 export interface JDoodleResponse {
   output: string;
@@ -15,58 +19,9 @@ export class JDoodleService {
     entryFunctionName: string,
     parameters: any[],
   ): Promise<ScriptExecutionResult> {
-    const stdin = JSON.stringify({ params: parameters });
+    const stdin = buildJDoodleStdin(parameters);
+    const wrappedScript = wrapScriptForJDoodle(sourceCode, entryFunctionName);
 
-    const wrappedScript = `${sourceCode}
-
-import json
-import sys
-import io
-
-def safe_serialize(obj):
-    try:
-        import numpy as np
-    except:
-        np = None
-    def convert(o):
-        if np is not None and isinstance(o, np.ndarray):
-            return o.tolist()
-        try:
-            return o.tolist()
-        except:
-            pass
-        if isinstance(o,set):
-            return [convert(i) for i in o]
-        elif isinstance(o,tuple):
-            return [convert(i) for i in o]
-        elif isinstance(o,dict):
-            return {k: convert(v) for k, v in o.items()}
-        elif isinstance(o,list):
-            return [convert(i) for i in o]
-        else:
-            return str(o)
-    return convert(obj)
-
-if __name__ == "__main__":
-    try:
-        captured_output = io.StringIO()
-        sys.stdout = captured_output
-
-        raw_input = json.loads(input())
-        params = raw_input['params']
-
-        result = ${entryFunctionName}(*params)
-
-        sys.stdout = sys.__stdout__
-
-        result = safe_serialize(result)
-
-        print(json.dumps(result))
-
-    except Exception as e:
-        sys.stdout = sys.__stdout__
-        print(json.dumps({"error": str(e)}))
-`;
     try {
       const response = await axios.post(JDoodleConfig.endpoint, {
         clientId: JDoodleConfig.clientId,
@@ -100,7 +55,6 @@ if __name__ == "__main__":
         error.message ||
         "Code execution failed";
 
-      // Throw structured error for proper classification
       throw new Error(
         JSON.stringify({
           errorSource: "JDoodle",

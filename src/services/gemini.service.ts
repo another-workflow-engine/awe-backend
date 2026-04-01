@@ -1,40 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 import Config from "../config";
 import type { ScriptExecutionResult } from "../types/script.execution";
+import { buildGeminiPrompt } from "../utils/scriptExecution.utils";
+import type { ScriptExecutionService } from "../types/script.execution";
 
-const genAI = new GoogleGenAI({ apiKey: Config.GEMINI_API_KEY! });
+export class GeminiService implements ScriptExecutionService {
+  private genAI = new GoogleGenAI({ apiKey: Config.GEMINI_API_KEY! });
 
-export class GeminiService {
-  static async executeScript(
+  async executeScript(
     sourceCode: string,
     entryFunctionName: string,
     parameters: any[],
   ): Promise<ScriptExecutionResult> {
-    const prompt = `
-You are a STRICT Python execution engine.
+    const prompt = buildGeminiPrompt(sourceCode, entryFunctionName, parameters);
 
-Execute the Python code logically (DO NOT explain).
-
-CODE:
-${sourceCode}
-
-FUNCTION:
-${entryFunctionName}
-
-INPUT:
-${JSON.stringify(parameters)}
-
-RULES:
-- Return ONLY valid JSON
-- No explanation
-- No markdown
-- Do NOT include backticks
-- Do NOT include logs like throughSignature
-- If error → {"error": "message"}
-- Output format → {"result": ...}
-`;
-
-    const result = await genAI.models.generateContent({
+    const result = await this.genAI.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [prompt],
       config: {
@@ -95,7 +75,6 @@ RULES:
       );
     }
 
-    // Unwrap result field to match JDoodle format
     if (
       parsedOutput &&
       typeof parsedOutput === "object" &&

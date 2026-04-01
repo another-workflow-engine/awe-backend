@@ -7,8 +7,7 @@ import { contextUtils } from "../../utils/context.utils.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
-import { JDoodleService } from "../../services/jdoodle.service.js";
-import { GeminiService } from "../../services/gemini.service.js";
+import { ExecutionServiceFactory } from "../../services/executionService.factory.js";
 import { getLogger } from "../../logger.js";
 
 export class ScriptNodeExecutor extends BaseExecutor {
@@ -36,33 +35,22 @@ export class ScriptNodeExecutor extends BaseExecutor {
     let rawOutput: string = "";
 
     try {
-      const executionService = configuration.executionService ?? "jdoodle";
+      const executionServiceType = configuration.executionService ?? "jdoodle";
       const logger = getLogger();
 
       logger.info(
-        { nodeId: node.id, executionService },
-        `Executing script using ${executionService} service`,
+        { nodeId: node.id, executionService: executionServiceType },
+        `Executing script using ${executionServiceType} service`,
       );
 
-      let response;
+      const executionService =
+        ExecutionServiceFactory.get(executionServiceType);
 
-      switch (executionService) {
-        case "gemini":
-          response = await GeminiService.executeScript(
-            configuration.sourceCode,
-            configuration.entryFunctionName,
-            parameters,
-          );
-          break;
-        case "jdoodle":
-        default:
-          response = await JDoodleService.executeScript(
-            configuration.sourceCode,
-            configuration.entryFunctionName,
-            parameters,
-          );
-          break;
-      }
+      const response = await executionService.executeScript(
+        configuration.sourceCode,
+        configuration.entryFunctionName,
+        parameters,
+      );
 
       parsedOutput = response.parsedOutput;
       rawOutput = response.rawOutput;

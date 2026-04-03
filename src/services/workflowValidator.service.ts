@@ -18,6 +18,7 @@ import {
 } from "../utils/feel.utils.js";
 import { graphUtils } from "../utils/graph.utils.js";
 import { parser as pythonParser } from "@lezer/python";
+import { JSONPath } from "jsonpath-plus";
 
 export type ValidationError = {
   code: number;
@@ -64,7 +65,9 @@ export enum ValidationErrorCode {
 type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
 
 const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
-const JSON_PATH_PART_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const JSONPATH_REGEX =
+/^\$(?:\.(?:[a-zA-Z_][a-zA-Z0-9_-]*|\*)|\[(?:\d+|\*|'[^']+'|"[^"]+")\]|\.\.)*$/;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -122,10 +125,9 @@ function validateContextReferences(
   }
 }
 
-function isStrictJsonPath(path: string): boolean {
-  const parts = path.split(".").filter(Boolean);
-  if (parts.length === 0) return false;
-  return parts.every((part) => JSON_PATH_PART_REGEX.test(part));
+function isValidJsonPath(path: string): boolean {
+  if (!path) return false;
+  return JSONPATH_REGEX.test(path.trim());
 }
 
 function validateJsonPath(
@@ -143,41 +145,15 @@ function validateJsonPath(
     return false;
   }
 
-  if (!isStrictJsonPath(jsonPath)) {
+  if (!isValidJsonPath(jsonPath)) {
     errors.push({
       code: ValidationErrorCode.INVALID_JSON_PATH,
-      message: `${message} - must be a dot-separated identifier path (e.g. a.b.c)`,
+      message: `${message} - must be a valid JSONPath expression`,
       nodeId,
     });
     return false;
   }
 
-  return true;
-}
-
-function validateBodyJsonPath(
-  jsonPath: string | undefined,
-  nodeId: string,
-  message: string,
-  errors: ValidationError[],
-): boolean {
-  if (!jsonPath?.trim()) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_JSON_PATH,
-      message,
-      nodeId,
-    });
-    return false;
-  }
-  const parts = jsonPath.split(".").filter(Boolean);
-  if (parts.length === 0) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_JSON_PATH,
-      message: `${message} - path must not be empty`,
-      nodeId,
-    });
-    return false;
-  }
   return true;
 }
 
@@ -597,7 +573,7 @@ function validateServiceNode(node: NodeModel, inputVariables: Set<string>): Vali
   }
 
   config.body?.forEach((entry, index) => {
-    validateBodyJsonPath(
+    validateJsonPath(
       entry.jsonPath,
       node.client_id,
       `Service task body field ${index + 1}: jsonPath is invalid`,

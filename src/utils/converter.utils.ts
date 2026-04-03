@@ -5,6 +5,7 @@ import type {
   FetchableSettings,
   UrlSettings,
 } from "../types/engine";
+import { TimeUnit } from "../types/enums";
 import type { LogDetailSchema } from "../types/instanceLog";
 import type { NodeInputSchema } from "../types/workflow";
 import { z } from "zod";
@@ -94,3 +95,19 @@ export const converterUtils = {
     return result.data;
   },
 };
+
+export const TimeConstants = {
+  SECOND: 1000,
+  MINUTE: 60 * 1000,
+} as const;
+
+export function convertToMilliseconds(delay: number, unit: TimeUnit): number {
+  switch (unit) {
+    case TimeUnit.MILLISECOND:
+      return delay;
+    case TimeUnit.SECOND:
+      return delay * TimeConstants.SECOND;
+    case TimeUnit.MINUTE:
+      return delay * TimeConstants.MINUTE;
+  }
+}

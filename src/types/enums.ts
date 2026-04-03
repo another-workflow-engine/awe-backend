@@ -80,3 +80,9 @@ export enum FeelDataType {
   OBJECT = "object",
   NULL = "null",
 }
+
+export enum TimeUnit {
+  MILLISECOND = "millisecond",
+  SECOND = "second",
+  MINUTE = "minute",
+}

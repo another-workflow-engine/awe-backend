@@ -4,9 +4,7 @@ import { evaluate } from "@bpmn-io/feelin";
 import type { NodeInputSchema } from "../types/workflow.js";
 import { EngineError } from "../errors/EngineError.js";
 import { httpRequestService } from "../services/httpRequest.service.js";
-import type { InstanceModel, NodeModel } from "../types/models.js";
-import { NodeTypes } from "../types/enums.js";
-import { converterUtils } from "./converter.utils.js";
+import { JSONPath } from "jsonpath-plus";
 
 type DataTypeMap = {
   string: string;
@@ -31,15 +29,18 @@ function isValidType(value: unknown, type: keyof DataTypeMap): boolean {
 }
 
 export const contextUtils = {
-  getByPath(data: unknown, path: string): unknown {
-    const parts = path.split(".").filter(Boolean);
+  getByJsonPath(data: any, path: string): unknown {
+    try {
+      const result = JSONPath({
+        path,
+        json: data,
+        wrap: false,
+      });
 
-    return parts.reduce<unknown>((acc, key) => {
-      if (acc === null || acc === undefined) {
-        return undefined;
-      }
-      return (acc as Record<string, unknown>)[key];
-    }, data);
+      return result;
+    } catch {
+      return undefined;
+    }
   },
 
   async evaluateContext(
@@ -94,7 +95,7 @@ export const contextUtils = {
         );
       }
 
-      const rawValue = contextUtils.getByPath(
+      const rawValue = contextUtils.getByJsonPath(
         fetchedResponses[urlId],
         jsonPath,
       );

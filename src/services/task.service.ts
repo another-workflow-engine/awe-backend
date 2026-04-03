@@ -6,7 +6,7 @@ import type { Transaction } from "kysely";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { nodeRepository } from "../repositories/node.repository.js";
 import { db } from "../database.js";
-import { LogEventTypes, NodeTypes, TaskStatuses } from "../types/enums.js";
+import { LogEventTypes, NodeTypes, TaskStatuses, TimeUnit } from "../types/enums.js";
 import { queueService } from "./queue.service.js";
 import { userTaskService } from "./userTaskExecution.service.js";
 import type { ContextVariables } from "../types/engine.js";
@@ -19,6 +19,7 @@ import { engineUtils } from "../utils/engine.utils.js";
 import { EngineError } from "../errors/EngineError.js";
 import { taskExecutionService } from "./taskExecution.service.js";
 import { NodeSchema } from "../schemas/node.schema.js";
+import { convertToMilliseconds } from "../utils/converter.utils.js";
 
 export const taskService = {
   getByIdOrThrow: async (taskId: string): Promise<TaskModel> => {
@@ -88,7 +89,10 @@ export const taskService = {
         nodeSchema.type === NodeTypes.SERVICE ||
         nodeSchema.type === NodeTypes.SCRIPT
       ) {
-        attempts.delay = nodeSchema.configuration.backoff.delayMs;
+        attempts.delay = convertToMilliseconds(
+          nodeSchema.configuration.backoff.delay,
+          nodeSchema.configuration.backoff.unit,
+        );
         attempts.type = nodeSchema.configuration.backoff.type;
         attempts.max = nodeSchema.configuration.maxAttempts;
       }

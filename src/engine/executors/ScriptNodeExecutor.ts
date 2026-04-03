@@ -10,10 +10,6 @@ import { edgeService } from "../../services/edge.services.js";
 import { ExecutionServiceFactory } from "../../services/executionService.factory.js";
 import { getLogger } from "../../logger.js";
 
-function getValueByPath(obj: any, path: string) {
-  return path.split(".").reduce((acc, key) => acc?.[key], obj);
-}
-
 export class ScriptNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
@@ -103,7 +99,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
     configuration.responseMap.forEach(({ jsonPath, contextVariableName }) => {
       outputVariables[contextVariableName] =
         typeof parsedOutput === "object"
-          ? getValueByPath(parsedOutput, jsonPath)
+          ? contextUtils.getByJsonPath(parsedOutput, jsonPath)
           : parsedOutput;
     });
 

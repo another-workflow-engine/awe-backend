@@ -1,10 +1,10 @@
-import { HttpError } from "../errors/HttpError";
+import { HttpError } from "../errors/HttpError.js";
 import type {
   HttpMethod,
   RequestOptions,
   HttpResponse,
   PathParameters,
-} from "../types/http";
+} from "../types/http.js";
 
 const DEFAULT_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",

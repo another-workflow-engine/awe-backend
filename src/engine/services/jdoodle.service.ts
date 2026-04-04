@@ -1,11 +1,11 @@
-import Config from "../../config";
-import { httpService } from "../../services/http.service";
+import Config from "../../config.js";
+import { httpService } from "../../services/http.service.js";
 import {
   ScriptExecutionResultSchema,
   type ScriptExecutionResult,
   type ScriptExecutionService,
-} from "../../types/engine";
-import { converterUtils } from "../../utils/converter.utils";
+} from "../../types/engine.js";
+import { converterUtils } from "../../utils/converter.utils.js";
 
 type JDoodleResponse = {
   output: string;

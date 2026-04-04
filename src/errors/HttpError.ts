@@ -1,4 +1,4 @@
-import { AppError } from "./AppError";
+import { AppError } from "./AppError.js";
 
 export class HttpError extends AppError {
   constructor(message: string, cause?: unknown) {

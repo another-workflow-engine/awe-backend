@@ -1,5 +1,5 @@
 import pino, { type Logger } from "pino";
-import Config from "./config";
+import Config from "./config.js";
 import { AsyncLocalStorage } from "async_hooks";
 
 export const baseLogger = pino({

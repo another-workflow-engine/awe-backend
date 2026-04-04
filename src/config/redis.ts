@@ -1,5 +1,5 @@
 import type { ConnectionOptions } from "bullmq";
-import Config from "../config";
+import Config from "../config.js";
 
 export const redisConnectionOptions: ConnectionOptions = {
   host: Config.REDIS_HOST ?? "localhost",

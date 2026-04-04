@@ -1,6 +1,6 @@
-import z, { success } from "zod";
-import type { TaskStatus } from "./database";
-import type { FeelDataType } from "./enums";
+import z from "zod";
+import type { TaskStatus } from "./database.js";
+import type { FeelDataType } from "./enums.js";
 
 export interface UrlSettings {
   urlExpression: string;

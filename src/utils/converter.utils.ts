@@ -1,13 +1,13 @@
-import { DataIntegrityError } from "../errors/DataIntegrity";
-import type { JsonValue } from "../types/database";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import type { JsonValue } from "../types/database.js";
 import type {
   InputVariables,
   FetchableSettings,
   UrlSettings,
-} from "../types/engine";
-import { TimeUnit } from "../types/enums";
-import type { LogDetailSchema } from "../types/instanceLog";
-import type { NodeInputSchema } from "../types/workflow";
+} from "../types/engine.js";
+import { TimeUnit } from "../types/enums.js";
+import type { LogDetailSchema } from "../types/instanceLog.js";
+import type { NodeInputSchema } from "../types/workflow.js";
 import { z } from "zod";
 
 function isNodeInputSchema(value: unknown): value is NodeInputSchema {

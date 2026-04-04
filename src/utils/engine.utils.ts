@@ -1,17 +1,17 @@
 import { Transaction } from "kysely";
-import { db } from "../database";
-import { StateTransitionError } from "../errors/StateTransitionError";
-import { instanceService } from "../services/instance.service";
-import { taskService } from "../services/task.service";
-import type { DB, InstanceStatus, NodeType } from "../types/database";
-import type { ExecutorResult, InputVariables } from "../types/engine";
-import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums";
-import type { InstanceModel, NodeModel, TaskModel } from "../types/models";
-import { converterUtils } from "./converter.utils";
-import { EngineError } from "../errors/EngineError";
-import { DataIntegrityError } from "../errors/DataIntegrity";
-import { nodeService } from "../services/node.services";
-import { getLogger } from "../logger";
+import { db } from "../database.js";
+import { StateTransitionError } from "../errors/StateTransitionError.js";
+import { instanceService } from "../services/instance.service.js";
+import { taskService } from "../services/task.service.js";
+import type { DB, InstanceStatus, NodeType } from "../types/database.js";
+import type { ExecutorResult, InputVariables } from "../types/engine.js";
+import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
+import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
+import { converterUtils } from "./converter.utils.js";
+import { EngineError } from "../errors/EngineError.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import { nodeService } from "../services/node.services.js";
+import { getLogger } from "../logger.js";
 
 async function handleNextNode(
   instance: InstanceModel,

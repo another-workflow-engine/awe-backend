@@ -7,9 +7,9 @@
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
-    "module": "ESNext",
+    "module": "node20",
     "target": "ES2020",
-    "moduleResolution": "Node",
+    "moduleResolution": "node16",
     "types": ["node", "jest"],
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,

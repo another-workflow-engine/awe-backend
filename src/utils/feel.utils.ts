@@ -1,6 +1,6 @@
 import { evaluate } from "@bpmn-io/feelin";
 import type { Warning, WarningType } from "@bpmn-io/feelin";
-import { FeelDataType } from "../types/enums";
+import { FeelDataType } from "../types/enums.js";
 
 export type FeelValidationResult = {
   valid: boolean;

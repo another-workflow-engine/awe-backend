@@ -1,13 +1,13 @@
 import type { Transaction } from "kysely";
-import { db } from "../database";
-import { taskExecutionRepository } from "../repositories/taskExecution.repository";
-import type { InputVariables } from "../types/engine";
-import { LogEventTypes, TaskStatuses } from "../types/enums";
-import type { LogDetailSchema } from "../types/instanceLog";
-import type { TaskExecutionModel, TaskModel } from "../types/models";
-import { converterUtils } from "../utils/converter.utils";
-import { eventLogService } from "./eventLog.service";
-import type { DB } from "../types/database";
+import { db } from "../database.js";
+import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
+import type { InputVariables } from "../types/engine.js";
+import { LogEventTypes, TaskStatuses } from "../types/enums.js";
+import type { LogDetailSchema } from "../types/instanceLog.js";
+import type { TaskExecutionModel } from "../types/models.js";
+import { converterUtils } from "../utils/converter.utils.js";
+import { eventLogService } from "./eventLog.service.js";
+import type { DB } from "../types/database.js";
 
 type ExecutionNodeStatus =
   | "completed"

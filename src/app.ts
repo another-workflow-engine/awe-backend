@@ -4,8 +4,8 @@ import { router } from "./routes/index.js";
 import Config from "./config.js";
 import { responseFormatter } from "./middlewares/responseFormatter.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
-import pinoHTTP from "pino-http";
 import { requestLoggerMiddleware } from "./middlewares/requestLogger.middleware.js";
+import { pinoHttp } from "pino-http";
 import { baseLogger } from "./logger.js";
 
 const app = express();
@@ -17,7 +17,7 @@ app.use(express.json());
 app.use(responseFormatter);
 
 app.use(
-  pinoHTTP({
+  pinoHttp({
     logger: baseLogger,
     serializers: {
       req(req) {

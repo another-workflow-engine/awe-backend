@@ -204,6 +204,23 @@ export const engineUtils = {
         );
 
         return { instance, task };
+      } else if (instance.control_signal === InstanceControlSignals.TERMINATE) {
+        task = await taskService.terminate(
+          instance.id,
+          task.id,
+          { message: "Instance was terminated." },
+          transaction,
+        );
+
+        instance = await instanceService.pause(
+          instance.id,
+          {
+            message: `Paused due to signal. Paused at node=${node.client_id}`,
+          },
+          transaction,
+        );
+
+        return { instance, task };
       }
 
       return { instance, task };

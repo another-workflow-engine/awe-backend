@@ -171,13 +171,18 @@ export const instanceService = {
 
   resume: async (instanceId: string, actor: ActorModel) => {
     let instance = await instanceRepository.findById(instanceId);
-    if (!instance) throw new NotFoundError(`Instance`);
+    if (!instance) {
+      throw new NotFoundError(`Instance`);
+    }
 
     engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
 
-    if (instance.status !== InstanceStatuses.PAUSED) {
+    if (
+      instance.status !== InstanceStatuses.PAUSED ||
+      instance.control_signal !== null
+    ) {
       throw new StateTransitionError(
-        `Instance id=${instanceId} cannot be resumed. It is not paused.`,
+        `Instance id=${instanceId} cannot be resumed`,
       );
     }
 
@@ -251,6 +256,43 @@ export const instanceService = {
         eventLogService.createInstanceLog(
           instanceId,
           LogEventTypes.FAILED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return instance;
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+  },
+
+  terminate: async (
+    instanceId: string,
+    details: LogDetailSchema,
+    transaction?: Transaction<DB>,
+  ): Promise<InstanceModel> => {
+    const logger = getLogger();
+    logger.info(details, `Instance id=${instanceId} terminated`);
+
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          {
+            status: InstanceStatuses.TERMINATED,
+            ended_on: new Date(),
+            current_node_id: null,
+          },
+          transaction,
+        ),
+
+        eventLogService.createInstanceLog(
+          instanceId,
+          LogEventTypes.TERMINATED,
           details,
           undefined,
           transaction,
@@ -345,7 +387,7 @@ export const instanceService = {
 
     if (instance.control_signal !== null) {
       throw new StateTransitionError(
-        `Instance is already being ${instance.control_signal}ed`,
+        `Instance is being ${instance.control_signal}ed`,
       );
     }
 
@@ -404,63 +446,71 @@ export const instanceService = {
 
   signalTerminate: async (
     instanceId: string,
-    actorId: string,
+    actor: ActorModel,
   ): Promise<InstanceModel> => {
-    const instance = await instanceRepository.findById(instanceId);
+    let instance = await instanceRepository.findById(instanceId);
     if (!instance) {
       throw new NotFoundError(`Instance id=${instanceId} not found`);
     }
 
-    // Cannot terminate already terminated instances
-    if (instance.status === InstanceStatuses.TERMINATED) {
-      throw new StateTransitionError(`Instance is already terminated`);
-    }
+    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
 
-    // Cannot terminate completed instances
-    if (instance.status === InstanceStatuses.COMPLETED) {
-      throw new StateTransitionError(`Cannot terminate a completed instance`);
+    if (instance.control_signal !== null) {
+      throw new StateTransitionError(
+        `Instance is being ${instance.control_signal}ed`,
+      );
     }
 
     return await db.transaction().execute(async (transaction) => {
-      const currentTask =
-        await taskRepository.findLatestByInstanceId(instanceId);
-      if (currentTask) {
-        const finalStatuses: string[] = [
-          TaskStatuses.COMPLETED,
-          TaskStatuses.FAILED,
-          TaskStatuses.TERMINATED,
-        ];
-        if (!finalStatuses.includes(currentTask.status)) {
-          await taskRepository.updateById(
-            currentTask.id,
-            { status: TaskStatuses.TERMINATED },
-            transaction,
-          );
-        }
+      [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          { control_signal: InstanceControlSignals.TERMINATE },
+          transaction,
+        ),
+        eventLogService.createInstanceLog(
+          instanceId,
+          LogEventTypes.TERMINATE_REQUESTED,
+          undefined,
+          actor.id,
+          transaction,
+        ),
+      ]);
 
-        // Remove job from queue (idempotent - safe if already removed or never queued)
-        await queueService.removeJob(currentTask.id);
+      if (!instance) {
+        throw new DataIntegrityError("Instance update failed");
       }
 
-      const updatedInstance = await instanceRepository.updateById(
+      const taskModels = await taskService.getInProgressByInstanceId(
+        instance.id,
+      );
+      if (!taskModels) {
+        return instance;
+      }
+
+      const currentNode = taskModels.node;
+
+      if (currentNode.type !== NodeTypes.USER) {
+        return instance;
+      }
+
+      await taskExecutionService.terminate(
         instanceId,
+        taskModels.taskExecution.id,
         {
-          status: InstanceStatuses.TERMINATED,
-          ended_on: new Date(),
-          current_node_id: null,
+          message: "Task terminated",
         },
         transaction,
       );
 
-      await eventLogService.createInstanceLog(
-        instanceId,
-        LogEventTypes.TERMINATED,
-        { message: "Instance terminated by user" },
-        actorId,
+      const updatedModels = await engineUtils.handleInstanceControlSignal(
+        instance,
+        taskModels.task,
+        currentNode,
         transaction,
       );
 
-      return updatedInstance;
+      return updatedModels.instance;
     });
   },
 };

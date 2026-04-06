@@ -239,6 +239,43 @@ export const taskService = {
       : await db.transaction().execute(executeCallback);
   },
 
+  terminate: async (
+    instanceId: string,
+    taskId: string,
+    details: LogDetailSchema,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    const logger = getLogger();
+    logger.info({ details }, `Task id=${taskId} terminated`);
+
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const [task] = await Promise.all([
+        taskRepository.updateById(
+          taskId,
+          {
+            status: TaskStatuses.TERMINATED,
+          },
+          transaction,
+        ),
+
+        eventLogService.createTaskLog(
+          instanceId,
+          taskId,
+          LogEventTypes.TERMINATED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return task;
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+  },
+
   pause: async (
     instanceId: string,
     taskId: string,

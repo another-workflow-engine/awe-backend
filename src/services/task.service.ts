@@ -1,5 +1,5 @@
 import { taskRepository } from "../repositories/task.repository.js";
-import type { DB } from "../types/database.js";
+import type { DB, InstanceEventType, TaskStatus } from "../types/database.js";
 import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import type { Transaction } from "kysely";
@@ -20,6 +20,56 @@ import { EngineError } from "../errors/EngineError.js";
 import { taskExecutionService } from "./taskExecution.service.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 import { convertToMilliseconds } from "../utils/converter.utils.js";
+
+const taskStatusToEventMap: Record<TaskStatus, InstanceEventType> = {
+  in_progress: LogEventTypes.RESUMED,
+  paused: LogEventTypes.PAUSED,
+  completed: LogEventTypes.COMPLETED,
+  failed: LogEventTypes.FAILED,
+  terminated: LogEventTypes.TERMINATED,
+};
+
+async function updateTaskStatusAndLog(
+  instanceId: string,
+  taskId: string,
+  status: TaskStatus,
+  details?: LogDetailSchema,
+  transaction?: Transaction<DB>,
+): Promise<TaskModel> {
+  const executeCallback = async (transaction: Transaction<DB>) => {
+    const [task] = await Promise.all([
+      taskRepository.updateById(
+        taskId,
+        {
+          status,
+        },
+        transaction,
+      ),
+
+      eventLogService.createTaskLog(
+        instanceId,
+        taskId,
+        taskStatusToEventMap[status],
+        details,
+        undefined,
+        transaction,
+      ),
+    ]);
+
+    return task;
+  };
+
+  const task = transaction
+    ? await executeCallback(transaction)
+    : await db.transaction().execute(executeCallback);
+
+  getLogger().info(
+    { instanceId, taskId, details },
+    `Task status changed to ${status}`,
+  );
+
+  return task;
+}
 
 async function createExecution(
   instance: InstanceModel,
@@ -222,35 +272,18 @@ export const taskService = {
     return contextUtils.getTaskContext(instanceContext, nodeInputSchema);
   },
 
-  getInProgressByInstanceId: async (instanceId: string) => {
-    return await taskRepository.findInProgressByInstanceIdWithRelations(
-      instanceId,
-    );
-  },
-
   complete: async (
-    task: TaskModel,
-    transaction: Transaction<DB>,
+    instanceId: string,
+    taskId: string,
+    transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
-    const [updatedTask] = await Promise.all([
-      taskRepository.updateById(
-        task.id,
-        {
-          status: TaskStatuses.COMPLETED,
-        },
-        transaction,
-      ),
-
-      eventLogService.createTaskLog(
-        task.instance_id,
-        task.id,
-        LogEventTypes.COMPLETED,
-        undefined,
-        undefined,
-        transaction,
-      ),
-    ]);
-    return updatedTask;
+    return await updateTaskStatusAndLog(
+      instanceId,
+      taskId,
+      TaskStatuses.COMPLETED,
+      undefined,
+      transaction,
+    );
   },
 
   fail: async (
@@ -259,35 +292,13 @@ export const taskService = {
     details: LogDetailSchema,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
-    const logger = getLogger();
-    logger.info({ details }, `Task id=${taskId} failed`);
-
-    const executeCallback = async (transaction: Transaction<DB>) => {
-      const [task] = await Promise.all([
-        taskRepository.updateById(
-          taskId,
-          {
-            status: TaskStatuses.FAILED,
-          },
-          transaction,
-        ),
-
-        eventLogService.createTaskLog(
-          instanceId,
-          taskId,
-          LogEventTypes.FAILED,
-          details,
-          undefined,
-          transaction,
-        ),
-      ]);
-
-      return task;
-    };
-
-    return transaction
-      ? await executeCallback(transaction)
-      : await db.transaction().execute(executeCallback);
+    return await updateTaskStatusAndLog(
+      instanceId,
+      taskId,
+      TaskStatuses.FAILED,
+      details,
+      transaction,
+    );
   },
 
   terminate: async (
@@ -296,35 +307,13 @@ export const taskService = {
     details: LogDetailSchema,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
-    const logger = getLogger();
-    logger.info({ details }, `Task id=${taskId} terminated`);
-
-    const executeCallback = async (transaction: Transaction<DB>) => {
-      const [task] = await Promise.all([
-        taskRepository.updateById(
-          taskId,
-          {
-            status: TaskStatuses.TERMINATED,
-          },
-          transaction,
-        ),
-
-        eventLogService.createTaskLog(
-          instanceId,
-          taskId,
-          LogEventTypes.TERMINATED,
-          details,
-          undefined,
-          transaction,
-        ),
-      ]);
-
-      return task;
-    };
-
-    return transaction
-      ? await executeCallback(transaction)
-      : await db.transaction().execute(executeCallback);
+    return await updateTaskStatusAndLog(
+      instanceId,
+      taskId,
+      TaskStatuses.TERMINATED,
+      details,
+      transaction,
+    );
   },
 
   pause: async (
@@ -333,34 +322,12 @@ export const taskService = {
     details: LogDetailSchema,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
-    const logger = getLogger();
-    logger.info({ details }, `Task id=${taskId} paused`);
-
-    const executeCallback = async (transaction: Transaction<DB>) => {
-      const [task] = await Promise.all([
-        taskRepository.updateById(
-          taskId,
-          {
-            status: TaskStatuses.PAUSED,
-          },
-          transaction,
-        ),
-
-        eventLogService.createTaskLog(
-          instanceId,
-          taskId,
-          LogEventTypes.PAUSED,
-          details,
-          undefined,
-          transaction,
-        ),
-      ]);
-
-      return task;
-    };
-
-    return transaction
-      ? await executeCallback(transaction)
-      : await db.transaction().execute(executeCallback);
+    return await updateTaskStatusAndLog(
+      instanceId,
+      taskId,
+      TaskStatuses.PAUSED,
+      details,
+      transaction,
+    );
   },
 };

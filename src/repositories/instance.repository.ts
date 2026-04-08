@@ -1,8 +1,13 @@
 import { type Insertable, type Transaction, type Updateable } from "kysely";
-import type { DB, Instance } from "../types/database.js";
-import type { InstanceModel } from "../types/models.js";
+import type { DB, Instance, TaskStatus } from "../types/database.js";
+import type {
+  InstanceModel,
+  TaskExecutionModel,
+  TaskModel,
+} from "../types/models.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
+import { TaskStatuses } from "../types/enums.js";
 
 export type NewInstance = Insertable<Instance>;
 export type UpdateInstance = Updateable<Instance>;
@@ -98,6 +103,55 @@ export const instanceRepository = {
       .where("id", "=", id)
       .where("is_deleted", "=", false)
       .executeTakeFirst();
+  },
+
+  getLockedInProgressOrPausedRelationsById: async (
+    instanceId: string,
+    transaction: Transaction<DB>,
+  ): Promise<
+    | {
+        instance: InstanceModel;
+        tasks: TaskModel[];
+        taskExecutions: TaskExecutionModel[];
+      }
+    | undefined
+  > => {
+    const instance = await transaction
+      .selectFrom("instance")
+      .selectAll()
+      .where("id", "=", instanceId)
+      .forUpdate()
+      .executeTakeFirst();
+
+    if (!instance) {
+      return undefined;
+    }
+
+    const tasks = await transaction
+      .selectFrom("task")
+      .selectAll()
+      .where("instance_id", "=", instanceId)
+      .where("status", "in", [TaskStatuses.IN_PROGRESS, TaskStatuses.PAUSED])
+      .forUpdate()
+      .execute();
+
+    if (tasks.length === 0) {
+      return { instance, tasks, taskExecutions: [] };
+    }
+
+    const taskExecutions = await transaction
+      .selectFrom("task_execution")
+      .selectAll()
+      .where(
+        "task_id",
+        "in",
+        tasks.map((t) => t.id),
+      )
+      .where("status", "=", TaskStatuses.IN_PROGRESS)
+      .forUpdate()
+      .execute();
+
+    return { instance, tasks, taskExecutions };
   },
 
   insert: async (data: NewInstance, transaction?: Transaction<DB>) => {

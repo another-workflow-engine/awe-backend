@@ -6,24 +6,28 @@ import { InstanceEntityTypes } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import type { ActorModel } from "../types/models.js";
 
+export type CreateInstanceLogParams = {
+  instanceId: string;
+  eventType: InstanceEventType;
+  details?: LogDetailSchema | undefined;
+  actorId?: string | undefined;
+  transaction?: Transaction<DB> | undefined;
+};
+
 export const eventLogService = {
-  createInstanceLog: async (
-    instanceId: string,
-    type: InstanceEventType,
-    details?: LogDetailSchema,
-    actorId?: string,
-    transaction?: Transaction<DB>,
-  ): Promise<void> => {
+  createInstanceLog: async (params: CreateInstanceLogParams): Promise<void> => {
     await instanceLogRepository.insert(
       {
-        instance_id: instanceId,
+        instance_id: params.instanceId,
         entity_type: InstanceEntityTypes.INSTANCE,
-        entity_id: instanceId,
-        event_type: type,
-        details: details ? converterUtils.objectToJsonValue(details) : null,
-        created_by: actorId ?? null,
+        entity_id: params.instanceId,
+        event_type: params.eventType,
+        details: params.details
+          ? converterUtils.objectToJsonValue(params.details)
+          : null,
+        created_by: params.actorId ?? null,
       },
-      transaction,
+      params.transaction,
     );
   },
 

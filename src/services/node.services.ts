@@ -13,7 +13,7 @@ import {
 import { NodeTypes } from "../types/enums.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
-import { NotFoundError } from "../errors/NotFoundError.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 export const nodeService = {
   createMany: async (
@@ -98,7 +98,7 @@ export const nodeService = {
   getByIdOrThrow: async (nodeId: string): Promise<NodeModel> => {
     const node = await nodeRepository.findById(nodeId);
     if (!node) {
-      throw new NotFoundError("Node");
+      throw new DataIntegrityError(`Node id=${nodeId} not found`);
     }
 
     return node;

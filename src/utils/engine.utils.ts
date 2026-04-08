@@ -104,8 +104,8 @@ async function applyInstanceUpdate(
     return await instanceService.complete(
       instance.id,
       result.outputVariables,
-      transaction,
       details,
+      transaction,
     );
   }
 
@@ -276,7 +276,7 @@ export const engineUtils = {
         );
 
         if (result.status === TaskStatuses.COMPLETED) {
-          await taskService.complete(task, transaction);
+          await taskService.complete(instance.id, task.id, transaction);
         } else {
           await taskService.fail(instance.id, task.id, {
             message: `Execution ${result.status}`,

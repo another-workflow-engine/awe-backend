@@ -34,23 +34,26 @@ export const systemController = {
         name: system.name,
         orgName: organization.name,
         contactEmail: organization.email,
-        environmentType: environment.type,
+        environmentType: environment.map((env) => env.type),
         createdAt: system.created_on,
       },
     });
   },
 
-  me: (req: Request, res: Response) => {
+  me: async (req: Request, res: Response) => {
+    const { system, organization, environment } =
+      await systemService.getCurrentSystem(req.actor);
+
     res.status(200).json({
       system: {
-        id: "sys-uuid",
-        name: "My Approval System",
-        orgName: "AWE Corp",
-        contactEmail: "admin@awe.com",
-        environmentType: "production",
+        id: system.id,
+        name: system.name,
+        orgName: organization.name,
+        contactEmail: organization.email,
+        environmentType: environment.type,
         status: "active",
-        createdAt: "2025-01-15T10:30:00.000Z",
-        updatedAt: "2025-01-15T10:30:00.000Z",
+        createdAt: system.created_on,
+        updatedAt: system.modified_on,
       },
     });
   },

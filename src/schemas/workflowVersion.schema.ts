@@ -8,6 +8,7 @@ export const WorkflowVersionCreateSchema = z.object({
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
+  status: z.enum(WorkflowVersionStatuses).optional().default(WorkflowVersionStatuses.DRAFT),
   actor: ActorSchema,
 });
 
@@ -41,4 +42,9 @@ export const WorkflowVersionUpdateSchema = z.object({
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
+});
+
+export const WorkflowVersionPromoteSchema = z.object({
+  versionId: z.uuidv4(),
+  actor: ActorSchema,
 });

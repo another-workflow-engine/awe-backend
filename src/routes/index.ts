@@ -5,6 +5,9 @@ import { workflowRouter } from "./workflow.routes.js";
 import { instanceRouter } from "./instance.routes.js";
 import { taskRouter } from "./task.routes.js";
 import { auditRouter } from "./audit.routes.js";
+import { authenticateRequest } from "../middlewares/auth.middleware.js";
+import { resolveEnvironmentContext } from "../middlewares/environment.middleware.js";
+import { workflowVersionController } from "../controllers/workflowVersion.controller.js";
 export const router = Router();
 
 const apiRouter = Router();

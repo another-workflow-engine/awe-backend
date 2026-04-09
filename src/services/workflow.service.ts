@@ -3,7 +3,7 @@ import { RepositoryError } from "../errors/RepositoryError.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import type { ActorModel } from "../types/models.js";
-import { environmentService } from "./environment.services.js";
+import { randomUUID } from "crypto";
 
 export type CreateWorkflowInput = {
   name: string;
@@ -17,31 +17,27 @@ export type UpdateWorkflowInput = {
 };
 
 export const workflowService = {
-  getAll: async (actor: ActorModel) => {
-    const environment = await environmentService.getByActor(actor);
-
+  getAll: async (environmentId: string) => {
     return await workflowRepository.findByEnvironmentIdWithLatestVersion(
-      environment.id,
+      environmentId,
     );
   },
-  
+
   getAllPaginated: async (
-    actor: ActorModel,
+    environmentId: string,
     limit: number,
     offset: number,
   ) => {
-    const environment = await environmentService.getByActor(actor);
-
     return await workflowRepository.findByEnvironmentIdWithLatestVersionPaginated(
-      environment.id,
+      environmentId,
       limit,
       offset,
     );
   },
 
-  get: async (workflowId: string, actor: ActorModel) => {
+  get: async (workflowId: string, environmentId: string) => {
     const [workflow, versions] = await Promise.all([
-      workflowRepository.findById(workflowId),
+      workflowRepository.findByIdAndEnvironmentId(workflowId, environmentId),
       workflowVersionRepository.findByWorkflowId(workflowId),
     ]);
 
@@ -52,27 +48,40 @@ export const workflowService = {
     return { workflow, versions };
   },
 
-  create: async (data: CreateWorkflowInput, actor: ActorModel) => {
-    const environment = await environmentService.getByActor(actor);
+  create: async (
+    data: CreateWorkflowInput,
+    actor: ActorModel,
+    environmentId: string,
+  ) => {
+    const workflowId = randomUUID();
 
     return await workflowRepository.insert({
+      id: workflowId,
       name: data.name,
       description: data.description,
       created_by: actor.id,
-      environment_id: environment.id,
+      environment_id: environmentId,
+      base_workflow_id: workflowId,
       modified_by: actor.id,
     });
   },
 
-  update: async (data: UpdateWorkflowInput, actor: ActorModel) => {
+  update: async (
+    data: UpdateWorkflowInput,
+    actor: ActorModel,
+    environmentId: string,
+  ) => {
+    const existing = await workflowRepository.findByIdAndEnvironmentId(
+      data.workflowId,
+      environmentId,
+    );
+
+    if (!existing) {
+      throw new NotFoundError("Workflow");
+    }
+
     if (data.name === undefined && data.description === undefined) {
-      const workflow = await workflowRepository.findById(data.workflowId);
-
-      if (!workflow) {
-        throw new NotFoundError("Workflow");
-      }
-
-      return workflow;
+      return existing;
     }
 
     return await workflowRepository.updateById(data.workflowId, {
@@ -83,7 +92,20 @@ export const workflowService = {
     });
   },
 
-  delete: async (workflowId: string, actor: ActorModel) => {
+  delete: async (
+    workflowId: string,
+    actor: ActorModel,
+    environmentId: string,
+  ) => {
+    const existing = await workflowRepository.findByIdAndEnvironmentId(
+      workflowId,
+      environmentId,
+    );
+
+    if (!existing) {
+      throw new NotFoundError("Workflow");
+    }
+
     return await workflowRepository.updateById(workflowId, {
       is_deleted: true,
       deleted_on: new Date(),

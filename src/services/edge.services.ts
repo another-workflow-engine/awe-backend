@@ -104,12 +104,19 @@ export const edgeService = {
   },
 
   getByNodes: async (nodes: NodeModel[]): Promise<EdgeModel[]> => {
+    return await edgeService.getByNodesWithTransaction(nodes);
+  },
+
+  getByNodesWithTransaction: async (
+    nodes: NodeModel[],
+    transaction?: Transaction<DB>,
+  ): Promise<EdgeModel[]> => {
     if (nodes.length === 0) {
       return [];
     }
 
     const ids = nodes.map((node) => node.id);
-    return await edgeRepository.findByNodeIds(ids);
+    return await edgeRepository.findByNodeIds(ids, transaction);
   },
 
   deleteByNodes: async (

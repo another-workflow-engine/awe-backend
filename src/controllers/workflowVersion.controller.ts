@@ -198,7 +198,7 @@ export const workflowVersionController = {
 
   promote: async (req: Request, res: Response) => {
     const data = WorkflowVersionPromoteSchema.parse({
-      versionId: req.params.id,
+      versionId: req.params.versionId,
       actor: req.actor,
     });
 

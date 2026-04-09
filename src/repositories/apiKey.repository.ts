@@ -30,11 +30,34 @@ export const apiKeyRepository = {
       .execute();
   },
 
+  countActiveByEnvironmentId: async (
+    environmentId: string,
+  ): Promise<number> => {
+    const result = await db
+      .selectFrom("api_key")
+      .select((eb) => eb.fn.count("id").as("count"))
+      .where("environment_id", "=", environmentId)
+      .where("is_revoked", "=", false)
+      .where("is_deleted", "=", false)
+      .executeTakeFirst();
+    return Number(result?.count ?? 0);
+  },
+
   findByPrefix: async (prefix: string) => {
     return await db
       .selectFrom("api_key")
       .selectAll()
       .where("key_prefix", "=", prefix)
+      .where("is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
+  findById: async (id: string, environments: string[]) => {
+    return await db
+      .selectFrom("api_key")
+      .selectAll()
+      .where("id", "=", id)
+      .where("environment_id", "in", environments)
       .where("is_deleted", "=", false)
       .executeTakeFirst();
   },
@@ -68,19 +91,15 @@ export const apiKeyRepository = {
       .executeTakeFirst();
   },
 
-  revokeById: async (id: string): Promise<ApiKeyModel> => {
-    try {
-      return await db
-        .updateTable("api_key")
-        .set({ is_revoked: true, revoked_on: new Date() })
-        .where("id", "=", id)
-        .where("is_revoked", "=", false)
-        .where("is_deleted", "=", false)
-        .returningAll()
-        .executeTakeFirstOrThrow();
-    } catch (err) {
-      throw new RepositoryError("Revoke API key failed");
-    }
+  revokeById: async (id: string): Promise<ApiKeyModel | undefined> => {
+    return await db
+      .updateTable("api_key")
+      .set({ is_revoked: true, revoked_on: new Date() })
+      .where("id", "=", id)
+      .where("is_revoked", "=", false)
+      .where("is_deleted", "=", false)
+      .returningAll()
+      .executeTakeFirst();
   },
 
   deleteById: async (id: string) => {

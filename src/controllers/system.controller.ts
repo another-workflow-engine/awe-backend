@@ -34,7 +34,7 @@ export const systemController = {
         name: system.name,
         orgName: organization.name,
         contactEmail: organization.email,
-        environmentType: environment.map((env) => env.type),
+        environmentTypes: environment.map((env) => env.type),
         createdAt: system.created_on,
       },
     });

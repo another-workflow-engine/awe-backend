@@ -8,7 +8,6 @@ export const WorkflowVersionCreateSchema = z.object({
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
-  status: z.enum(WorkflowVersionStatuses).optional().default(WorkflowVersionStatuses.DRAFT),
   actor: ActorSchema,
 });
 

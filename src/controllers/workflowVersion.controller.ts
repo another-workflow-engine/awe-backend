@@ -55,6 +55,7 @@ export const workflowVersionController = {
 
     const workflowVersion = await workflowVersionService.createNew(
       data,
+      WorkflowVersionStatuses.DRAFT,
       undefined,
       req.environmentId,
     );

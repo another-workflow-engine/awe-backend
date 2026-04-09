@@ -23,14 +23,16 @@ import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { workflowValidatorService } from "./workflowValidator.service.js";
 import { Transaction } from "kysely";
-import type { DB } from "../types/database.js";
+import type { DB, WorkflowVersionStatus } from "../types/database.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
-export type StatusPartialUpdateInput = z.infer<typeof WorkflowVersionUpdateStatusSchema>;
+export type StatusPartialUpdateInput = z.infer<
+  typeof WorkflowVersionUpdateStatusSchema
+>;
 export type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
 export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
@@ -54,7 +56,6 @@ const getVersionOrThrow = async (
 };
 
 export const workflowVersionService = {
-
   listPaginated: async (
     data: ListVersionInput,
     limit: number,
@@ -88,7 +89,10 @@ export const workflowVersionService = {
   },
 
   getDetail: async (data: DetailInput, environmentId: string) => {
-    const workflowVersion = await getVersionOrThrow(data.versionId, environmentId);
+    const workflowVersion = await getVersionOrThrow(
+      data.versionId,
+      environmentId,
+    );
 
     const nodeModels = await nodeService.getByWorkflowVersion(workflowVersion);
     const edgeModels = await edgeService.getByNodes(nodeModels);
@@ -187,6 +191,7 @@ export const workflowVersionService = {
 
   createNew: async (
     data: CreateVersionInput,
+    status?: WorkflowVersionStatus,
     existingTransaction?: Transaction<DB>,
     environmentId?: string,
   ): Promise<WorkflowVersionModel> => {
@@ -215,17 +220,16 @@ export const workflowVersionService = {
         );
       }
 
-      const workflowVersion =
-        await workflowVersionRepository.insertNextVersion(
-          {
-            description: data.description ?? null,
-            created_by: data.actor.id,
-            modified_by: data.actor.id,
-            status: data.status,
-            workflow_id: data.workflowId,
-          },
-          transaction,
-        );
+      const workflowVersion = await workflowVersionRepository.insertNextVersion(
+        {
+          description: data.description ?? null,
+          created_by: data.actor.id,
+          modified_by: data.actor.id,
+          status: status ?? WorkflowVersionStatuses.DRAFT,
+          workflow_id: data.workflowId,
+        },
+        transaction,
+      );
 
       const nodes = await nodeService.createMany(
         data.nodes,
@@ -234,12 +238,7 @@ export const workflowVersionService = {
         transaction,
       );
 
-      await edgeService.createMany(
-        data.edges,
-        nodes,
-        data.actor,
-        transaction,
-      );
+      await edgeService.createMany(data.edges, nodes, data.actor, transaction);
 
       return workflowVersion;
     };
@@ -252,7 +251,10 @@ export const workflowVersionService = {
   },
 
   validate: async (data: ValidateInput, environmentId: string) => {
-    let workflowVersion = await getVersionOrThrow(data.versionId, environmentId);
+    let workflowVersion = await getVersionOrThrow(
+      data.versionId,
+      environmentId,
+    );
 
     if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
       return { result: { valid: true, errors: [] }, workflowVersion };
@@ -277,7 +279,10 @@ export const workflowVersionService = {
     data: StatusPartialUpdateInput,
     environmentId: string,
   ) => {
-    let workflowVersion = await getVersionOrThrow(data.versionId, environmentId);
+    let workflowVersion = await getVersionOrThrow(
+      data.versionId,
+      environmentId,
+    );
 
     const currentStatus = workflowVersion.status;
     const newStatus = data.status;
@@ -293,7 +298,6 @@ export const workflowVersionService = {
     }
 
     return db.transaction().execute(async (transaction) => {
-
       if (newStatus === WorkflowVersionStatuses.ACTIVE) {
         await workflowVersionRepository.demoteActiveVersionToPublished(
           workflowVersion.workflow_id,
@@ -324,20 +328,26 @@ export const workflowVersionService = {
   },
 
   clone: async (data: DetailInput, environmentId: string) => {
-    const workflowVersion = await getVersionOrThrow(data.versionId, environmentId);
+    const workflowVersion = await getVersionOrThrow(
+      data.versionId,
+      environmentId,
+    );
 
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
     const edges = await edgeService.getByNodes(nodes);
 
-    return workflowVersionService.createNew({
-      workflowId: workflowVersion.workflow_id,
-      description: `Clone of version ${workflowVersion.version} - ${workflowVersion.description}`,
-      nodes: nodes.map((node) => nodeSchemaService.getNodeSchema(node)),
-      edges: edges.map((edge) => edgeService.toEdgeSchema(edge, nodes)),
-      status: WorkflowVersionStatuses.VALID,
-      actor: data.actor,
-    }, undefined, environmentId);
-
+    return workflowVersionService.createNew(
+      {
+        workflowId: workflowVersion.workflow_id,
+        description: `Clone of version ${workflowVersion.version} - ${workflowVersion.description}`,
+        nodes: nodes.map((node) => nodeSchemaService.getNodeSchema(node)),
+        edges: edges.map((edge) => edgeService.toEdgeSchema(edge, nodes)),
+        actor: data.actor,
+      },
+      WorkflowVersionStatuses.VALID,
+      undefined,
+      environmentId,
+    );
   },
 
   promoteWorkflowVersion: async (
@@ -364,9 +374,8 @@ export const workflowVersionService = {
         throw new NotFoundError("Workflow");
       }
 
-      const baseWorkflowId = sourceWorkflow.base_workflow_id ?? sourceWorkflow.id;
-
-     
+      const baseWorkflowId =
+        sourceWorkflow.base_workflow_id ?? sourceWorkflow.id;
 
       let targetWorkflow =
         await workflowRepository.findByBaseWorkflowIdAndEnvironmentId(
@@ -402,16 +411,18 @@ export const workflowVersionService = {
         {
           workflowId: targetWorkflow.id,
           description: sourceVersion.description,
-          nodes: sourceNodes.map((node) => nodeSchemaService.getNodeSchema(node)),
+          nodes: sourceNodes.map((node) =>
+            nodeSchemaService.getNodeSchema(node),
+          ),
           edges: sourceEdges.map((edge) =>
             edgeService.toEdgeSchema(edge, sourceNodes),
           ),
-          status: WorkflowVersionStatuses.DRAFT,
           actor: {
             id: actorId,
             type: ActorTypes.ORGANIZATION_ACCOUNT,
           },
         },
+        WorkflowVersionStatuses.DRAFT,
         transaction,
         targetEnvironmentId,
       );
@@ -429,7 +440,5 @@ export const workflowVersionService = {
       targetEnvironmentId,
       data.actor.id,
     );
-
-  }
-
+  },
 };

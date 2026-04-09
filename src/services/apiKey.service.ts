@@ -32,7 +32,6 @@ export const apiKeyService = {
       throw new AuthError();
     }
 
-    // Validate environment type
     const validTypes = Object.values(EnvironmentTypes);
     if (!validTypes.includes(environmentType as (typeof validTypes)[number])) {
       throw new AppError(
@@ -41,7 +40,6 @@ export const apiKeyService = {
       );
     }
 
-    // Find environment by type for this organization
     const environments = await environmentRepository.findByOrganizationActorId(
       actor.id,
     );
@@ -53,7 +51,6 @@ export const apiKeyService = {
       );
     }
 
-    // Enforce: only one active API key per environment
     const existingKeyCount = await apiKeyRepository.countActiveByEnvironmentId(
       environment.id,
     );
@@ -97,7 +94,6 @@ export const apiKeyService = {
       throw new AuthError();
     }
 
-    // First, check if the API key exists and get its details
     const apiKey = await apiKeyRepository.findById(id);
 
     if (!apiKey) {
@@ -108,7 +104,6 @@ export const apiKeyService = {
       throw new NotFoundError("API key not found");
     }
 
-    // Check if already revoked
     if (apiKey.is_revoked) {
       baseLogger.warn(
         { apiKeyId: id, environmentId: apiKey.environment_id },
@@ -117,22 +112,18 @@ export const apiKeyService = {
       throw new AppError("API key is already revoked", 400);
     }
 
-    // Get environment info for logging
     const environments = await environmentRepository.findById(
       apiKey.environment_id,
     );
     const environmentType = environments?.type || "unknown";
 
-    // Count active keys before revocation for logging
     const activeKeyCount = await apiKeyRepository.countActiveByEnvironmentId(
       apiKey.environment_id,
     );
 
-    // Attempt revocation
     const revokedKey = await apiKeyRepository.revokeById(id);
 
     if (!revokedKey) {
-      // This shouldn't happen given our checks above, but handle defensively
       baseLogger.error(
         { apiKeyId: id, environmentId: apiKey.environment_id },
         "API key revoke failed: Database update returned null",

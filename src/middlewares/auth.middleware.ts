@@ -13,9 +13,6 @@ declare global {
   }
 }
 
-/**
- * Logs API key validation failure with context
- */
 function logApiKeyError(
   req: Request,
   errorType: "missing" | "invalid" | "expired",
@@ -39,7 +36,6 @@ export const authenticateRequest = async (
 ) => {
   const authHeader = req.headers.authorization;
 
-  // Check x-api-key header as alternative to Authorization
   const apiKeyHeader = req.headers["x-api-key"];
 
   if (!authHeader && !apiKeyHeader) {
@@ -47,7 +43,6 @@ export const authenticateRequest = async (
     throw new AuthError();
   }
 
-  // Handle x-api-key header
   if (typeof apiKeyHeader === "string" && apiKeyHeader) {
     try {
       req.actor = await apiKeyService.getActorOrThrow(apiKeyHeader);
@@ -62,7 +57,6 @@ export const authenticateRequest = async (
     }
   }
 
-  // Handle Authorization header
   if (authHeader) {
     const [name, value] = authHeader.split(" ");
 

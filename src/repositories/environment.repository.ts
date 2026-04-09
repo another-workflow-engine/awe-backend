@@ -13,7 +13,7 @@ export const environmentRepository = {
       .selectAll()
       .where("id", "=", id)
       .where("is_deleted", "=", false)
-      .execute();
+      .executeTakeFirst();
   },
 
   findBySystemId: async (systemId: string, transaction?: Transaction<DB>) => {

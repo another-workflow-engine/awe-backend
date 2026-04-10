@@ -104,7 +104,7 @@ export const contextUtils = {
 
   getTaskContext(
     instanceContext: InputVariables,
-    inputSchema: NodeInputSchema,
+    inputSchema: NodeInputSchema, 
   ): InputVariables {
     const { constants, fetchables, urls } = instanceContext;
     const taskContext: InputVariables = {

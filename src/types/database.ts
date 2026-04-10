@@ -594,6 +594,16 @@ export interface RefreshToken {
   token: string;
 }
 
+export interface Secret {
+  created_on: Generated<Timestamp>;
+  environment_id: string | null;
+  id: Generated<string>;
+  label: string;
+  modified_on: Generated<Timestamp>;
+  organization_id: string | null;
+  secret_key: string | null;
+}
+
 export interface StorageBuckets {
   allowed_mime_types: string[] | null;
   avif_autodetection: Generated<boolean | null>;
@@ -819,6 +829,7 @@ export interface DB {
   "realtime.schema_migrations": RealtimeSchemaMigrations;
   "realtime.subscription": RealtimeSubscription;
   refresh_token: RefreshToken;
+  secret: Secret;
   "storage.buckets": StorageBuckets;
   "storage.buckets_analytics": StorageBucketsAnalytics;
   "storage.buckets_vectors": StorageBucketsVectors;

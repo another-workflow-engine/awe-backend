@@ -46,6 +46,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1024.0",
     "@bpmn-io/feelin": "^6.1.0",
     "@google/genai": "^1.46.0",
     "@google/generative-ai": "^0.24.1",

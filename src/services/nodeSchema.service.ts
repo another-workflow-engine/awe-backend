@@ -77,12 +77,17 @@ export const nodeSchemaService = {
 
   _updateNameSetForExpression: (
     nameSet: Set<string>,
+    secretSet: Set<string>,
     expression: string,
   ): void => {
-    const iterator = expression.matchAll(/(?<=context\.)\w*/g);
-
-    for (const result of iterator) {
+    const variableIterator = expression.matchAll(/(?<=context\.)\w*/g);
+    for (const result of variableIterator) {
       nameSet.add(result[0]);
+    }
+
+    const secretIterator = expression.matchAll(/(?<=secret\.)\w*/g);
+    for (const result of secretIterator) {
+      secretSet.add(result[0]);
     }
   },
 
@@ -93,6 +98,7 @@ export const nodeSchemaService = {
     outputSchema: NodeOuputSchema;
   } => {
     const inputVariableSet = new Set<string>();
+    const inputSecretSet = new Set<string>();
     const outputVariableSet = new Set<string>();
 
     configuration.inputDataMap.forEach((input) => {
@@ -105,9 +111,14 @@ export const nodeSchemaService = {
       outputVariableSet.add(variableName);
     });
 
+    configuration.secretDataMap.forEach((secret) => {
+      inputSecretSet.add(secret.secretContextName);
+    });
+
     return {
       inputSchema: {
         variableNames: [...inputVariableSet],
+        secretNames: [...inputSecretSet],
       },
       outputSchema: {
         variableNames: [...outputVariableSet],
@@ -122,11 +133,13 @@ export const nodeSchemaService = {
     outputSchema: NodeOuputSchema;
   } => {
     const inputVariableSet = new Set<string>();
+    const inputSecretSet = new Set<string>();
     const outputVariableSet = new Set<string>();
 
     configuration.requestMap.forEach((data) => {
       nodeSchemaService._updateNameSetForExpression(
         inputVariableSet,
+        inputSecretSet,
         data.valueExpression,
       );
     });
@@ -134,6 +147,7 @@ export const nodeSchemaService = {
     if (configuration.assignee) {
       nodeSchemaService._updateNameSetForExpression(
         inputVariableSet,
+        new Set<string>(),
         configuration.assignee,
       );
     }
@@ -145,6 +159,7 @@ export const nodeSchemaService = {
     return {
       inputSchema: {
         variableNames: [...inputVariableSet],
+        secretNames: [...inputSecretSet],
       },
       outputSchema: {
         variableNames: [...outputVariableSet],
@@ -159,12 +174,14 @@ export const nodeSchemaService = {
     outputSchema: NodeOuputSchema;
   } => {
     const inputVariableSet = new Set<string>();
+    const inputSecretSet = new Set<string>();
     const outputVariableSet = new Set<string>();
 
     if (configuration.body) {
       configuration.body.forEach((data) =>
         nodeSchemaService._updateNameSetForExpression(
           inputVariableSet,
+          inputSecretSet,
           data.valueExpression,
         ),
       );
@@ -172,6 +189,7 @@ export const nodeSchemaService = {
 
     nodeSchemaService._updateNameSetForExpression(
       inputVariableSet,
+      inputSecretSet,
       configuration.urlExpression,
     );
 
@@ -182,6 +200,7 @@ export const nodeSchemaService = {
     return {
       inputSchema: {
         variableNames: [...inputVariableSet],
+        secretNames: [...inputSecretSet],
       },
       outputSchema: {
         variableNames: [...outputVariableSet],
@@ -196,11 +215,13 @@ export const nodeSchemaService = {
     outputSchema: NodeOuputSchema;
   } => {
     const inputVariableSet = new Set<string>();
+    const inputSecretSet = new Set<string>();
     const outputVariableSet = new Set<string>();
 
     configuration.parameterMap.forEach((data) => {
       nodeSchemaService._updateNameSetForExpression(
         inputVariableSet,
+        inputSecretSet,
         data.valueExpression,
       );
     });
@@ -212,6 +233,7 @@ export const nodeSchemaService = {
     return {
       inputSchema: {
         variableNames: [...inputVariableSet],
+        secretNames: [...inputSecretSet],
       },
       outputSchema: {
         variableNames: [...outputVariableSet],
@@ -226,10 +248,12 @@ export const nodeSchemaService = {
     outputSchema: NodeOuputSchema;
   } => {
     const inputVariableSet = new Set<string>();
+    const inputSecretSet = new Set<string>();
 
     configuration.rules.forEach((data) => {
       nodeSchemaService._updateNameSetForExpression(
         inputVariableSet,
+        inputSecretSet,
         data.conditionExpression,
       );
     });
@@ -237,6 +261,7 @@ export const nodeSchemaService = {
     return {
       inputSchema: {
         variableNames: [...inputVariableSet],
+        secretNames: [...inputSecretSet],
       },
       outputSchema: {
         variableNames: [],
@@ -255,6 +280,7 @@ export const nodeSchemaService = {
     configuration.resultMap.forEach((data) => {
       nodeSchemaService._updateNameSetForExpression(
         inputVariableSet,
+        new Set<string>(),
         data.valueExpression,
       );
     });
@@ -262,6 +288,7 @@ export const nodeSchemaService = {
     return {
       inputSchema: {
         variableNames: [...inputVariableSet],
+        secretNames: [],
       },
       outputSchema: {
         variableNames: [],

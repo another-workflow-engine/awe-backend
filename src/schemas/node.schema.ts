@@ -34,10 +34,15 @@ export const StartNodeDataMapSchema = z.object({
   fetchableId: z.string().optional(),
 });
 
+export const SecretDataMapSchema = z.object({
+  label: z.string(),
+  secretContextName: z.string(),
+});
+
 export const StartNodeConfigurationSchema = z.object({
   inputDataMap: z.array(StartNodeDataMapSchema),
-
   fetchables: z.array(FetchableSchema),
+  secretDataMap: z.array(SecretDataMapSchema),
 });
 
 export const EndNodeConfigurationSchema = z.object({

@@ -12,7 +12,6 @@ import type { Logger } from "pino";
 import { TaskStatuses } from "../../types/enums.js";
 import type {
   InstanceModel,
-  NodeModel,
   TaskModel,
 } from "../../types/models.js";
 import { EngineError } from "../../errors/EngineError.js";

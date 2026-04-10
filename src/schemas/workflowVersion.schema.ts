@@ -42,3 +42,8 @@ export const WorkflowVersionUpdateSchema = z.object({
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
 });
+
+export const WorkflowVersionPromoteSchema = z.object({
+  versionId: z.uuidv4(),
+  actor: ActorSchema,
+});

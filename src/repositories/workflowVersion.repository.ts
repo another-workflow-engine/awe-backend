@@ -18,12 +18,28 @@ export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 export type UpdateWorkflowVersion = Updateable<WorkflowVersion>;
 
 export const workflowVersionRepository = {
-  findById: async (id: string) => {
-    return await db
+  findById: async (id: string, transaction?: Transaction<DB>) => {
+    return await (transaction ?? db)
       .selectFrom("workflow_version")
       .selectAll()
       .where("id", "=", id)
       .where("is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
+  findByIdAndEnvironmentId: async (
+    id: string,
+    environmentId: string,
+    transaction?: Transaction<DB>,
+  ) => {
+    return await (transaction ?? db)
+      .selectFrom("workflow_version")
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .selectAll("workflow_version")
+      .where("workflow_version.id", "=", id)
+      .where("workflow.environment_id", "=", environmentId)
+      .where("workflow_version.is_deleted", "=", false)
+      .where("workflow.is_deleted", "=", false)
       .executeTakeFirst();
   },
 

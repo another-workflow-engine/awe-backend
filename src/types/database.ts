@@ -669,6 +669,7 @@ export interface StorageS3MultipartUploads {
   id: string;
   in_progress_size: Generated<Int8>;
   key: string;
+  metadata: Json | null;
   owner_id: string | null;
   upload_signature: string;
   user_metadata: Json | null;
@@ -762,6 +763,7 @@ export interface VaultSecrets {
 }
 
 export interface Workflow {
+  base_workflow_id: string | null;
   created_by: string;
   created_on: Generated<Timestamp>;
   deleted_by: string | null;

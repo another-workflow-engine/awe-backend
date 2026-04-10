@@ -3,17 +3,30 @@ import { RepositoryError } from "../errors/RepositoryError.js";
 import type { Environment, DB } from "../types/database.js";
 import type { Insertable, Transaction } from "kysely";
 import type { EnvironmentModel } from "../types/models.js";
+import type { EnvironmentType } from "../types/database.js";
 
 type NewEnvironment = Insertable<Environment>;
 
 export const environmentRepository = {
+  findByType: async (
+    type: EnvironmentType,
+    transaction?: Transaction<DB>,
+  ): Promise<EnvironmentModel[]> => {
+    return await (transaction ?? db)
+      .selectFrom("environment")
+      .selectAll()
+      .where("type", "=", type)
+      .where("is_deleted", "=", false)
+      .execute();
+  },
+
   findById: async (id: string, transaction?: Transaction<DB>) => {
     return await (transaction ?? db)
       .selectFrom("environment")
       .selectAll()
       .where("id", "=", id)
       .where("is_deleted", "=", false)
-      .execute();
+      .executeTakeFirst();
   },
 
   findBySystemId: async (systemId: string, transaction?: Transaction<DB>) => {
@@ -56,16 +69,16 @@ export const environmentRepository = {
       .execute();
   },
 
-  insert: async (
-    data: NewEnvironment,
+  insertMany: async (
+    data: NewEnvironment[],
     transaction?: Transaction<DB>,
-  ): Promise<EnvironmentModel> => {
+  ): Promise<EnvironmentModel[]> => {
     try {
       return await (transaction ?? db)
         .insertInto("environment")
         .values(data)
         .returningAll()
-        .executeTakeFirstOrThrow();
+        .execute();
     } catch (err) {
       throw new RepositoryError("Environment insert failed", err);
     }

@@ -1,9 +1,16 @@
 import type { Request, Response } from "express";
 import { apiKeyService } from "../services/apiKey.service.js";
 import { z } from "zod";
+import { EnvironmentTypes } from "../types/enums.js";
+import type { EnvironmentType } from "../types/database.js";
 
 const apiKeyIdParam = z.object({
   keyId: z.uuidv4(),
+});
+
+const createApiKeySchema = z.object({
+  label: z.string().min(1, "Label is required"),
+  environment: z.enum(Object.values(EnvironmentTypes) as [string, ...string[]]),
 });
 
 export const apiKeyController = {
@@ -24,13 +31,18 @@ export const apiKeyController = {
   },
 
   generate: async (req: Request, res: Response) => {
-    const { label } = req.body;
+    const { label, environment } = createApiKeySchema.parse(req.body);
 
-    const { apiKey, rawKey } = await apiKeyService.createNew(label, req.actor);
+    const { apiKey, rawKey } = await apiKeyService.createNew(
+      label,
+      environment as EnvironmentType,
+      req.actor,
+    );
 
     return res.status(201).json({
       id: apiKey.id,
       label: apiKey.label,
+      environment,
       apiKey: rawKey,
       createdAt: apiKey.created_on,
     });

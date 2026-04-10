@@ -13,15 +13,24 @@ export type TaskExecutionWithNode = TaskExecutionModel & {
   node_type: string;
   node_name: string | null;
   node_configuration: unknown;
+  user_task_execution_id: string | null;
 };
 
 export type WorkflowNodeForExecution = {
+  node_configuration: any;
   node_id: string;
   node_client_id: string;
   node_type: string;
   node_name: string | null;
-  node_configuration: unknown;
   created_on: Date;
+};
+
+export type TaskExecutionForGraph = TaskExecutionModel & {
+  node_id: string;
+  node_client_id: string;
+  node_type: string;
+  node_name: string | null;
+  user_task_execution_id: string | null;
 };
 
 export type WorkflowConnectionForExecution = {
@@ -37,7 +46,7 @@ export type WorkflowConnectionForExecution = {
 export type ExecutionGraphData = {
   nodes: WorkflowNodeForExecution[];
   connections: WorkflowConnectionForExecution[];
-  executions: TaskExecutionWithNode[];
+  executions: TaskExecutionForGraph[];
 };
 
 export const taskExecutionRepository = {
@@ -138,7 +147,6 @@ export const taskExecutionRepository = {
             eb.ref("node.client_id").as("node_client_id"),
             eb.ref("node.type").as("node_type"),
             eb.ref("node.name").as("node_name"),
-            eb.ref("node.configuration").as("node_configuration"),
             eb.ref("node.created_on").as("created_on"),
           ])
           .where("node.workflow_version_id", "=", instance.workflow_version_id)
@@ -176,17 +184,22 @@ export const taskExecutionRepository = {
           .selectFrom("task_execution")
           .innerJoin("task", "task.id", "task_execution.task_id")
           .innerJoin("node", "node.id", "task.node_id")
+          .leftJoin(
+            "user_task_execution",
+            "user_task_execution.task_execution_id",
+            "task_execution.id",
+          )
           .selectAll("task_execution")
           .select((eb) => [
             eb.ref("node.id").as("node_id"),
             eb.ref("node.client_id").as("node_client_id"),
             eb.ref("node.type").as("node_type"),
             eb.ref("node.name").as("node_name"),
-            eb.ref("node.configuration").as("node_configuration"),
+            eb.ref("user_task_execution.id").as("user_task_execution_id"),
           ])
           .where("task.instance_id", "=", instanceId)
           .orderBy("task_execution.created_on", "asc")
-          .execute() as Promise<TaskExecutionWithNode[]>,
+          .execute() as Promise<TaskExecutionForGraph[]>,
       ]);
 
       return {

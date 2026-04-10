@@ -18,6 +18,7 @@ export const workflowGroupController = {
     const workflow = await workflowService.create(
       { name, description },
       req.actor,
+      req.environmentId,
     );
 
     return res.status(201).json({
@@ -33,19 +34,19 @@ export const workflowGroupController = {
   list: async (req: Request, res: Response) => {
     const { page, limit, offset } = parsePaginationFromRequest(req);
     const { items, total } = await workflowService.getAllPaginated(
-      req.actor,
+      req.environmentId,
       limit,
       offset,
     );
 
     const formattedWorkflows = items.map(
-      ({ workflow, latestWorkflowVersion, status }) => {
+      ({ workflow, status, latestVersionId }) => {
         return {
           id: workflow.id,
           name: workflow.name,
           description: workflow.description,
-          latestVersion: latestWorkflowVersion,
           status: status,
+          latestVersionId: latestVersionId,
           createdAt: workflow.created_on,
           updatedAt: workflow.modified_on,
         };
@@ -64,7 +65,7 @@ export const workflowGroupController = {
       ...req.params,
       ...req.body,
     });
-    const workflow = await workflowService.update(data, req.actor);
+    const workflow = await workflowService.update(data, req.actor, req.environmentId);
 
     res.status(200).json({
       id: workflow.id,
@@ -78,7 +79,7 @@ export const workflowGroupController = {
     const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
     const { workflow, versions } = await workflowService.get(
       workflowId,
-      req.actor,
+      req.environmentId,
     );
     return res.status(200).json({
       id: workflow.id,
@@ -102,7 +103,7 @@ export const workflowGroupController = {
 
   delete: async (req: Request, res: Response) => {
     const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
-    await workflowService.delete(workflowId, req.actor);
+    await workflowService.delete(workflowId, req.actor, req.environmentId);
     res.status(200).json({});
   },
 

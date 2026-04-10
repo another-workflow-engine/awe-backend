@@ -274,61 +274,59 @@ export const taskExecutionService = {
     instanceId: string,
     taskExecutionId: string,
     outputVariables: object,
+    transaction: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
-    return await db.transaction().execute(async (transaction) => {
-      const [taskExecution] = await Promise.all([
-        taskExecutionRepository.updateById(
-          taskExecutionId,
-          {
-            status: TaskStatuses.COMPLETED,
-            output_variables: converterUtils.objectToJsonValue(outputVariables),
-            ended_on: new Date(),
-          },
-          transaction,
-        ),
+    const [taskExecution] = await Promise.all([
+      taskExecutionRepository.updateById(
+        taskExecutionId,
+        {
+          status: TaskStatuses.COMPLETED,
+          output_variables: converterUtils.objectToJsonValue(outputVariables),
+          ended_on: new Date(),
+        },
+        transaction,
+      ),
 
-        eventLogService.createTaskExecutionLog(
-          instanceId,
-          taskExecutionId,
-          LogEventTypes.COMPLETED,
-          undefined,
-          undefined,
-          transaction,
-        ),
-      ]);
+      eventLogService.createTaskExecutionLog(
+        instanceId,
+        taskExecutionId,
+        LogEventTypes.COMPLETED,
+        undefined,
+        undefined,
+        transaction,
+      ),
+    ]);
 
-      return taskExecution;
-    });
+    return taskExecution;
   },
 
   fail: async (
     instanceId: string,
     taskExecutionId: string,
     details: LogDetailSchema,
+    transaction: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
-    return await db.transaction().execute(async (transaction) => {
-      const [taskExecution] = await Promise.all([
-        taskExecutionRepository.updateById(
-          taskExecutionId,
-          {
-            status: TaskStatuses.FAILED,
-            ended_on: new Date(),
-          },
-          transaction,
-        ),
+    const [taskExecution] = await Promise.all([
+      taskExecutionRepository.updateById(
+        taskExecutionId,
+        {
+          status: TaskStatuses.FAILED,
+          ended_on: new Date(),
+        },
+        transaction,
+      ),
 
-        eventLogService.createTaskExecutionLog(
-          instanceId,
-          taskExecutionId,
-          LogEventTypes.FAILED,
-          details,
-          undefined,
-          transaction,
-        ),
-      ]);
+      eventLogService.createTaskExecutionLog(
+        instanceId,
+        taskExecutionId,
+        LogEventTypes.FAILED,
+        details,
+        undefined,
+        transaction,
+      ),
+    ]);
 
-      return taskExecution;
-    });
+    return taskExecution;
   },
 
   terminate: async (

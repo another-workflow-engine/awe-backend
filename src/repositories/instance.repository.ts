@@ -1,8 +1,13 @@
 import { type Insertable, type Transaction, type Updateable } from "kysely";
-import type { DB, Instance } from "../types/database.js";
-import type { InstanceModel } from "../types/models.js";
+import type { DB, Instance, TaskStatus } from "../types/database.js";
+import type {
+  InstanceModel,
+  TaskExecutionModel,
+  TaskModel,
+} from "../types/models.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
+import { TaskStatuses } from "../types/enums.js";
 
 export type NewInstance = Insertable<Instance>;
 export type UpdateInstance = Updateable<Instance>;
@@ -10,6 +15,12 @@ export type UpdateInstance = Updateable<Instance>;
 export type InstanceListItem = InstanceModel & {
   version_number: number | null;
   workflow_name: string;
+};
+
+export type LockedInProgressOrPausedRelations = {
+  instance: InstanceModel | undefined;
+  task: TaskModel | undefined;
+  taskExecution: TaskExecutionModel | undefined;
 };
 
 export const instanceRepository = {
@@ -116,6 +127,50 @@ export const instanceRepository = {
       .where("id", "=", id)
       .where("is_deleted", "=", false)
       .executeTakeFirst();
+  },
+
+  getLockedInProgressOrPausedRelationsById: async (
+    instanceId: string,
+    transaction: Transaction<DB>,
+  ): Promise<LockedInProgressOrPausedRelations> => {
+    const returnObject: LockedInProgressOrPausedRelations = {
+      instance: undefined,
+      task: undefined,
+      taskExecution: undefined,
+    };
+
+    returnObject.instance = await transaction
+      .selectFrom("instance")
+      .selectAll()
+      .where("id", "=", instanceId)
+      .forUpdate()
+      .executeTakeFirst();
+
+    if (!returnObject.instance) {
+      return returnObject;
+    }
+
+    returnObject.task = await transaction
+      .selectFrom("task")
+      .selectAll()
+      .where("instance_id", "=", instanceId)
+      .where("status", "in", [TaskStatuses.IN_PROGRESS, TaskStatuses.PAUSED])
+      .forUpdate()
+      .executeTakeFirst();
+
+    if (!returnObject.task) {
+      return returnObject;
+    }
+
+    returnObject.taskExecution = await transaction
+      .selectFrom("task_execution")
+      .selectAll()
+      .where("task_id", "=", returnObject.task.id)
+      .where("status", "=", TaskStatuses.IN_PROGRESS)
+      .forUpdate()
+      .executeTakeFirst();
+
+    return returnObject;
   },
 
   findByIdAndEnvironmentIds: async (

@@ -1,6 +1,7 @@
+import type { Transaction } from "kysely";
 import { EngineError } from "../../errors/EngineError.js";
 import { taskExecutionService } from "../../services/taskExecution.service.js";
-import type { NodeType } from "../../types/database.js";
+import type { DB, NodeType } from "../../types/database.js";
 import type { InputVariables, ExecutorResult } from "../../types/engine.js";
 import { NodeTypes, TaskStatuses } from "../../types/enums.js";
 import type { NodeModel, TaskModel } from "../../types/models.js";
@@ -31,10 +32,12 @@ export default class TaskExecutor {
   private executorConstructor: ExecutorConstructor;
   private node: NodeModel;
   private task: TaskModel;
+  private context: InputVariables;
 
-  constructor(task: TaskModel, node: NodeModel) {
+  constructor(task: TaskModel, node: NodeModel, context: InputVariables) {
     this.task = task;
     this.node = node;
+    this.context = context;
 
     if (node.type == NodeTypes.USER) {
       throw new EngineError(
@@ -50,18 +53,19 @@ export default class TaskExecutor {
     this.executorConstructor = Executor;
   }
 
-  async run(
-    context: InputVariables,
-  ): Promise<{ executionId: string; result: ExecutorResult }> {
+  async start(transaction: Transaction<DB>): Promise<string> {
     const taskExecution = await taskExecutionService.create(
       this.task.instance_id,
       this.task.id,
-      context,
+      this.context,
+      transaction,
     );
+    return taskExecution.id;
+  }
 
-    const executor = new this.executorConstructor(this.node, context);
+  async run(): Promise<ExecutorResult> {
+    const executor = new this.executorConstructor(this.node, this.context);
 
-    executor;
     const result = await executor.run().catch((err: Error) => {
       return {
         status: TaskStatuses.FAILED,
@@ -72,25 +76,32 @@ export default class TaskExecutor {
       };
     });
 
-    return {
-      executionId: taskExecution.id,
-      result,
-    };
+    return result;
   }
 
-  async end(executionId: string, result: ExecutorResult) {
+  async end(
+    executionId: string,
+    result: ExecutorResult,
+    transaction: Transaction<DB>,
+  ) {
     if (result.status === TaskStatuses.COMPLETED) {
       await taskExecutionService.complete(
         this.task.instance_id,
         executionId,
         result.outputVariables,
+        transaction,
       );
       return;
     }
 
-    await taskExecutionService.fail(this.task.instance_id, executionId, {
-      message: result.errorMessage ?? "Unkown error",
-      error: result.error,
-    });
+    await taskExecutionService.fail(
+      this.task.instance_id,
+      executionId,
+      {
+        message: result.errorMessage ?? "Unkown error",
+        error: result.error,
+      },
+      transaction,
+    );
   }
 }

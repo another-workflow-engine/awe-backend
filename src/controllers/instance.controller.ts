@@ -9,6 +9,7 @@ import {
   buildPaginatedResponse,
   parsePaginationFromRequest,
 } from "../utils/pagination.utils.js";
+import { instanceSignalService } from "../services/instanceSignal.service.js";
 
 export const instanceController = {
   list: async (req: Request, res: Response) => {
@@ -114,7 +115,7 @@ export const instanceController = {
 
   terminate: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.signalTerminate(
+    const instance = await instanceSignalService.signalTerminate(
       instanceId,
       req.actor,
       req.environmentIds,

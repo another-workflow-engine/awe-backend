@@ -27,6 +27,8 @@ import { taskExecutionService } from "./taskExecution.service.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
+import { db } from "../database.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 export const userTaskService = {
   create: async (
@@ -227,20 +229,41 @@ export const userTaskService = {
       node.id,
     );
 
-    const updatedtaskExecution = await taskExecutionService.complete(
-      instance.id,
-      taskExecution.id,
-      outputVariables,
-    );
+    return await db.transaction().execute(async (transaction) => {
+      const models = await engineUtils.getLockedModels({
+        instanceId: instance.id,
+        taskId: task.id,
+        nodeId: node.id,
+        transaction,
+      });
+      if (!models) {
+        throw new DataIntegrityError(
+          `Unable to lock data for user task id=${taskExecution.id}`,
+        );
+      }
 
-    const result: ExecutorResult = {
-      status: updatedtaskExecution.status,
-      outputVariables: outputVariables,
-      nextNodeId: nextNodeId ?? null,
-    };
+      const updatedtaskExecution = await taskExecutionService.complete(
+        instance.id,
+        taskExecution.id,
+        outputVariables,
+        transaction,
+      );
 
-    await engineUtils.updateInstanceAndTask(instance, node, task, result);
+      const result: ExecutorResult = {
+        status: updatedtaskExecution.status,
+        outputVariables: outputVariables,
+        nextNodeId: nextNodeId ?? null,
+      };
 
-    return { taskExecution: updatedtaskExecution, userTaskExecution };
+      await engineUtils.updateInstanceAndRelations({
+        instance,
+        task,
+        node,
+        result,
+        transaction,
+      });
+
+      return { taskExecution: updatedtaskExecution, userTaskExecution };
+    });
   },
 };

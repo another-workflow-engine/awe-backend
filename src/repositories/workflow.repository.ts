@@ -32,6 +32,20 @@ export const workflowRepository = {
       .executeTakeFirst();
   },
 
+  findByIdAndEnvironmentIds: async (
+    id: string,
+    environmentIds: string[],
+    transaction?: Transaction<DB>,
+  ) => {
+    return await (transaction ?? db)
+      .selectFrom("workflow")
+      .selectAll()
+      .where("id", "=", id)
+      .where("environment_id", "in", environmentIds)
+      .where("is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
   findByBaseWorkflowIdAndEnvironmentId: async (
     baseWorkflowId: string,
     environmentId: string,
@@ -135,6 +149,84 @@ export const workflowRepository = {
     });
   },
 
+  findByEnvironmentIdsWithLatestVersion: async (
+    environmentIds: string[],
+    transaction?: Transaction<DB>,
+  ): Promise<
+    {
+      workflow: WorkflowModel;
+      status: WorkflowVersionStatus | null;
+      latestWorkflowVersion: number | null;
+    }[]
+  > => {
+    if (environmentIds.length === 0) {
+      return [];
+    }
+
+    const dbConn = transaction ?? db;
+
+    const workflows = await dbConn
+      .selectFrom("workflow")
+      .selectAll()
+      .where("environment_id", "in", environmentIds)
+      .where("is_deleted", "=", false)
+      .execute();
+
+    const workflowIds = workflows.map((w) => w.id);
+
+    if (workflowIds.length === 0) {
+      return [];
+    }
+
+    const versions = await dbConn
+      .selectFrom("workflow_version")
+      .select(["workflow_id", "version", "status"])
+      .where("workflow_id", "in", workflowIds)
+      .where("is_deleted", "=", false)
+      .distinctOn("workflow_id")
+      .orderBy("workflow_id")
+      .orderBy("version", "desc")
+      .execute();
+
+    const versionMap = new Map(
+      versions.map((v) => [
+        v.workflow_id,
+        {
+          version: Number(v.version),
+          status: v.status,
+        },
+      ]),
+    );
+
+    return workflows.map((wf) => {
+      const versionInfo = versionMap.get(wf.id);
+
+      return {
+        workflow: wf,
+        status: versionInfo?.status ?? null,
+        latestWorkflowVersion: versionInfo?.version ?? null,
+      };
+    });
+  },
+
+  countByEnvironmentIds: async (
+    environmentIds: string[],
+    transaction?: Transaction<DB>,
+  ): Promise<number> => {
+    if (environmentIds.length === 0) {
+      return 0;
+    }
+
+    const result = await (transaction ?? db)
+      .selectFrom("workflow")
+      .select((eb) => eb.fn.count<number>("id").as("count"))
+      .where("environment_id", "in", environmentIds)
+      .where("is_deleted", "=", false)
+      .executeTakeFirstOrThrow();
+
+    return Number(result.count);
+  },
+
   findByEnvironmentIdWithLatestVersionPaginated: async (
     environemntId: string,
     limit: number,
@@ -164,6 +256,88 @@ export const workflowRepository = {
       .selectFrom("workflow")
       .select((eb) => eb.fn.count<number>("id").as("count"))
       .where("environment_id", "=", environemntId)
+      .where("is_deleted", "=", false)
+      .executeTakeFirstOrThrow();
+
+    const workflowIds = workflows.map((w) => w.id);
+
+    if (workflowIds.length === 0) {
+      return {
+        items: [],
+        total: Number(countResult.count),
+      };
+    }
+
+    const versions = await dbConn
+      .selectFrom("workflow_version")
+      .select(["workflow_id", "id", "version", "status"])
+      .where("workflow_id", "in", workflowIds)
+      .where("is_deleted", "=", false)
+      .distinctOn("workflow_id")
+      .orderBy("workflow_id")
+      .orderBy("version", "desc")
+      .execute();
+
+    const versionMap = new Map(
+      versions.map((v) => [
+        v.workflow_id,
+        {
+          version: Number(v.version),
+          status: v.status,
+          id: v.id,
+        },
+      ]),
+    );
+
+    const items = workflows.map((wf) => {
+      const versionInfo = versionMap.get(wf.id);
+
+      return {
+        workflow: wf,
+        status: versionInfo?.status ?? null,
+        latestVersionId: versionInfo?.id ?? null,
+      };
+    });
+
+    return {
+      items,
+      total: Number(countResult.count),
+    };
+  },
+
+  findByEnvironmentIdsWithLatestVersionPaginated: async (
+    environmentIds: string[],
+    limit: number,
+    offset: number,
+    transaction?: Transaction<DB>,
+  ): Promise<{
+    items: Array<{
+      workflow: WorkflowModel;
+      status: WorkflowVersionStatus | null;
+      latestVersionId: string | null;
+    }>;
+    total: number;
+  }> => {
+    if (environmentIds.length === 0) {
+      return { items: [], total: 0 };
+    }
+
+    const dbConn = transaction ?? db;
+
+    const workflows = await dbConn
+      .selectFrom("workflow")
+      .selectAll()
+      .where("environment_id", "in", environmentIds)
+      .where("is_deleted", "=", false)
+      .orderBy("workflow.created_on", "desc")
+      .limit(limit)
+      .offset(offset)
+      .execute();
+
+    const countResult = await dbConn
+      .selectFrom("workflow")
+      .select((eb) => eb.fn.count<number>("id").as("count"))
+      .where("environment_id", "in", environmentIds)
       .where("is_deleted", "=", false)
       .executeTakeFirstOrThrow();
 
@@ -209,7 +383,7 @@ export const workflowRepository = {
 
     return {
       items,
-      total: countResult.count,
+      total: Number(countResult.count),
     };
   },
 };

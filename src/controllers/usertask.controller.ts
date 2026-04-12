@@ -11,6 +11,7 @@ export const userTaskController = {
     const { page, limit, offset } = parsePaginationFromRequest(req);
     const { items, total } = await userTaskService.getPendingPaginated(
       req.actor,
+      req.environmentIds,
       limit,
       offset,
     );
@@ -20,14 +21,21 @@ export const userTaskController = {
 
   getTask: async (req: Request, res: Response) => {
     const { taskId } = UserTaskParamsSchema.parse(req.params);
-    const task = await userTaskService.get(taskId, req.actor);
+    const task = await userTaskService.get(taskId, req.actor, req.environmentIds);
     return res.json({ ...task });
   },
 
   completeUserTask: async (req: Request, res: Response) => {
     const { taskId } = UserTaskParamsSchema.parse(req.params);
-    const { userTaskExecution, taskExecution } =
-      await userTaskService.completeUserTask(taskId, req.body ?? {}, req.actor);
+    const userInput = req.body ?? {};
+    delete userInput.environmentType;
+    const { taskExecution } =
+      await userTaskService.completeUserTask(
+        taskId,
+        userInput,
+        req.actor,
+        req.environmentIds,
+      );
     return res.json({
       status: taskExecution.status,
       completedAt: taskExecution.ended_on,

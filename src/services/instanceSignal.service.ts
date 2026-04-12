@@ -58,11 +58,13 @@ async function updateInstanceControlSignal(
   instanceId: string,
   controlSignal: InstanceControlSignal,
   actorId: string,
+  environmentIds: string[],
 ): Promise<InstanceModel> {
   return await db.transaction().execute(async (transaction) => {
     let { instance, task, taskExecution } =
       await instanceService.getLockedInProgressOrPausedRelations(
         instanceId,
+        environmentIds,
         transaction,
       );
     if (!instance) {
@@ -125,22 +127,26 @@ export const instanceSignalService = {
   signalPause: async (
     instanceId: string,
     actor: ActorModel,
+    environmentIds: string[],
   ): Promise<InstanceModel> => {
     return await updateInstanceControlSignal(
       instanceId,
       InstanceControlSignals.PAUSE,
       actor.id,
+      environmentIds,
     );
   },
 
   signalTerminate: async (
     instanceId: string,
     actor: ActorModel,
+    environmentIds: string[],
   ): Promise<InstanceModel> => {
     return await updateInstanceControlSignal(
       instanceId,
       InstanceControlSignals.TERMINATE,
       actor.id,
+      environmentIds,
     );
   },
 };

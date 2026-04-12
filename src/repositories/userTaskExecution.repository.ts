@@ -30,11 +30,15 @@ export const userTaskExecutionRepository = {
     }
   },
 
-  findByEnvironmentIdAndStatus: async (
-    environmentId: string,
+  findByEnvironmentIdsAndStatus: async (
+    environmentIds: string[],
     status: TaskStatus,
     transaction?: Transaction<DB>,
   ): Promise<PendingUserTaskList[]> => {
+    if (environmentIds.length === 0) {
+      return [];
+    }
+
     try {
       const result = await (transaction ?? db)
         .selectFrom("user_task_execution")
@@ -67,7 +71,7 @@ export const userTaskExecutionRepository = {
           eb.ref("workflow_version.version").as("workflow_version"),
         ])
         .where("task_execution.status", "=", status)
-        .where("workflow.environment_id", "=", environmentId)
+        .where("workflow.environment_id", "in", environmentIds)
         .execute();
 
       return result.map((row) => ({
@@ -88,9 +92,9 @@ export const userTaskExecutionRepository = {
     }
   },
 
-  findByIdAndEnvironmentIdWithRelations: async (
+  findByIdAndEnvironmentIdsWithRelations: async (
     id: string,
-    environmentId: string,
+    environmentIds: string[],
     transaction?: Transaction<DB>,
   ): Promise<
     | {
@@ -101,6 +105,10 @@ export const userTaskExecutionRepository = {
       }
     | undefined
   > => {
+    if (environmentIds.length === 0) {
+      return;
+    }
+
     const result = await (transaction ?? db)
       .selectFrom("user_task_execution")
       .innerJoin(
@@ -169,7 +177,7 @@ export const userTaskExecutionRepository = {
         eb.ref("workflow.name").as("workflow_name"),
         eb.ref("workflow_version.version").as("workflow_version"),
       ])
-      .where("environment.id", "=", environmentId)
+      .where("environment.id", "in", environmentIds)
       .where("user_task_execution.id", "=", id)
       .executeTakeFirst();
 
@@ -230,8 +238,8 @@ export const userTaskExecutionRepository = {
     };
   },
 
-  findByEnvironmentIdAndStatusPaginated: async (
-    environmentId: string,
+  findByEnvironmentIdsAndStatusPaginated: async (
+    environmentIds: string[],
     status: TaskStatus,
     limit: number,
     offset: number,
@@ -240,6 +248,13 @@ export const userTaskExecutionRepository = {
     items: PendingUserTaskList[];
     total: number;
   }> => {
+    if (environmentIds.length === 0) {
+      return {
+        items: [],
+        total: 0,
+      };
+    }
+
     try {
       const items = await (transaction ?? db)
         .selectFrom("user_task_execution")
@@ -272,7 +287,7 @@ export const userTaskExecutionRepository = {
           eb.ref("workflow_version.version").as("workflow_version"),
         ])
         .where("task_execution.status", "=", status)
-        .where("workflow.environment_id", "=", environmentId)
+        .where("workflow.environment_id", "in", environmentIds)
         .orderBy("user_task_execution.created_on", "desc")
         .limit(limit)
         .offset(offset)
@@ -297,7 +312,7 @@ export const userTaskExecutionRepository = {
           eb.fn.count<number>("user_task_execution.id").as("count"),
         )
         .where("task_execution.status", "=", status)
-        .where("workflow.environment_id", "=", environmentId)
+        .where("workflow.environment_id", "in", environmentIds)
         .executeTakeFirstOrThrow();
 
       const formattedItems = items.map((row) => ({
@@ -316,7 +331,7 @@ export const userTaskExecutionRepository = {
 
       return {
         items: formattedItems,
-        total: countResult.count,
+        total: Number(countResult.count),
       };
     } catch (err) {
       throw new RepositoryError(

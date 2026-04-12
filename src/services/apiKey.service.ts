@@ -12,22 +12,33 @@ import argon2 from "argon2";
 import { db } from "../database.js";
 import { actorRepository } from "../repositories/actor.repository.js";
 import { baseLogger } from "../logger.js";
+import type { ApiKeyModel } from "../types/models.js";
 import type { EnvironmentType } from "../types/database.js";
 
 export const apiKeyService = {
-  getAll: async (actor: ActorModel) => {
+  getAll: async (
+    actor: ActorModel,
+    environmentTypes?: EnvironmentType[],
+  ): Promise<Array<ApiKeyModel & { environmentType: EnvironmentType }>> => {
     if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
 
-    return await apiKeyRepository.findByOrganizationActorId(actor.id);
+    const apiKeys = await apiKeyRepository.findByOrganizationActorId(actor.id);
+
+    if (!environmentTypes || environmentTypes.length === 0) {
+      return apiKeys;
+    }
+
+    const selected = new Set(environmentTypes);
+    return apiKeys.filter((apiKey) => selected.has(apiKey.environmentType));
   },
 
-  createNew: async (
-    label: string,
-    environmentType: EnvironmentType,
-    actor: ActorModel,
-  ) => {
+  createNew: async (label: string, environmentType: EnvironmentType, actor: ActorModel): Promise<{
+    rawKey: string;
+    apiKey: ApiKeyModel;
+    environmentType: EnvironmentType;
+  }> => {
     if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
@@ -85,7 +96,7 @@ export const apiKeyService = {
         transaction,
       );
 
-      return { rawKey, apiKey };
+      return { rawKey, apiKey, environmentType: environment.type };
     });
   },
 

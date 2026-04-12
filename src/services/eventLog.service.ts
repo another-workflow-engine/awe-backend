@@ -4,7 +4,6 @@ import type { Transaction } from "kysely";
 import { instanceLogRepository } from "../repositories/instanceLog.repository.js";
 import { InstanceEntityTypes } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
-import type { ActorModel } from "../types/models.js";
 
 export type CreateInstanceLogParams = {
   instanceId: string;
@@ -89,7 +88,10 @@ export const eventLogService = {
     );
   },
 
-  getInstanceAudit: async (instanceId: string, actor: ActorModel) => {
-    return await instanceLogRepository.getInstanceAudit(instanceId, actor);
+  getInstanceAudit: async (instanceId: string, environmentIds: string[]) => {
+    return await instanceLogRepository.getInstanceAudit(
+      instanceId,
+      environmentIds,
+    );
   },
 };

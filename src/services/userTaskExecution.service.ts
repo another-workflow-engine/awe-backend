@@ -67,36 +67,45 @@ export const userTaskService = {
   },
 
   getPending: async (actor: ActorModel): Promise<PendingUserTaskList[]> => {
-    const environment = await environmentService.getByActor(actor);
-    return await userTaskExecutionRepository.findByEnvironmentIdAndStatus(
-      environment.id,
+    const environments = await environmentService.getAllByActor(actor);
+    return await userTaskExecutionRepository.findByEnvironmentIdsAndStatus(
+      environments.map((environment) => environment.id),
       TaskStatuses.IN_PROGRESS,
     );
   },
 
   getPendingPaginated: async (
     actor: ActorModel,
+    environmentIds: string[],
     limit: number,
     offset: number,
   ): Promise<{
     items: PendingUserTaskList[];
     total: number;
   }> => {
-    const environment = await environmentService.getByActor(actor);
-    return await userTaskExecutionRepository.findByEnvironmentIdAndStatusPaginated(
-      environment.id,
+    const filteredEnvironmentIds =
+      environmentIds.length > 0
+        ? environmentIds
+        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
+
+    return await userTaskExecutionRepository.findByEnvironmentIdsAndStatusPaginated(
+      filteredEnvironmentIds,
       TaskStatuses.IN_PROGRESS,
       limit,
       offset,
     );
   },
 
-  get: async (id: string, actor: ActorModel) => {
-    const environment = await environmentService.getByActor(actor);
+  get: async (id: string, actor: ActorModel, environmentIds: string[]) => {
+    const filteredEnvironmentIds =
+      environmentIds.length > 0
+        ? environmentIds
+        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
+
     const result =
-      await userTaskExecutionRepository.findByIdAndEnvironmentIdWithRelations(
+      await userTaskExecutionRepository.findByIdAndEnvironmentIdsWithRelations(
         id,
-        environment.id,
+        filteredEnvironmentIds,
       );
 
     if (!result) {
@@ -148,15 +157,20 @@ export const userTaskService = {
     id: string,
     userInput: Record<string, unknown>,
     actor: ActorModel,
+    environmentIds: string[],
   ): Promise<{
     userTaskExecution: UserTaskExecutionModel;
     taskExecution: TaskExecutionModel;
   }> => {
-    const environment = await environmentService.getByActor(actor);
+    const filteredEnvironmentIds =
+      environmentIds.length > 0
+        ? environmentIds
+        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
+
     const models =
-      await userTaskExecutionRepository.findByIdAndEnvironmentIdWithRelations(
+      await userTaskExecutionRepository.findByIdAndEnvironmentIdsWithRelations(
         id,
-        environment.id,
+        filteredEnvironmentIds,
       );
 
     if (!models) {

@@ -43,6 +43,22 @@ export const workflowVersionRepository = {
       .executeTakeFirst();
   },
 
+  findByIdAndEnvironmentIds: async (
+    id: string,
+    environmentIds: string[],
+    transaction?: Transaction<DB>,
+  ) => {
+    return await (transaction ?? db)
+      .selectFrom("workflow_version")
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .selectAll("workflow_version")
+      .where("workflow_version.id", "=", id)
+      .where("workflow.environment_id", "in", environmentIds)
+      .where("workflow_version.is_deleted", "=", false)
+      .where("workflow.is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
   findByWorkflowId: async (
     id: string,
     transaction?: Transaction<DB>,
@@ -90,7 +106,7 @@ export const workflowVersionRepository = {
 
       return {
         items,
-        total: countResult.count,
+        total: Number(countResult.count),
       };
     } catch (err) {
       throw new RepositoryError(
@@ -123,15 +139,26 @@ export const workflowVersionRepository = {
 
   findActiveVersionByWorkflowId: async (
     workflowId: string,
+    environmentIds?: string[],
     transaction?: Transaction<DB>,
   ): Promise<WorkflowVersionModel | undefined> => {
-    return await (transaction ?? db)
+    const dbConn = transaction ?? db;
+
+    const query = dbConn
       .selectFrom("workflow_version")
-      .selectAll()
-      .where("workflow_id", "=", workflowId)
-      .where("status", "=", WorkflowVersionStatuses.ACTIVE)
-      .where("is_deleted", "=", false)
-      .executeTakeFirst();
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .selectAll("workflow_version")
+      .where("workflow_version.workflow_id", "=", workflowId)
+      .where("workflow_version.status", "=", WorkflowVersionStatuses.ACTIVE)
+      .where("workflow_version.is_deleted", "=", false)
+      .where("workflow.is_deleted", "=", false);
+
+    const filteredQuery =
+      environmentIds && environmentIds.length > 0
+        ? query.where("workflow.environment_id", "in", environmentIds)
+        : query;
+
+    return await filteredQuery.executeTakeFirst();
   },
 
   insertNextVersion: async (

@@ -6,8 +6,6 @@ import type {
   InstanceEntityType,
   InstanceEventType,
 } from "../types/database.js";
-import type { ActorModel } from "../types/models.js";
-import { environmentService } from "../services/environment.services.js";
 
 export type NewInstanceLog = Insertable<InstanceLog>;
 
@@ -67,9 +65,11 @@ export const instanceLogRepository = {
     }
   },
 
-  getInstanceAudit: async (instanceId: string, actor: ActorModel) => {
+  getInstanceAudit: async (instanceId: string, environmentIds: string[]) => {
     try {
-      const environment = await environmentService.getByActor(actor);
+      if (environmentIds.length === 0) {
+        return null;
+      }
 
       const logs = await db
         .selectFrom("instance_log")
@@ -82,7 +82,7 @@ export const instanceLogRepository = {
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
         .selectAll("instance_log")
         .where("instance_log.instance_id", "=", instanceId)
-        .where("workflow.environment_id", "=", environment.id)
+        .where("workflow.environment_id", "in", environmentIds)
         .orderBy("instance_log.created_on", "asc")
         .execute();
 
@@ -103,7 +103,7 @@ export const instanceLogRepository = {
           eb.ref("workflow.id").as("workflow_id"),
         ])
         .where("instance.id", "=", instanceId)
-        .where("workflow.environment_id", "=", environment.id)
+        .where("workflow.environment_id", "in", environmentIds)
         .executeTakeFirst();
 
       if (!instanceRow) return null;

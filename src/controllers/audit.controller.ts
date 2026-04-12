@@ -9,7 +9,10 @@ const instanceIdParamSchema = z.object({
 export const auditController = {
   getInstanceAudit: async (req: Request, res: Response): Promise<void> => {
     const { instanceId } = instanceIdParamSchema.parse(req.params);
-    const audit = await eventLogService.getInstanceAudit(instanceId, req.actor);
+    const audit = await eventLogService.getInstanceAudit(
+      instanceId,
+      req.environmentIds,
+    );
     if (!audit) {
       res.status(404).json({ error: "Instance not found" });
       return;

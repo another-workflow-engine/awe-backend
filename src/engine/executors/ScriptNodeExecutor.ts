@@ -44,8 +44,9 @@ export class ScriptNodeExecutor extends BaseExecutor<typeof NodeTypes.SCRIPT> {
       return this.getFailedResult(`Script failed to execute`, result.output);
     }
 
-    this.configuration.responseMap.forEach((dataMap) => {
+    for (const dataMap of this.configuration.responseMap) {
       const value = contextUtils.getByJsonPath(result.output, dataMap.jsonPath);
+
       if (value === undefined) {
         return this.getFailedResult(
           `"${dataMap.jsonPath}" is missing from result`,
@@ -59,7 +60,7 @@ export class ScriptNodeExecutor extends BaseExecutor<typeof NodeTypes.SCRIPT> {
       }
 
       this.outputVariables[dataMap.contextVariableName] = value;
-    });
+    }
 
     return await this.getCompletedResult();
   }

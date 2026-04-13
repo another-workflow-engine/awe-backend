@@ -43,16 +43,17 @@ export const userTaskService = {
       configObject,
     );
 
-    const evaluatedContext =
-      await contextUtils.evaluateContext(executionContext);
 
-    const assignee = configuration.assignee
-      ? contextUtils.getFeelEvaluatedValue(
-          configuration.assignee,
-          evaluatedContext,
-          FeelDataType.STRING,
-        )
-      : null;
+    let assignee: string | null = null;
+    if (configuration.assignee?.trim()) {
+      const evaluatedContext = await contextUtils.evaluateContext(executionContext);
+      assignee = contextUtils.getFeelEvaluatedValue(
+        configuration.assignee,
+        evaluatedContext,
+        FeelDataType.STRING,
+      );
+    }
+
     const title = configuration.title ?? null;
 
     return await userTaskExecutionRepository.insert(

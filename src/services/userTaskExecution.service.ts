@@ -10,7 +10,7 @@ import {
   FeelDataType,
 } from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
-import type { InputVariables, ExecutorResult } from "../types/engine.js";
+import type { Context, ExecutorResult } from "../types/engine.js";
 import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 import type {
@@ -29,12 +29,13 @@ import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
 import { db } from "../database.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import { ContextSchema } from "../schemas/context.schema.js";
 
 export const userTaskService = {
   create: async (
     node: UserNodeModel,
     taskExecution: TaskExecutionModel,
-    executionContext: InputVariables,
+    executionContext: Context,
     transaction: Transaction<DB>,
   ): Promise<UserTaskExecutionModel> => {
     const configObject = converterUtils.jsonValueToObject(node.configuration);
@@ -66,36 +67,45 @@ export const userTaskService = {
   },
 
   getPending: async (actor: ActorModel): Promise<PendingUserTaskList[]> => {
-    const environment = await environmentService.getByActor(actor);
-    return await userTaskExecutionRepository.findByEnvironmentIdAndStatus(
-      environment.id,
+    const environments = await environmentService.getAllByActor(actor);
+    return await userTaskExecutionRepository.findByEnvironmentIdsAndStatus(
+      environments.map((environment) => environment.id),
       TaskStatuses.IN_PROGRESS,
     );
   },
 
   getPendingPaginated: async (
     actor: ActorModel,
+    environmentIds: string[],
     limit: number,
     offset: number,
   ): Promise<{
     items: PendingUserTaskList[];
     total: number;
   }> => {
-    const environment = await environmentService.getByActor(actor);
-    return await userTaskExecutionRepository.findByEnvironmentIdAndStatusPaginated(
-      environment.id,
+    const filteredEnvironmentIds =
+      environmentIds.length > 0
+        ? environmentIds
+        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
+
+    return await userTaskExecutionRepository.findByEnvironmentIdsAndStatusPaginated(
+      filteredEnvironmentIds,
       TaskStatuses.IN_PROGRESS,
       limit,
       offset,
     );
   },
 
-  get: async (id: string, actor: ActorModel) => {
-    const environment = await environmentService.getByActor(actor);
+  get: async (id: string, actor: ActorModel, environmentIds: string[]) => {
+    const filteredEnvironmentIds =
+      environmentIds.length > 0
+        ? environmentIds
+        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
+
     const result =
-      await userTaskExecutionRepository.findByIdAndEnvironmentIdWithRelations(
+      await userTaskExecutionRepository.findByIdAndEnvironmentIdsWithRelations(
         id,
-        environment.id,
+        filteredEnvironmentIds,
       );
 
     if (!result) {
@@ -104,7 +114,8 @@ export const userTaskService = {
 
     const { userTaskExecution, taskExecution, node, workflow } = result;
 
-    const nodeContext = converterUtils.jsonValueToContextVariables(
+    const nodeContext = converterUtils.parseOrThrow(
+      ContextSchema,
       taskExecution.input_variables,
     );
     const evaluatedContext = await contextUtils.evaluateContext(nodeContext);
@@ -146,15 +157,20 @@ export const userTaskService = {
     id: string,
     userInput: Record<string, unknown>,
     actor: ActorModel,
+    environmentIds: string[],
   ): Promise<{
     userTaskExecution: UserTaskExecutionModel;
     taskExecution: TaskExecutionModel;
   }> => {
-    const environment = await environmentService.getByActor(actor);
+    const filteredEnvironmentIds =
+      environmentIds.length > 0
+        ? environmentIds
+        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
+
     const models =
-      await userTaskExecutionRepository.findByIdAndEnvironmentIdWithRelations(
+      await userTaskExecutionRepository.findByIdAndEnvironmentIdsWithRelations(
         id,
-        environment.id,
+        filteredEnvironmentIds,
       );
 
     if (!models) {
@@ -186,7 +202,8 @@ export const userTaskService = {
       node.configuration,
     );
 
-    const executionContext = converterUtils.jsonValueToContextVariables(
+    const executionContext = converterUtils.parseOrThrow(
+      ContextSchema,
       taskExecution.input_variables,
     );
 

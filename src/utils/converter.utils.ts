@@ -1,10 +1,5 @@
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import type { JsonValue } from "../types/database.js";
-import type {
-  InputVariables,
-  FetchableSettings,
-  UrlSettings,
-} from "../types/engine.js";
 import { TimeUnit } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import type { NodeInputSchema } from "../types/workflow.js";
@@ -19,10 +14,6 @@ function isNodeInputSchema(value: unknown): value is NodeInputSchema {
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 export const converterUtils = {
   jsonValueToObject: (value: JsonValue): Record<string, unknown> => {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -33,20 +24,6 @@ export const converterUtils = {
 
   objectToJsonValue: (value: object): JsonValue => {
     return value as JsonValue;
-  },
-
-  jsonValueToContextVariables: (value: JsonValue): InputVariables => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new DataIntegrityError("Invalid context variables");
-    }
-
-    const obj = value as Record<string, unknown>;
-
-    if (!obj.constants || !obj.fetchables || !obj.urls) {
-      throw new DataIntegrityError("Invalid context variables");
-    }
-
-    return obj as unknown as InputVariables;
   },
 
   jsonValueToNodeInputSchema: (value: JsonValue): NodeInputSchema => {
@@ -67,16 +44,6 @@ export const converterUtils = {
     }
 
     throw new DataIntegrityError("Invalid Instance Log Detail schema");
-  },
-
-  objectToContextVariables: (obj: Record<string, unknown>): InputVariables => {
-    return {
-      constants: isRecord(obj.constants) ? obj.constants : {},
-      fetchables: isRecord(obj.fetchables)
-        ? (obj.fetchables as Record<string, FetchableSettings>)
-        : {},
-      urls: isRecord(obj.urls) ? (obj.urls as Record<string, UrlSettings>) : {},
-    };
   },
 
   parseOrThrow<T>(

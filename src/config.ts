@@ -17,6 +17,8 @@ const Config = {
   JDOODLE_CLIENT_ID: process.env.JDOODLE_CLIENT_ID,
   JDOODLE_CLIENT_SECRET: process.env.JDOODLE_CLIENT_SECRET,
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  AWS_REGION: process.env.AWS_REGION,
+  KMS_ARN: process.env.KMS_ARN,
 };
 
 function validateConfig(config: Record<string, string | undefined>) {

@@ -6,6 +6,7 @@ import type {
   InstanceEventType,
   InstanceStatus,
   NodeType,
+  SecretProviderType,
   TaskStatus,
   WorkflowVersionStatus,
 } from "./database.js";
@@ -95,3 +96,9 @@ export enum TimeUnit {
   SECOND = "second",
   MINUTE = "minute",
 }
+
+export const SecretProviderTypes = {
+  AWS_SECRETS_MANAGER: "aws_secrets_manager",
+  DEFAULT: "default",
+  INFISICAL: "infisical",
+} as const satisfies Record<string, SecretProviderType>;

@@ -2,17 +2,7 @@ import { z } from "zod";
 import { FeelDataType, NodeTypes, TimeUnit } from "../types/enums.js";
 import { HttpMethodSchema } from "../types/http.js";
 
-export const FeelDataTypeSchema = z.enum([
-  FeelDataType.NUMBER,
-  FeelDataType.STRING,
-  FeelDataType.BOOLEAN,
-  FeelDataType.DATE,
-  FeelDataType.TIME,
-  FeelDataType.DATETIME,
-  FeelDataType.LIST,
-  FeelDataType.OBJECT,
-  FeelDataType.NULL,
-]);
+export const FeelDataTypeSchema = z.enum(Object.values(FeelDataType));
 
 const HttpHeaderSchema = z.object({
   key: z.string(),
@@ -34,10 +24,15 @@ export const StartNodeDataMapSchema = z.object({
   fetchableId: z.string().optional(),
 });
 
+export const SecretDataMapSchema = z.object({
+  secretId: z.string(),
+  secretVariableName: z.string(),
+});
+
 export const StartNodeConfigurationSchema = z.object({
   inputDataMap: z.array(StartNodeDataMapSchema),
-
   fetchables: z.array(FetchableSchema),
+  secretDataMap: z.array(SecretDataMapSchema).default([]),
 });
 
 export const EndNodeConfigurationSchema = z.object({

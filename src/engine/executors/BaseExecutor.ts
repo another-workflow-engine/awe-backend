@@ -1,8 +1,8 @@
 import type { NodeModel } from "../../types/models.js";
 import type {
-  InputVariables,
-  ExecutorResult,
   Context,
+  ExecutorResult,
+  EvaluatedContext,
 } from "../../types/engine.js";
 import { TaskStatuses } from "../../types/enums.js";
 import { edgeService } from "../../services/edge.services.js";
@@ -18,15 +18,15 @@ import { contextUtils } from "../../utils/context.utils.js";
 
 export abstract class BaseExecutor<T extends NodeType> {
   protected node: NodeModel;
-  protected inputVariables: InputVariables;
+  protected inputVariables: Context;
   protected outputVariables: Record<string, unknown> = {};
   protected configuration: NodeConfiguration<T>;
 
   protected abstract execute(
-    evaluatedContext: Context,
+    evaluatedContext: EvaluatedContext,
   ): Promise<ExecutorResult>;
 
-  constructor(node: NodeModel, inputVariables: InputVariables) {
+  constructor(node: NodeModel, inputVariables: Context) {
     this.node = node;
     this.inputVariables = inputVariables;
     this.configuration = converterUtils.parseOrThrow(

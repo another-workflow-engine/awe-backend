@@ -1,23 +1,16 @@
 import z from "zod";
 import type { TaskStatus } from "./database.js";
-import type { FeelDataType } from "./enums.js";
+import {
+  ContextSchema,
+  type FetchableSettingsSchema,
+  type UrlSettingsSchema,
+} from "../schemas/context.schema.js";
 
-export interface UrlSettings {
-  urlExpression: string;
-  headers: Record<string, string>;
-}
+export type UrlSettings = z.infer<typeof UrlSettingsSchema>;
 
-export interface FetchableSettings {
-  urlId: string;
-  jsonPath: string;
-  dataType: FeelDataType;
-}
+export type FetchableSettings = z.infer<typeof FetchableSettingsSchema>;
 
-export interface InputVariables {
-  constants: Record<string, unknown>; // variableName: value
-  fetchables: Record<string, FetchableSettings>; // variableName: FetchableSettings
-  urls: Record<string, UrlSettings>; // urlId: settings
-}
+export type Context = z.infer<typeof ContextSchema>;
 
 export interface ExecutorResult {
   status: TaskStatus;
@@ -35,8 +28,9 @@ export interface QueueJobData {
 
 export type NodeRunResult = { nextNodeIds: string[] };
 
-export type Context = {
+export type EvaluatedContext = {
   context: Record<string, unknown>;
+  secret: Record<string, string>;
 };
 
 export const ScriptExecutionResultSchema = z.object({

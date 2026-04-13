@@ -1,7 +1,7 @@
 import type { Transaction } from "kysely";
 import { db } from "../database.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
-import type { InputVariables } from "../types/engine.js";
+import type { Context } from "../types/engine.js";
 import { LogEventTypes, TaskStatuses } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import type { TaskExecutionModel } from "../types/models.js";
@@ -15,13 +15,15 @@ type ExecutionNodeStatus =
   | "failed"
   | "in_progress"
   | "terminated"
-  | "pending";
+  | "pending"
+  | "discarded";
 
 type ExecutionTimelineItem = {
   nodeId: string;
   nodeClientId: string;
   nodeType: string;
   nodeName: string | null;
+  nodeConfiguration: unknown;
   order: number;
   status: ExecutionNodeStatus;
   startedOn: Date | null;
@@ -29,6 +31,7 @@ type ExecutionTimelineItem = {
   inputVariables: unknown;
   outputVariables: unknown;
   userTaskExecutionId: string | null;
+  taskId: string | null;
   outgoingConnections: {
     destinationNodeId: string | null;
     destinationNodeClientId: string | null;
@@ -203,31 +206,80 @@ export const taskExecutionService = {
         (orderByNodeId.get(b.node_id) ?? Number.MAX_SAFE_INTEGER),
     );
 
-    const executionItems: ExecutionTimelineItem[] = orderedNodes.map(
-      (node) => {
-        const outgoingConnections =
-          outgoingConnectionsByNodeId.get(node.node_id) ?? [];
-
-        const nodeExecutions = executionByNodeId.get(node.node_id) ?? [];
-        const latestTaskExecution = getLatestTaskExecution(nodeExecutions);
-
-        return {
-          nodeId: node.node_id,
-          nodeClientId: node.node_client_id,
-          nodeType: node.node_type,
-          nodeName: node.node_name,
-          node_configuration: node.node_configuration,
-          order: orderByNodeId.get(node.node_id) ?? Number.MAX_SAFE_INTEGER,
-          status: mapExecutionStatus(latestTaskExecution?.status),
-          startedOn: latestTaskExecution?.started_on ?? null,
-          endedOn: latestTaskExecution?.ended_on ?? null,
-          inputVariables: latestTaskExecution?.input_variables ?? null,
-          outputVariables: latestTaskExecution?.output_variables ?? null,
-          userTaskExecutionId: latestTaskExecution?.user_task_execution_id ?? null,
-          outgoingConnections,
-        };
-      },
+    const sortedExecutions = [...executions].sort(
+      (a, b) => a.created_on.getTime() - b.created_on.getTime(),
     );
+    const execIndexById = new Map<string, number>();
+    sortedExecutions.forEach((ex, idx) => execIndexById.set(ex.id, idx));
+
+    const discardedNodeIds = new Set<string>();
+
+    for (const node of nodes) {
+      if (node.node_type === "decision") {
+        const nodeExecs = executionByNodeId.get(node.node_id) ?? [];
+        const latestExec = getLatestTaskExecution(nodeExecs);
+
+        if (latestExec && latestExec.status === "completed") {
+          const idx = execIndexById.get(latestExec.id);
+          let takenDestinationId: string | null = null;
+          if (idx !== undefined && idx < sortedExecutions.length - 1) {
+            takenDestinationId = sortedExecutions[idx + 1]?.node_id ?? null;
+          }
+
+          const outConns = outgoingConnectionsByNodeId.get(node.node_id) ?? [];
+          for (const conn of outConns) {
+            if (
+              conn.destinationNodeId &&
+              conn.destinationNodeId !== takenDestinationId
+            ) {
+              // BFS to mark discarded
+              const queue = [conn.destinationNodeId];
+              while (queue.length > 0) {
+                const cur = queue.shift()!;
+                if (!executionByNodeId.has(cur) && !discardedNodeIds.has(cur)) {
+                  discardedNodeIds.add(cur);
+                  const curOuts = outgoingConnectionsByNodeId.get(cur) ?? [];
+                  for (const co of curOuts) {
+                    if (co.destinationNodeId) queue.push(co.destinationNodeId);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const executionItems: ExecutionTimelineItem[] = orderedNodes.map((node) => {
+      const outgoingConnections =
+        outgoingConnectionsByNodeId.get(node.node_id) ?? [];
+
+      const nodeExecutions = executionByNodeId.get(node.node_id) ?? [];
+      const latestTaskExecution = getLatestTaskExecution(nodeExecutions);
+
+      let status = mapExecutionStatus(latestTaskExecution?.status);
+      if (status === "pending" && discardedNodeIds.has(node.node_id)) {
+        status = "discarded";
+      }
+
+      return {
+        nodeId: node.node_id,
+        nodeClientId: node.node_client_id,
+        nodeType: node.node_type,
+        nodeName: node.node_name,
+        nodeConfiguration: node.node_configuration,
+        order: orderByNodeId.get(node.node_id) ?? Number.MAX_SAFE_INTEGER,
+        status: status,
+        startedOn: latestTaskExecution?.started_on ?? null,
+        endedOn: latestTaskExecution?.ended_on ?? null,
+        inputVariables: latestTaskExecution?.input_variables ?? null,
+        outputVariables: latestTaskExecution?.output_variables ?? null,
+        userTaskExecutionId:
+          latestTaskExecution?.user_task_execution_id ?? null,
+        taskId: latestTaskExecution?.task_id ?? null,
+        outgoingConnections,
+      };
+    });
 
     return {
       data: {
@@ -239,7 +291,7 @@ export const taskExecutionService = {
   create: async (
     instanceId: string,
     taskId: string,
-    inputVariables: InputVariables,
+    inputVariables: Context,
     transaction?: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
     const executeCallback = async (transaction: Transaction<DB>) => {

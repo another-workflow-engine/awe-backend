@@ -1,18 +1,133 @@
 import type {
   DecisionNodeConfiguration,
   EndNodeConfiguration,
+  Fetchable,
   Node,
+  NodeConfiguration,
   NodeInputSchema,
   NodeOuputSchema,
   ScriptNodeConfiguration,
   ServiceNodeConfiguration,
   StartNodeConfiguration,
+  StartNodeDataMap,
   UserNodeConfiguration,
 } from "../types/workflow.js";
-import { NodeTypes } from "../types/enums.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 import type { NodeModel } from "../types/models.js";
 import { converterUtils } from "../utils/converter.utils.js";
+import type { NodeType } from "../types/database.js";
+import { EngineError } from "../errors/EngineError.js";
+
+function extractVariableNames(
+  expression: string,
+  contextSet: Set<string>,
+  secretSet: Set<string>,
+): void {
+  for (const result of expression.matchAll(/(?<=context\.)\w*/g)) {
+    contextSet.add(result[0]);
+  }
+
+  for (const result of expression.matchAll(/(?<=secret\.)\w*/g)) {
+    secretSet.add(result[0]);
+  }
+}
+
+type SchemaResult = {
+  inputSchema: NodeInputSchema;
+  outputSchema: NodeOuputSchema;
+};
+
+function buildSchema(params: {
+  expressions?: string[];
+  outputVariables?: string[];
+  includeSecrets?: boolean;
+}): SchemaResult {
+  const inputVars = new Set<string>();
+  const inputSecrets = new Set<string>();
+  const outputVars = new Set(params.outputVariables ?? []);
+
+  for (const expr of params.expressions ?? []) {
+    extractVariableNames(expr, inputVars, inputSecrets);
+  }
+
+  return {
+    inputSchema: {
+      variableNames: [...inputVars],
+      secretNames: params.includeSecrets === true ? [...inputSecrets] : [],
+    },
+    outputSchema: {
+      variableNames: [...outputVars],
+    },
+  };
+}
+
+function getStartSchema(config: StartNodeConfiguration): SchemaResult {
+  return {
+    inputSchema: {
+      variableNames: config.inputDataMap
+        .filter((i) => i.fetchableId === undefined)
+        .map((i) => i.contextVariableName),
+      secretNames: [],
+    },
+    outputSchema: {
+      variableNames: config.inputDataMap.map((i) => i.contextVariableName),
+    },
+  };
+}
+
+function getUserSchema(config: UserNodeConfiguration): SchemaResult {
+  return buildSchema({
+    expressions: [
+      ...config.requestMap.map((r) => r.valueExpression),
+      ...(config.assignee ? [config.assignee] : []),
+    ],
+    outputVariables: config.responseMap.map((r) => r.contextVariableName),
+  });
+}
+
+function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
+  return buildSchema({
+    expressions: [
+      config.urlExpression,
+      ...(config.body?.map((b) => b.valueExpression) ?? []),
+    ],
+    outputVariables: config.responseMap.map((r) => r.contextVariableName),
+    includeSecrets: true,
+  });
+}
+
+function getScriptSchema(config: ScriptNodeConfiguration): SchemaResult {
+  return buildSchema({
+    expressions: config.parameterMap.map((p) => p.valueExpression),
+    outputVariables: config.responseMap.map((r) => r.contextVariableName),
+    includeSecrets: true,
+  });
+}
+
+function getDecisionSchema(config: DecisionNodeConfiguration): SchemaResult {
+  return buildSchema({
+    expressions: config.rules.map((r) => r.conditionExpression),
+  });
+}
+
+function getEndSchema(config: EndNodeConfiguration): SchemaResult {
+  return buildSchema({
+    expressions: config.resultMap.map((r) => r.valueExpression),
+  });
+}
+
+type SchemaGetters = {
+  [K in NodeType]: (config: NodeConfiguration<K>) => SchemaResult;
+};
+
+const schemaGetters: SchemaGetters = {
+  start: getStartSchema,
+  service: getServiceSchema,
+  script: getScriptSchema,
+  user: getUserSchema,
+  decision: getDecisionSchema,
+  end: getEndSchema,
+};
 
 export const nodeSchemaService = {
   getNodeSchema: (node: NodeModel): Node => {
@@ -31,241 +146,71 @@ export const nodeSchemaService = {
     return converterUtils.parseOrThrow(NodeSchema, nodeObject);
   },
 
-  getInputOutputSchemas: (
-    node: Node,
-  ): {
-    inputSchema: NodeInputSchema;
-    outputSchema: NodeOuputSchema;
-  } => {
-    switch (node.type) {
-      case NodeTypes.START:
-        return nodeSchemaService._getInputOuputSchemasForStartNode(
-          node.configuration,
-        );
+  getFetchablesMap: (
+    inputDataMap: StartNodeDataMap[],
+    fetchables: Fetchable[],
+  ): Record<string, NodeInputSchema> => {
+    const schemas: Record<string, NodeInputSchema> = {};
 
-      case NodeTypes.USER:
-        return nodeSchemaService._getInputOuputSchemasForUserNode(
-          node.configuration,
-        );
+    fetchables.forEach((fetchable) => {
+      schemas[fetchable.id] = buildSchema({
+        expressions: [
+          fetchable.urlExpression,
+          ...(fetchable.headers?.map((b) => b.valueExpression) ?? []),
+        ],
+        includeSecrets: true,
+      }).inputSchema;
+    });
 
-      case NodeTypes.SERVICE:
-        return nodeSchemaService._getInputOutputSchemasForServiceNode(
-          node.configuration,
-        );
+    let fetchablesMap: Record<string, NodeInputSchema> = {};
 
-      case NodeTypes.SCRIPT:
-        return nodeSchemaService._getInputOuputSchemasForScriptNode(
-          node.configuration,
-        );
-
-      case NodeTypes.DECISION:
-        return nodeSchemaService._getInputOutputSchemasForDecisionNode(
-          node.configuration,
-        );
-
-      case NodeTypes.END:
-        return nodeSchemaService._getInputOutputSchemasForEndNode(
-          node.configuration,
-        );
-
-      default:
-        throw new Error(
-          `Input schema evaluation not implemented for node = ${node}`,
-        );
-    }
-  },
-
-  _updateNameSetForExpression: (
-    nameSet: Set<string>,
-    expression: string,
-  ): void => {
-    const iterator = expression.matchAll(/(?<=context\.)\w*/g);
-
-    for (const result of iterator) {
-      nameSet.add(result[0]);
-    }
-  },
-
-  _getInputOuputSchemasForStartNode: (
-    configuration: StartNodeConfiguration,
-  ): {
-    inputSchema: NodeInputSchema;
-    outputSchema: NodeOuputSchema;
-  } => {
-    const inputVariableSet = new Set<string>();
-    const outputVariableSet = new Set<string>();
-
-    configuration.inputDataMap.forEach((input) => {
-      const variableName = input.contextVariableName;
-
-      if (input.fetchableId === undefined) {
-        inputVariableSet.add(variableName);
+    inputDataMap.forEach((dataMap) => {
+      if (!dataMap.fetchableId) {
+        return;
       }
 
-      outputVariableSet.add(variableName);
+      const schema = schemas[dataMap.fetchableId];
+      if (!schema) {
+        throw new EngineError("Fetchable input schema could not be evaluated");
+      }
+
+      fetchablesMap[dataMap.contextVariableName] = schema;
     });
 
-    return {
-      inputSchema: {
-        variableNames: [...inputVariableSet],
-      },
-      outputSchema: {
-        variableNames: [...outputVariableSet],
-      },
-    };
+    return fetchablesMap;
   },
 
-  _getInputOuputSchemasForUserNode: (
-    configuration: UserNodeConfiguration,
+  getInputOutputSchemas: (
+    node: Node,
+    fetchablesMap: Record<string, NodeInputSchema>,
   ): {
     inputSchema: NodeInputSchema;
     outputSchema: NodeOuputSchema;
   } => {
-    const inputVariableSet = new Set<string>();
-    const outputVariableSet = new Set<string>();
+    const schemas = (
+      schemaGetters[node.type] as (
+        config: NodeConfiguration<typeof node.type>,
+      ) => SchemaResult
+    )(node.configuration);
 
-    configuration.requestMap.forEach((data) => {
-      nodeSchemaService._updateNameSetForExpression(
-        inputVariableSet,
-        data.valueExpression,
-      );
-    });
-
-    if (configuration.assignee) {
-      nodeSchemaService._updateNameSetForExpression(
-        inputVariableSet,
-        configuration.assignee,
-      );
-    }
-
-    configuration.responseMap.forEach((data) => {
-      outputVariableSet.add(data.contextVariableName);
-    });
-
-    return {
-      inputSchema: {
-        variableNames: [...inputVariableSet],
+    const inputSchemas = schemas.inputSchema.variableNames.flatMap(
+      (variableName) => {
+        const schema = fetchablesMap[variableName];
+        return schema ? [schema] : [];
       },
-      outputSchema: {
-        variableNames: [...outputVariableSet],
-      },
-    };
-  },
-
-  _getInputOutputSchemasForServiceNode: (
-    configuration: ServiceNodeConfiguration,
-  ): {
-    inputSchema: NodeInputSchema;
-    outputSchema: NodeOuputSchema;
-  } => {
-    const inputVariableSet = new Set<string>();
-    const outputVariableSet = new Set<string>();
-
-    if (configuration.body) {
-      configuration.body.forEach((data) =>
-        nodeSchemaService._updateNameSetForExpression(
-          inputVariableSet,
-          data.valueExpression,
-        ),
-      );
-    }
-
-    nodeSchemaService._updateNameSetForExpression(
-      inputVariableSet,
-      configuration.urlExpression,
     );
 
-    configuration.responseMap.forEach((data) => {
-      outputVariableSet.add(data.contextVariableName);
-    });
+    inputSchemas.push(schemas.inputSchema);
 
-    return {
-      inputSchema: {
-        variableNames: [...inputVariableSet],
-      },
-      outputSchema: {
-        variableNames: [...outputVariableSet],
-      },
+    schemas.inputSchema = {
+      variableNames: [
+        ...new Set(inputSchemas.flatMap((s) => s.variableNames)),
+      ],
+      secretNames: [
+        ...new Set(inputSchemas.flatMap((s) => s.secretNames)),
+      ],
     };
-  },
 
-  _getInputOuputSchemasForScriptNode: (
-    configuration: ScriptNodeConfiguration,
-  ): {
-    inputSchema: NodeInputSchema;
-    outputSchema: NodeOuputSchema;
-  } => {
-    const inputVariableSet = new Set<string>();
-    const outputVariableSet = new Set<string>();
-
-    configuration.parameterMap.forEach((data) => {
-      nodeSchemaService._updateNameSetForExpression(
-        inputVariableSet,
-        data.valueExpression,
-      );
-    });
-
-    configuration.responseMap.forEach((data) => {
-      outputVariableSet.add(data.contextVariableName);
-    });
-
-    return {
-      inputSchema: {
-        variableNames: [...inputVariableSet],
-      },
-      outputSchema: {
-        variableNames: [...outputVariableSet],
-      },
-    };
-  },
-
-  _getInputOutputSchemasForDecisionNode: (
-    configuration: DecisionNodeConfiguration,
-  ): {
-    inputSchema: NodeInputSchema;
-    outputSchema: NodeOuputSchema;
-  } => {
-    const inputVariableSet = new Set<string>();
-
-    configuration.rules.forEach((data) => {
-      nodeSchemaService._updateNameSetForExpression(
-        inputVariableSet,
-        data.conditionExpression,
-      );
-    });
-
-    return {
-      inputSchema: {
-        variableNames: [...inputVariableSet],
-      },
-      outputSchema: {
-        variableNames: [],
-      },
-    };
-  },
-
-  _getInputOutputSchemasForEndNode: (
-    configuration: EndNodeConfiguration,
-  ): {
-    inputSchema: NodeInputSchema;
-    outputSchema: NodeOuputSchema;
-  } => {
-    const inputVariableSet = new Set<string>();
-
-    configuration.resultMap.forEach((data) => {
-      nodeSchemaService._updateNameSetForExpression(
-        inputVariableSet,
-        data.valueExpression,
-      );
-    });
-
-    return {
-      inputSchema: {
-        variableNames: [...inputVariableSet],
-      },
-      outputSchema: {
-        variableNames: [],
-      },
-    };
+    return schemas;
   },
 };

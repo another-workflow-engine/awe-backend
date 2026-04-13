@@ -2,7 +2,7 @@ import type { Transaction } from "kysely";
 import { EngineError } from "../../errors/EngineError.js";
 import { taskExecutionService } from "../../services/taskExecution.service.js";
 import type { DB, NodeType } from "../../types/database.js";
-import type { InputVariables, ExecutorResult } from "../../types/engine.js";
+import type { Context, ExecutorResult } from "../../types/engine.js";
 import { NodeTypes, TaskStatuses } from "../../types/enums.js";
 import type { NodeModel, TaskModel } from "../../types/models.js";
 import type { BaseExecutor } from "./BaseExecutor.js";
@@ -14,7 +14,7 @@ import { StartNodeExecutor } from "./StartNodeExecutor.js";
 
 type ExecutorConstructor = new (
   node: NodeModel,
-  inputVariables: InputVariables,
+  inputVariables: Context,
 ) => BaseExecutor<any>;
 
 const ExecutorMap: Record<
@@ -32,9 +32,9 @@ export default class TaskExecutor {
   private executorConstructor: ExecutorConstructor;
   private node: NodeModel;
   private task: TaskModel;
-  private context: InputVariables;
+  private context: Context;
 
-  constructor(task: TaskModel, node: NodeModel, context: InputVariables) {
+  constructor(task: TaskModel, node: NodeModel, context: Context) {
     this.task = task;
     this.node = node;
     this.context = context;

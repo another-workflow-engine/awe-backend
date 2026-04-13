@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { systemService } from "../services/system.services.js";
+import { dashboardService } from "../services/dashboard.service.js";
 import { z } from "zod";
 
 const RegisterSystemInput = z.object({
@@ -56,5 +57,14 @@ export const systemController = {
         updatedAt: system.modified_on,
       },
     });
+  },
+
+  dashboard: async (req: Request, res: Response) => {
+    const overview = await dashboardService.getOverview(
+      req.actor,
+      req.environmentIds,
+    );
+
+    res.status(200).json(overview);
   },
 };

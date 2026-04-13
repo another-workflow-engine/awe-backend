@@ -147,6 +147,7 @@ export const taskExecutionRepository = {
             eb.ref("node.client_id").as("node_client_id"),
             eb.ref("node.type").as("node_type"),
             eb.ref("node.name").as("node_name"),
+            eb.ref("node.configuration").as("node_configuration"),
             eb.ref("node.created_on").as("created_on"),
           ])
           .where("node.workflow_version_id", "=", instance.workflow_version_id)

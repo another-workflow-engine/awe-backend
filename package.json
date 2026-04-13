@@ -47,9 +47,11 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1024.0",
     "@bpmn-io/feelin": "^6.1.0",
     "@google/genai": "^1.46.0",
     "@google/generative-ai": "^0.24.1",
+    "@infisical/sdk": "^5.0.0",
     "@lezer/python": "^1.1.18",
     "argon2": "^0.44.0",
     "bullmq": "^5.71.0",

@@ -57,6 +57,8 @@ export type NodeType = "decision" | "end" | "script" | "service" | "start" | "us
 
 export type Numeric = ColumnType<string, number | string, number | string>;
 
+export type SecretProviderType = "aws_secrets_manager" | "default" | "infisical";
+
 export type StorageBuckettype = "ANALYTICS" | "STANDARD" | "VECTOR";
 
 export type TaskStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
@@ -594,14 +596,23 @@ export interface RefreshToken {
   token: string;
 }
 
-export interface Secret {
-  created_on: Generated<Timestamp>;
-  environment_id: string | null;
+export interface SecretProvider {
+  configuration: Json;
+  created_on: Generated<Timestamp | null>;
+  id: Generated<string>;
+  label: string | null;
+  organization_id: string;
+  type: SecretProviderType;
+  updated_on: Generated<Timestamp | null>;
+}
+
+export interface SecretReference {
+  created_on: Generated<Timestamp | null>;
+  environment_id: string;
   id: Generated<string>;
   label: string;
-  modified_on: Generated<Timestamp>;
-  organization_id: string | null;
-  secret_key: string | null;
+  provider_id: string;
+  secret_key: string;
 }
 
 export interface StorageBuckets {
@@ -831,7 +842,8 @@ export interface DB {
   "realtime.schema_migrations": RealtimeSchemaMigrations;
   "realtime.subscription": RealtimeSubscription;
   refresh_token: RefreshToken;
-  secret: Secret;
+  secret_provider: SecretProvider;
+  secret_reference: SecretReference;
   "storage.buckets": StorageBuckets;
   "storage.buckets_analytics": StorageBucketsAnalytics;
   "storage.buckets_vectors": StorageBucketsVectors;

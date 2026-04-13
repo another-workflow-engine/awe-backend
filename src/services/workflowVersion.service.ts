@@ -1,8 +1,10 @@
 import { db } from "../database.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
+import { environmentRepository } from "../repositories/environment.repository.js";
 import {
   ActorTypes,
+  EnvironmentTypes,
   FeelDataType,
   NodeTypes,
   WorkflowVersionStatuses,
@@ -28,6 +30,8 @@ import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
+import { ValidationError } from "../errors/ValidationError.js";
+import { AuthError } from "../errors/AuthError.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 export type StatusPartialUpdateInput = z.infer<
@@ -39,14 +43,28 @@ export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 export type PromoteVersionInput = z.infer<typeof WorkflowVersionPromoteSchema>;
 
+const isPromotionPathAllowed = (
+  sourceEnvironmentType: string,
+  targetEnvironmentType: string,
+) => {
+  return (
+    (sourceEnvironmentType === EnvironmentTypes.DEVELOPMENT &&
+      targetEnvironmentType === EnvironmentTypes.STAGING) ||
+    (sourceEnvironmentType === EnvironmentTypes.DEVELOPMENT &&
+      targetEnvironmentType === EnvironmentTypes.PRODUCTION) ||
+    (sourceEnvironmentType === EnvironmentTypes.STAGING &&
+      targetEnvironmentType === EnvironmentTypes.PRODUCTION)
+  );
+};
+
 const getVersionOrThrow = async (
   versionId: string,
-  environmentId: string,
+  environmentIds: string[],
   transaction?: Transaction<DB>,
 ) => {
-  const version = await workflowVersionRepository.findByIdAndEnvironmentId(
+  const version = await workflowVersionRepository.findByIdAndEnvironmentIds(
     versionId,
-    environmentId,
+    environmentIds,
     transaction,
   );
   if (!version) {
@@ -60,39 +78,55 @@ export const workflowVersionService = {
     data: ListVersionInput,
     limit: number,
     offset: number,
-    environmentId: string,
+    environmentIds: string[],
   ) => {
-    const workflow = await workflowRepository.findByIdAndEnvironmentId(
+    const workflow = await workflowRepository.findByIdAndEnvironmentIds(
       data.workflowId,
-      environmentId,
+      environmentIds,
     );
 
     if (!workflow) {
       throw new NotFoundError("Workflow");
     }
 
-    return await workflowVersionRepository.findByWorkflowIdPaginated(
+    const versions = await workflowVersionRepository.findByWorkflowIdPaginated(
       data.workflowId,
       limit,
       offset,
     );
+
+    return {
+      workflow,
+      ...versions,
+    };
   },
 
   getActiveVersionByWorkflowId: async (
     workflowId: string,
+    environmentIds?: string[],
     transaction?: Transaction<DB>,
   ): Promise<WorkflowVersionModel | undefined> => {
     return await workflowVersionRepository.findActiveVersionByWorkflowId(
       workflowId,
+      environmentIds,
       transaction,
     );
   },
 
-  getDetail: async (data: DetailInput, environmentId: string) => {
+  getDetail: async (data: DetailInput, environmentIds: string[]) => {
     const workflowVersion = await getVersionOrThrow(
       data.versionId,
-      environmentId,
+      environmentIds,
     );
+
+    const workflow = await workflowRepository.findByIdAndEnvironmentIds(
+      workflowVersion.workflow_id,
+      environmentIds,
+    );
+
+    if (!workflow) {
+      throw new NotFoundError("Workflow");
+    }
 
     const nodeModels = await nodeService.getByWorkflowVersion(workflowVersion);
     const edgeModels = await edgeService.getByNodes(nodeModels);
@@ -129,17 +163,17 @@ export const workflowVersionService = {
       });
     }
 
-    return { workflowVersion, nodes, edges, startVariables };
+    return { workflow, workflowVersion, nodes, edges, startVariables };
   },
 
   update: async (
     data: UpdateVersionInput,
-    environmentId: string,
+    environmentIds: string[],
   ): Promise<WorkflowVersionModel> => {
     return db.transaction().execute(async (transaction) => {
       const workflowVersion = await getVersionOrThrow(
         data.versionId,
-        environmentId,
+        environmentIds,
         transaction,
       );
 
@@ -193,13 +227,13 @@ export const workflowVersionService = {
     data: CreateVersionInput,
     status?: WorkflowVersionStatus,
     existingTransaction?: Transaction<DB>,
-    environmentId?: string,
+    environmentIds?: string[],
   ): Promise<WorkflowVersionModel> => {
     const createInTransaction = async (transaction: Transaction<DB>) => {
-      if (environmentId) {
-        const workflow = await workflowRepository.findByIdAndEnvironmentId(
+      if (environmentIds) {
+        const workflow = await workflowRepository.findByIdAndEnvironmentIds(
           data.workflowId,
-          environmentId,
+          environmentIds,
           transaction,
         );
 
@@ -250,10 +284,10 @@ export const workflowVersionService = {
     return db.transaction().execute(createInTransaction);
   },
 
-  validate: async (data: ValidateInput, environmentId: string) => {
+  validate: async (data: ValidateInput, environmentIds: string[]) => {
     let workflowVersion = await getVersionOrThrow(
       data.versionId,
-      environmentId,
+      environmentIds,
     );
 
     if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
@@ -277,11 +311,11 @@ export const workflowVersionService = {
 
   changeStatus: async (
     data: StatusPartialUpdateInput,
-    environmentId: string,
+    environmentIds: string[],
   ) => {
     let workflowVersion = await getVersionOrThrow(
       data.versionId,
-      environmentId,
+      environmentIds,
     );
 
     const currentStatus = workflowVersion.status;
@@ -327,10 +361,10 @@ export const workflowVersionService = {
     });
   },
 
-  clone: async (data: DetailInput, environmentId: string) => {
+  clone: async (data: DetailInput, environmentIds: string[]) => {
     const workflowVersion = await getVersionOrThrow(
       data.versionId,
-      environmentId,
+      environmentIds,
     );
 
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
@@ -346,7 +380,7 @@ export const workflowVersionService = {
       },
       WorkflowVersionStatuses.VALID,
       undefined,
-      environmentId,
+      environmentIds,
     );
   },
 
@@ -372,6 +406,44 @@ export const workflowVersionService = {
 
       if (!sourceWorkflow) {
         throw new NotFoundError("Workflow");
+      }
+
+      const sourceEnvironment = await environmentRepository.findById(
+        sourceWorkflow.environment_id,
+        transaction,
+      );
+      const targetEnvironment = await environmentRepository.findById(
+        targetEnvironmentId,
+        transaction,
+      );
+
+      if (!sourceEnvironment || !targetEnvironment) {
+        throw new ValidationError("Invalid promotion target", [
+          {
+            field: "environmentType",
+            message:
+              "Source or target environment could not be resolved for this organization",
+          },
+        ]);
+      }
+
+      if (sourceEnvironment.id === targetEnvironment.id) {
+        throw new ValidationError("Invalid promotion target", [
+          {
+            field: "environmentType",
+            message: "Source and target environments must be different",
+          },
+        ]);
+      }
+
+      if (!isPromotionPathAllowed(sourceEnvironment.type, targetEnvironment.type)) {
+        throw new ValidationError("Invalid promotion path", [
+          {
+            field: "environmentType",
+            message:
+              `Promotion from '${sourceEnvironment.type}' to '${targetEnvironment.type}' is not allowed. Allowed paths: development -> staging, development -> production, staging -> production`,
+          },
+        ]);
       }
 
       const baseWorkflowId =
@@ -424,7 +496,7 @@ export const workflowVersionService = {
         },
         WorkflowVersionStatuses.DRAFT,
         transaction,
-        targetEnvironmentId,
+        [targetEnvironmentId],
       );
 
       return {
@@ -435,6 +507,12 @@ export const workflowVersionService = {
   },
 
   promote: async (data: PromoteVersionInput, targetEnvironmentId: string) => {
+    if (data.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+      throw new AuthError(
+        "Only organization account actors are allowed to promote workflow versions",
+      );
+    }
+
     return await workflowVersionService.promoteWorkflowVersion(
       data.versionId,
       targetEnvironmentId,

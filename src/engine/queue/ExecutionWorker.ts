@@ -95,6 +95,7 @@ export class ExecutionWorker {
         }
 
         ({ instance, task } = models);
+        return undefined;
       }
 
       const executionContext = taskService.getTaskContext(instance, node);
@@ -123,20 +124,31 @@ export class ExecutionWorker {
 
       const result = await data.executor.run();
 
-      this.finalizeExecution(job.data, data.executionId, data.executor, result);
+      this.logger.info(result, "Task execution completed");
 
+      await this.finalizeExecution(
+        job.data,
+        data.executionId,
+        data.executor,
+        result,
+      );
       if (result.status === TaskStatuses.COMPLETED || isLastAttempt) {
         return;
       }
     } catch (error) {
-      await engineUtils.onExecutionFailure({ error, instanceId, taskId });
-
+      if (job.data?.instanceId && job.data?.taskId) {
+        await engineUtils.onExecutionFailure({ error, instanceId: job.data.instanceId, taskId: job.data.taskId });
+      }
       throw new UnrecoverableError(
         error instanceof Error ? error.message : "Unknown error",
       );
     }
 
-    throw new EngineError(`Task execution for task id=${taskId} failed`);
+    if (job.data?.taskId) {
+        throw new EngineError(`Task execution for task id=${job.data.taskId} failed`);
+    } else {
+        throw new EngineError(`Task execution failed`);
+    }
   }
 
   private async finalizeExecution(
@@ -145,8 +157,6 @@ export class ExecutionWorker {
     executor: TaskExecutor,
     result: ExecutorResult,
   ) {
-    const { instanceId, taskId, nodeId } = jobData;
-
     return await db.transaction().execute(async (transaction) => {
       const models = await engineUtils.getLockedModels({
         ...jobData,

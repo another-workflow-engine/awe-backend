@@ -1,7 +1,7 @@
 import { BaseExecutor } from "./BaseExecutor.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { FeelDataType, NodeTypes } from "../../types/enums.js";
-import type { Context, ExecutorResult } from "../../types/engine.js";
+import type { EvaluatedContext, ExecutorResult } from "../../types/engine.js";
 import { contextUtils } from "../../utils/context.utils.js";
 import { httpService } from "../../services/http.service.js";
 import { isValidFeelType } from "../../utils/feel.utils.js";
@@ -46,7 +46,7 @@ export class ServiceNodeExecutor extends BaseExecutor<
     current[lastKey] = value;
   }
 
-  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
     const url = contextUtils.getFeelEvaluatedValue(
       this.configuration.urlExpression,
       evaluatedContext,

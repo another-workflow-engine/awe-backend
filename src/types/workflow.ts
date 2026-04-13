@@ -44,9 +44,12 @@ export type StartNode = Extract<Node, { type: "start" }>;
 
 export type NodeInputSchema = {
   variableNames: string[];
+  secretNames: string[];
 };
 
-export type NodeOuputSchema = NodeInputSchema;
+export type NodeOuputSchema = {
+  variableNames: string[];
+};
 
 export type StartNodeDataMap = z.infer<typeof StartNodeDataMapSchema>;
 

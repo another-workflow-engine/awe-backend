@@ -14,6 +14,7 @@ import {
   parsePaginationFromRequest,
 } from "../utils/pagination.utils.js";
 import { WorkflowVersionStatuses } from "../types/enums.js";
+import { getEnvironmentTypeById } from "../utils/environment.utils.js";
 
 export const workflowVersionController = {
   list: async (req: Request, res: Response) => {
@@ -23,11 +24,17 @@ export const workflowVersionController = {
     });
     const { page, limit, offset } = parsePaginationFromRequest(req);
 
-    const { items, total } = await workflowVersionService.listPaginated(
+    const { workflow, items, total } = await workflowVersionService.listPaginated(
       data,
       limit,
       offset,
-      req.environmentId,
+      req.environmentIds,
+    );
+
+    const environmentType = getEnvironmentTypeById(
+      req.environmentIds,
+      req.environmentTypes,
+      workflow.environment_id,
     );
 
     const versions = items.map((version) => ({
@@ -37,6 +44,7 @@ export const workflowVersionController = {
       status: version.status,
       description: version.description,
       publishedAt: version.published_on,
+      environmentType,
       createdAt: version.created_on,
       updatedAt: version.modified_on,
     }));
@@ -57,7 +65,7 @@ export const workflowVersionController = {
       data,
       WorkflowVersionStatuses.DRAFT,
       undefined,
-      req.environmentId,
+      req.environmentIds,
     );
 
     return res.status(201).json({
@@ -75,8 +83,10 @@ export const workflowVersionController = {
       actor: req.actor,
     });
 
-    const { result, workflowVersion } =
-      await workflowVersionService.validate(data, req.environmentId);
+    const { result, workflowVersion } = await workflowVersionService.validate(
+      data,
+      req.environmentIds,
+    );
 
     res.status(200).json({
       valid: result.valid,
@@ -91,8 +101,14 @@ export const workflowVersionController = {
       actor: req.actor,
     });
 
-    const { workflowVersion, nodes, edges, startVariables } =
-      await workflowVersionService.getDetail(data, req.environmentId);
+    const { workflow, workflowVersion, nodes, edges, startVariables } =
+      await workflowVersionService.getDetail(data, req.environmentIds);
+
+    const environmentType = getEnvironmentTypeById(
+      req.environmentIds,
+      req.environmentTypes,
+      workflow.environment_id,
+    );
 
     return res.status(200).json({
       id: workflowVersion.id,
@@ -102,6 +118,7 @@ export const workflowVersionController = {
       publishedAt: workflowVersion.published_on,
       createdAt: workflowVersion.created_on,
       modifiedAt: workflowVersion.modified_on,
+      environmentType,
       nodes,
       edges,
       startVariables,
@@ -117,7 +134,7 @@ export const workflowVersionController = {
 
     const workflowVersion = await workflowVersionService.changeStatus(
       data,
-      req.environmentId,
+      req.environmentIds,
     );
 
     res.status(200).json({
@@ -138,7 +155,7 @@ export const workflowVersionController = {
     });
     const workflowVersion = await workflowVersionService.update(
       data,
-      req.environmentId,
+      req.environmentIds,
     );
     return res.status(200).json({
       id: workflowVersion.id,
@@ -158,7 +175,7 @@ export const workflowVersionController = {
     });
     const workflowVersion = await workflowVersionService.changeStatus(
       data,
-      req.environmentId,
+      req.environmentIds,
     );
     return res.status(200).json({
       id: workflowVersion.id,
@@ -177,7 +194,7 @@ export const workflowVersionController = {
     });
     const workflowVersion = await workflowVersionService.changeStatus(
       data,
-      req.environmentId,
+      req.environmentIds,
     );
     return res.status(200).json({
       id: workflowVersion.id,
@@ -193,7 +210,10 @@ export const workflowVersionController = {
       versionId: req.params.versionId,
       actor: req.actor,
     });
-    const clonedVersion = await workflowVersionService.clone(data, req.environmentId);
+    const clonedVersion = await workflowVersionService.clone(
+      data,
+      req.environmentIds,
+    );
     return res.status(201).json(clonedVersion);
   },
 
@@ -205,6 +225,5 @@ export const workflowVersionController = {
 
     const result = await workflowVersionService.promote(data, req.environmentId);
     return res.status(201).json(result);
-  }
-
+  },
 };

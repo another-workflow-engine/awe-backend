@@ -17,27 +17,27 @@ export type UpdateWorkflowInput = {
 };
 
 export const workflowService = {
-  getAll: async (environmentId: string) => {
-    return await workflowRepository.findByEnvironmentIdWithLatestVersion(
-      environmentId,
+  getAll: async (environmentIds: string[]) => {
+    return await workflowRepository.findByEnvironmentIdsWithLatestVersion(
+      environmentIds,
     );
   },
 
   getAllPaginated: async (
-    environmentId: string,
+    environmentIds: string[],
     limit: number,
     offset: number,
   ) => {
-    return await workflowRepository.findByEnvironmentIdWithLatestVersionPaginated(
-      environmentId,
+    return await workflowRepository.findByEnvironmentIdsWithLatestVersionPaginated(
+      environmentIds,
       limit,
       offset,
     );
   },
 
-  get: async (workflowId: string, environmentId: string) => {
+  get: async (workflowId: string, environmentIds: string[]) => {
     const [workflow, versions] = await Promise.all([
-      workflowRepository.findByIdAndEnvironmentId(workflowId, environmentId),
+      workflowRepository.findByIdAndEnvironmentIds(workflowId, environmentIds),
       workflowVersionRepository.findByWorkflowId(workflowId),
     ]);
 
@@ -69,11 +69,11 @@ export const workflowService = {
   update: async (
     data: UpdateWorkflowInput,
     actor: ActorModel,
-    environmentId: string,
+    environmentIds: string[],
   ) => {
-    const existing = await workflowRepository.findByIdAndEnvironmentId(
+    const existing = await workflowRepository.findByIdAndEnvironmentIds(
       data.workflowId,
-      environmentId,
+      environmentIds,
     );
 
     if (!existing) {
@@ -95,11 +95,11 @@ export const workflowService = {
   delete: async (
     workflowId: string,
     actor: ActorModel,
-    environmentId: string,
+    environmentIds: string[],
   ) => {
-    const existing = await workflowRepository.findByIdAndEnvironmentId(
+    const existing = await workflowRepository.findByIdAndEnvironmentIds(
       workflowId,
-      environmentId,
+      environmentIds,
     );
 
     if (!existing) {

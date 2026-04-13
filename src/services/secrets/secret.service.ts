@@ -1,0 +1,74 @@
+import { environmentService } from "../environment.services.js";
+import type z from "zod";
+import type { CreateNewSecretSchema } from "../../controllers/secret.controller.js";
+import { secretReferenceRepository } from "../../repositories/secretReference.repository.js";
+import { EngineError } from "../../errors/EngineError.js";
+import { providerClassMap } from "./providers/providerMap.js";
+import { secretProviderRepository } from "../../repositories/secretProvider.repository.js";
+import { NotFoundError } from "../../errors/NotFoundError.js";
+import { InvalidOperationError } from "../../errors/InvalidOperationError.js";
+
+type CreateNewSecretSchemaType = z.infer<typeof CreateNewSecretSchema>;
+
+export const secretService = {
+  createNew: async (data: CreateNewSecretSchemaType) => {
+    const environment = await environmentService.getByActorAndType(
+      data.actor,
+      data.environmentType,
+    );
+
+    const providerModel = await secretProviderRepository.findById(
+      data.providerId,
+    );
+    if (!providerModel) {
+      throw new NotFoundError("Secret provider");
+    }
+
+    const ProviderClass = providerClassMap[providerModel.type];
+    const providerInstance = new ProviderClass(providerModel);
+    const result = await providerInstance.testSecretExists(data.key);
+
+    if (!result.success) {
+      const message = result.error ? result.error.message : "Unkown error";
+      throw new InvalidOperationError(message, result.error);
+    }
+
+    return await secretReferenceRepository.insert({
+      label: data.label,
+      provider_id: data.providerId,
+      environment_id: environment.id,
+      secret_key: data.key,
+    });
+  },
+
+  getByIds: async (secretIds: string[]): Promise<Record<string, string>> => {
+    if (secretIds.length === 0) {
+      return {};
+    }
+
+    const referenceMap =
+      await secretReferenceRepository.findByIdsWithProviders(secretIds);
+
+    const secrets: Record<string, string> = {};
+
+    for (const [provider, references] of referenceMap) {
+      const ProviderClass = providerClassMap[provider.type];
+      const providerInstance = new ProviderClass(provider);
+
+      const keys = references.map((r) => r.secret_key);
+      const valueMap = await providerInstance.fetchSecrets(keys);
+
+      references.forEach((ref) => {
+        const value = valueMap[ref.secret_key];
+        if (value === undefined) {
+          throw new EngineError(
+            `Secret key "${ref.secret_key}" not returned by provider`,
+          );
+        }
+        secrets[ref.id] = value;
+      });
+    }
+
+    return secrets;
+  },
+};

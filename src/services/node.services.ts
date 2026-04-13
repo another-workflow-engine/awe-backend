@@ -4,7 +4,7 @@ import type {
   NodeModel,
   WorkflowVersionModel,
 } from "../types/models.js";
-import type { Node } from "../types/workflow.js";
+import type { Node, NodeInputSchema } from "../types/workflow.js";
 import type { DB } from "../types/database.js";
 import {
   nodeRepository,
@@ -26,6 +26,15 @@ export const nodeService = {
       return [];
     }
 
+    const startNode = data.find((node) => node.type === NodeTypes.START);
+
+    const fetchablesMap: Record<string, NodeInputSchema> = startNode
+      ? nodeSchemaService.getFetchablesMap(
+          startNode.configuration.inputDataMap,
+          startNode.configuration.fetchables,
+        )
+      : {};
+
     const nodes: NewNode[] = data.map((node) => {
       const maxAttempts =
         node.type === NodeTypes.START ||
@@ -35,7 +44,7 @@ export const nodeService = {
           : node.configuration.maxAttempts;
 
       const { inputSchema, outputSchema } =
-        nodeSchemaService.getInputOutputSchemas(node);
+        nodeSchemaService.getInputOutputSchemas(node, fetchablesMap);
 
       return {
         client_id: node.id,

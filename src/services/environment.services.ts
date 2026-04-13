@@ -6,18 +6,23 @@ import type { ActorModel, EnvironmentModel } from "../types/models.js";
 import type { EnvironmentType } from "../types/database.js";
 
 export const environmentService = {
+  getAllByActor: async (actor: ActorModel): Promise<EnvironmentModel[]> => {
+    if (actor.type == ActorTypes.ORGANIZATION_ACCOUNT) {
+      return await environmentRepository.findByOrganizationActorId(actor.id);
+    }
+
+    if (actor.type === ActorTypes.API_KEY_CLIENT) {
+      return await environmentRepository.findByApiKeyActorId(actor.id);
+    }
+
+    return [];
+  },
+
   getByActorAndType: async (
     actor: ActorModel,
     environmentType: EnvironmentType,
   ): Promise<EnvironmentModel> => {
-    let environments: EnvironmentModel[] = [];
-
-    if (actor.type == ActorTypes.ORGANIZATION_ACCOUNT) {
-      environments = await environmentRepository.findByOrganizationActorId(actor.id);
-    } else if (actor.type === ActorTypes.API_KEY_CLIENT) {
-      environments = await environmentRepository.findByApiKeyActorId(actor.id);
-    }
-
+    const environments = await environmentService.getAllByActor(actor);
     const environment = environments.find((env) => env.type === environmentType);
 
     if (!environment) {
@@ -32,18 +37,24 @@ export const environmentService = {
     return environment;
   },
 
-  getByActor: async (actor: ActorModel) => {
-    let environment: EnvironmentModel | undefined;
+  getByActorAndTypes: async (
+    actor: ActorModel,
+    environmentTypes: EnvironmentType[],
+  ): Promise<EnvironmentModel[]> => {
+    const environments = await environmentService.getAllByActor(actor);
 
-    if (actor.type == ActorTypes.ORGANIZATION_ACCOUNT) {
-      environment = (
-        await environmentRepository.findByOrganizationActorId(actor.id)
-      )[0];
-    } else if (actor.type === ActorTypes.API_KEY_CLIENT) {
-      environment = (
-        await environmentRepository.findByApiKeyActorId(actor.id)
-      )[0];
+    if (environmentTypes.length === 0) {
+      return environments;
     }
+
+    const byType = new Map(environments.map((environment) => [environment.type, environment]));
+    return environmentTypes
+      .map((environmentType) => byType.get(environmentType))
+      .filter((environment): environment is EnvironmentModel => Boolean(environment));
+  },
+
+  getByActor: async (actor: ActorModel) => {
+    const environment = (await environmentService.getAllByActor(actor))[0];
 
     if (!environment) {
       throw new DataIntegrityError(

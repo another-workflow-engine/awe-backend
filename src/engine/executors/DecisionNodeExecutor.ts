@@ -1,7 +1,7 @@
 import { BaseExecutor } from "./BaseExecutor.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { FeelDataType, NodeTypes } from "../../types/enums.js";
-import type { ExecutorResult, Context } from "../../types/engine.js";
+import type { ExecutorResult, EvaluatedContext } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { contextUtils } from "../../utils/context.utils.js";
 import type {
@@ -12,7 +12,7 @@ import type {
 export class DecisionNodeExecutor extends BaseExecutor<
   typeof NodeTypes.DECISION
 > {
-  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
     let matchedRule: DecisionNodeRule | DecisionNodeDefaultRule | undefined;
 
     matchedRule = this.configuration.rules.find((rule) =>

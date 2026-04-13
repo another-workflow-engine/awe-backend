@@ -20,7 +20,6 @@ export class BullMQQueue {
     backoffDelay: number,
   ): Promise<void> {
     await this.queue.add("execute-node", jobData, {
-      jobId: jobData.taskId,
       attempts: maxAttempts,
       backoff: {
         type: backoffType,
@@ -40,9 +39,6 @@ export class BullMQQueue {
         logger.debug({ jobId }, "Job removed from queue");
       }
     } catch (err) {
-      // Job may be locked by a worker currently processing it
-      // This is expected if the instance is paused while executing
-      // The worker will check instance state and handle accordingly
       if (err instanceof Error && err.message.includes("locked")) {
         logger.info(
           { jobId, error: err.message },

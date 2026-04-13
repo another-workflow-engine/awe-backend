@@ -1,10 +1,10 @@
 import { BaseExecutor } from "./BaseExecutor.js";
 import { NodeTypes } from "../../types/enums.js";
-import type { ExecutorResult, Context } from "../../types/engine.js";
+import type { ExecutorResult, EvaluatedContext } from "../../types/engine.js";
 import { contextUtils } from "../../utils/context.utils.js";
 
 export class EndNodeExecutor extends BaseExecutor<typeof NodeTypes.END> {
-  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
     this.configuration.resultMap.forEach((dataMap) => {
       this.outputVariables[dataMap.variableName] =
         contextUtils.getFeelEvaluatedValue(

@@ -9,6 +9,8 @@ import type {
   Node,
   Organization,
   RefreshToken,
+  SecretProvider,
+  SecretReference,
   System,
   Task,
   TaskExecution,
@@ -80,3 +82,7 @@ export type TaskExecutionModel = Selectable<TaskExecution>;
 export type UserTaskExecutionModel = Selectable<UserTaskExecution>;
 
 export type InstanceLogModel = Selectable<InstanceLog>;
+
+export type SecretProviderModel = Selectable<SecretProvider>;
+
+export type SecretReferenceModel = Selectable<SecretReference>;

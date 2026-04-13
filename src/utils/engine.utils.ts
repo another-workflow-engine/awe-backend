@@ -9,7 +9,7 @@ import type {
   InstanceStatus,
   NodeType,
 } from "../types/database.js";
-import type { ExecutorResult, InputVariables } from "../types/engine.js";
+import type { ExecutorResult, Context } from "../types/engine.js";
 import {
   InstanceControlSignals,
   InstanceStatuses,
@@ -22,6 +22,7 @@ import { EngineError } from "../errors/EngineError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { nodeService } from "../services/node.services.js";
 import { getLogger } from "../logger.js";
+import { ContextSchema } from "../schemas/context.schema.js";
 
 async function handleNextNode(
   instance: InstanceModel,
@@ -36,11 +37,23 @@ async function handleNextNode(
   if (!nextNode) {
     throw new DataIntegrityError(`Node not found node id = ${nextNodeId}`);
   }
-
   if (instance.control_signal) {
+    const status =
+      instance.control_signal === InstanceControlSignals.TERMINATE
+        ? TaskStatuses.TERMINATED
+        : TaskStatuses.PAUSED;
+
+    const task = await taskService.createWithStatus(
+      nextNode,
+      instance,
+      status,
+      transaction,
+    );
+
     await engineUtils.handleInstanceControlSignal({
       instanceId: instance.id,
       controlSignal: instance.control_signal,
+      taskId: task.id,
       node: nextNode,
       transaction,
     });
@@ -48,6 +61,12 @@ async function handleNextNode(
   }
 
   if (!instance.auto_advance) {
+    await taskService.createWithStatus(
+      nextNode,
+      instance,
+      TaskStatuses.PAUSED,
+      transaction,
+    );
     return;
   }
 
@@ -58,12 +77,13 @@ function getUpdatedInstanceContext(
   node: NodeModel,
   executionOuputVariables: Record<string, unknown>,
   instance: InstanceModel,
-): InputVariables {
+): Context {
   if (node.type === NodeTypes.START) {
-    return converterUtils.objectToContextVariables(executionOuputVariables);
+    return converterUtils.parseOrThrow(ContextSchema, executionOuputVariables);
   }
 
-  const instanceContext = converterUtils.jsonValueToContextVariables(
+  const instanceContext = converterUtils.parseOrThrow(
+    ContextSchema,
     instance.current_variables,
   );
 
@@ -74,6 +94,7 @@ function getUpdatedInstanceContext(
     },
     fetchables: { ...instanceContext.fetchables },
     urls: { ...instanceContext.urls },
+    secrets: { ...instanceContext.secrets },
   };
 }
 
@@ -112,7 +133,7 @@ async function applyInstanceUpdate(
   node: NodeModel,
   result: ExecutorResult,
   instanceStatus: InstanceStatus,
-  instanceContext: InputVariables,
+  instanceContext: Context,
   transaction: Transaction<DB>,
 ): Promise<InstanceModel> {
   if (node.type === NodeTypes.END && result.status === TaskStatuses.COMPLETED) {

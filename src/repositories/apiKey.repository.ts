@@ -15,6 +15,7 @@ export const apiKeyRepository = {
       .innerJoin("system", "system.id", "environment.system_id")
       .innerJoin("organization", "organization.id", "system.organization_id")
       .selectAll("api_key")
+      .select("environment.type as environmentType")
       .where("organization.actor_id", "=", actorId)
       .where("api_key.is_deleted", "=", false)
       .execute();

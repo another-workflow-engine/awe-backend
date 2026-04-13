@@ -2,6 +2,7 @@ import { taskRepository } from "../repositories/task.repository.js";
 import type { DB, InstanceEventType, TaskStatus } from "../types/database.js";
 import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
+import { StateTransitionError } from "../errors/StateTransitionError.js";
 import type { Transaction } from "kysely";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { nodeRepository } from "../repositories/node.repository.js";
@@ -94,7 +95,7 @@ async function createExecution(
       nodeSchema.configuration.backoff.unit,
     );
     attempts.type = nodeSchema.configuration.backoff.type;
-    attempts.max = nodeSchema.configuration.maxAttempts - previousAttemptCount;
+    attempts.max = Math.max(1, nodeSchema.configuration.maxAttempts - previousAttemptCount);
   }
 
   if (node.type !== NodeTypes.USER) {
@@ -221,6 +222,33 @@ export const taskService = {
       : await db.transaction().execute(executeCallback);
   },
 
+  createWithStatus: async (
+    node: NodeModel,
+    instance: InstanceModel,
+    status: TaskStatus,
+    transaction: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    const task = await taskRepository.insert(
+      {
+        instance_id: instance.id,
+        node_id: node.id,
+        status,
+      },
+      transaction,
+    );
+
+    await eventLogService.createTaskLog(
+      instance.id,
+      task.id,
+      taskStatusToEventMap[status],
+      undefined,
+      undefined,
+      transaction,
+    );
+
+    return task;
+  },
+
   resume: async (
     node: NodeModel,
     instance: InstanceModel,
@@ -229,6 +257,7 @@ export const taskService = {
     let task = await taskRepository.findByStatusAndInstanceId(
       instance.id,
       TaskStatuses.PAUSED,
+      transaction,
     );
     if (!task) {
       return await taskService.create(node, instance, transaction);
@@ -257,7 +286,51 @@ export const taskService = {
       instance,
       task,
       node,
-      taskExecutions.length - 1,
+      taskExecutions.length,
+      transaction,
+    );
+  },
+
+  retry: async (
+    taskId: string,
+    instance: InstanceModel,
+    node: NodeModel,
+    actorId: string,
+    transaction: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    let task = await taskRepository.findById(taskId, transaction);
+    if (!task) {
+      throw new NotFoundError("task");
+    }
+
+    if (task.status !== TaskStatuses.FAILED) {
+      throw new StateTransitionError("Only failed tasks can be retried");
+    }
+
+    const taskExecutions = await taskExecutionService.getByTaskId(task.id);
+
+    task = await taskRepository.updateById(
+      task.id,
+      {
+        status: TaskStatuses.IN_PROGRESS,
+      },
+      transaction,
+    );
+
+    await eventLogService.createTaskLog(
+      instance.id,
+      task.id,
+      LogEventTypes.RESUMED,
+      { message: "Manual retry of failed task" },
+      actorId,
+      transaction,
+    );
+
+    return await createExecution(
+      instance,
+      task,
+      node,
+      taskExecutions.length,
       transaction,
     );
   },

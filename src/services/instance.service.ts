@@ -1,13 +1,13 @@
 import { instanceRepository } from "../repositories/instance.repository.js";
 import type { InstanceCreateSchema } from "../schemas/instance.schema.js";
-import type { ActorModel, InstanceModel } from "../types/models.js";
+import type { ActorModel, InstanceModel, TaskModel } from "../types/models.js";
 import type { z } from "zod";
 import { workflowVersionService } from "./workflowVersion.service.js";
 import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { LogEventTypes, InstanceStatuses } from "../types/enums.js";
+import { LogEventTypes, InstanceStatuses, TaskStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
@@ -270,6 +270,12 @@ export const instanceService = {
       });
 
       if (instance.auto_advance === false) {
+        await taskService.createWithStatus(
+          startNode,
+          instance,
+          TaskStatuses.PAUSED,
+          transaction,
+        );
         return { instance, workflowVersion };
       }
 
@@ -279,7 +285,7 @@ export const instanceService = {
         let message = "Unexpected error";
 
         if (err instanceof Error) {
-          message = message;
+          message = err.message || message;
         }
         instance = await instanceService.fail(instance.id, {
           message,
@@ -406,5 +412,71 @@ export const instanceService = {
       },
       transaction,
     );
+  },
+
+  retry: async (
+    instanceId: string,
+    actor: ActorModel,
+    environmentIds: string[],
+    targetTaskId?: string,
+  ) => {
+    return await db.transaction().execute(async (transaction) => {
+      const instance = await instanceRepository.findByIdAndEnvironmentIds(
+        instanceId,
+        environmentIds,
+        transaction,
+      );
+      if (!instance) throw new NotFoundError("Instance");
+
+      if (instance.status !== InstanceStatuses.FAILED) {
+        throw new StateTransitionError(
+          `Instance is not FAILED. Status is ${instance.status}`,
+        );
+      }
+
+      let taskToRetry: TaskModel;
+      if (targetTaskId) {
+        const t = await taskRepository.findById(targetTaskId, transaction);
+        if (!t || t.instance_id !== instanceId) throw new NotFoundError("Task");
+        taskToRetry = t;
+      } else {
+        const latestTask = await taskRepository.findLatestByInstanceId(
+          instanceId,
+          transaction,
+        );
+        if (!latestTask)
+          throw new DataIntegrityError("No task found for instance");
+        taskToRetry = latestTask;
+      }
+
+      if (taskToRetry.status !== TaskStatuses.FAILED) {
+        throw new StateTransitionError(
+          `Task is not FAILED. Status is ${taskToRetry.status}`,
+        );
+      }
+
+      const node = await nodeService.getById(taskToRetry.node_id);
+      if (!node) {
+        throw new DataIntegrityError(`Node not found id = ${taskToRetry.node_id}`);
+      }
+
+      const updatedInstance = await updateInstanceStatus({
+        instanceId: instance.id,
+        status: InstanceStatuses.IN_PROGRESS,
+        actorId: actor.id,
+        details: { message: "Retrying failed task" },
+        transaction,
+      });
+
+      await taskService.retry(
+        taskToRetry.id,
+        updatedInstance,
+        node,
+        actor.id,
+        transaction,
+      );
+
+      return updatedInstance;
+    });
   },
 };

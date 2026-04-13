@@ -27,23 +27,25 @@ def safe_serialize(obj):
         import numpy as np
     except:
         np = None
+
     def convert(o):
+        if isinstance(o, (int, float, bool)) or o is None:
+            return o
+
         if np is not None and isinstance(o, np.ndarray):
             return o.tolist()
-        try:
-            return o.tolist()
-        except:
-            pass
-        if isinstance(o,set):
+
+        if isinstance(o, set):
             return [convert(i) for i in o]
-        elif isinstance(o,tuple):
+        elif isinstance(o, tuple):
             return [convert(i) for i in o]
-        elif isinstance(o,dict):
+        elif isinstance(o, list):
+            return [convert(i) for i in o]
+        elif isinstance(o, dict):
             return {k: convert(v) for k, v in o.items()}
-        elif isinstance(o,list):
-            return [convert(i) for i in o]
-        else:
-            return str(o)
+
+        return str(o)
+
     return convert(obj)
 
 if __name__ == "__main__":

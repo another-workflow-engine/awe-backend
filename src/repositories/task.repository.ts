@@ -36,8 +36,8 @@ export const taskRepository = {
       .executeTakeFirst();
   },
 
-  findLatestByInstanceId: async (instanceId: string) => {
-    return await db
+  findLatestByInstanceId: async (instanceId: string, transaction?: Transaction<DB>) => {
+    return await (transaction ?? db)
       .selectFrom("task")
       .selectAll()
       .where("instance_id", "=", instanceId)

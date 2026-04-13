@@ -36,11 +36,23 @@ async function handleNextNode(
   if (!nextNode) {
     throw new DataIntegrityError(`Node not found node id = ${nextNodeId}`);
   }
-
   if (instance.control_signal) {
+    const status =
+      instance.control_signal === InstanceControlSignals.TERMINATE
+        ? TaskStatuses.TERMINATED
+        : TaskStatuses.PAUSED;
+
+    const task = await taskService.createWithStatus(
+      nextNode,
+      instance,
+      status,
+      transaction,
+    );
+
     await engineUtils.handleInstanceControlSignal({
       instanceId: instance.id,
       controlSignal: instance.control_signal,
+      taskId: task.id,
       node: nextNode,
       transaction,
     });
@@ -48,6 +60,12 @@ async function handleNextNode(
   }
 
   if (!instance.auto_advance) {
+    await taskService.createWithStatus(
+      nextNode,
+      instance,
+      TaskStatuses.PAUSED,
+      transaction,
+    );
     return;
   }
 

@@ -26,3 +26,8 @@ instanceRouter.post(
   "/:instanceId/terminate",
   instanceController.terminate,
 );
+
+instanceRouter.post(
+  "/:instanceId/retry",
+  instanceController.retryInstance,
+);

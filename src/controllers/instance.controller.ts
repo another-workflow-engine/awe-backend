@@ -124,4 +124,14 @@ export const instanceController = {
     );
     return res.json({ instance });
   },
+
+  retryInstance: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+    const instance = await instanceService.retry(
+      instanceId,
+      req.actor,
+      req.environmentIds,
+    );
+    return res.json({ instance });
+  },
 };

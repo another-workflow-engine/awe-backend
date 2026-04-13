@@ -31,6 +31,7 @@ import { nodeSchemaService } from "./nodeSchema.service.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { ValidationError } from "../errors/ValidationError.js";
+import { AuthError } from "../errors/AuthError.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 export type StatusPartialUpdateInput = z.infer<
@@ -506,6 +507,12 @@ export const workflowVersionService = {
   },
 
   promote: async (data: PromoteVersionInput, targetEnvironmentId: string) => {
+    if (data.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+      throw new AuthError(
+        "Only organization account actors are allowed to promote workflow versions",
+      );
+    }
+
     return await workflowVersionService.promoteWorkflowVersion(
       data.versionId,
       targetEnvironmentId,

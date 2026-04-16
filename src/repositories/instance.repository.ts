@@ -1,5 +1,10 @@
 import { type Insertable, type Transaction, type Updateable } from "kysely";
-import type { DB, Instance, InstanceStatus } from "../types/database.js";
+import type {
+  DB,
+  EnvironmentType,
+  Instance,
+  InstanceStatus,
+} from "../types/database.js";
 import type {
   InstanceModel,
   TaskExecutionModel,
@@ -15,6 +20,7 @@ export type UpdateInstance = Updateable<Instance>;
 export type InstanceListItem = InstanceModel & {
   version_number: number | null;
   workflow_name: string;
+  environment: EnvironmentType;
 };
 
 export type LockedInProgressOrPausedRelations = {
@@ -41,14 +47,17 @@ export const instanceRepository = {
           "instance.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .innerJoin("environment", "environment.id", "workflow.environment_id")
         .selectAll("instance")
         .select((eb) => [
           eb.ref("workflow_version.version").as("version_number"),
           eb.ref("workflow.name").as("workflow_name"),
+          eb.ref("environment.type").as("environment"),
         ])
         .where("workflow.created_by", "=", actorId)
         .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
+        .where("environment.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .execute()) as unknown as InstanceListItem[];
     } catch (err) {
@@ -81,14 +90,17 @@ export const instanceRepository = {
           "instance.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .innerJoin("environment", "environment.id", "workflow.environment_id")
         .selectAll("instance")
         .select((eb) => [
           eb.ref("workflow_version.version").as("version_number"),
           eb.ref("workflow.name").as("workflow_name"),
+          eb.ref("environment.type").as("environment"),
         ])
         .where("workflow.created_by", "=", actorId)
         .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
+        .where("environment.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .limit(limit)
         .offset(offset)
@@ -102,10 +114,12 @@ export const instanceRepository = {
           "instance.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .innerJoin("environment", "environment.id", "workflow.environment_id")
         .select((eb) => eb.fn.count<number>("instance.id").as("count"))
         .where("workflow.created_by", "=", actorId)
         .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
+        .where("environment.is_deleted", "=", false)
         .executeTakeFirstOrThrow();
 
       return {
@@ -238,15 +252,18 @@ export const instanceRepository = {
           "instance.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .innerJoin("environment", "environment.id", "workflow.environment_id")
         .selectAll("instance")
         .select((eb) => [
           eb.ref("workflow_version.version").as("version_number"),
           eb.ref("workflow.name").as("workflow_name"),
+          eb.ref("environment.type").as("environment"),
         ])
         .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
         .where("workflow_version.is_deleted", "=", false)
         .where("workflow.is_deleted", "=", false)
+        .where("environment.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .limit(limit)
         .execute()) as unknown as InstanceListItem[];

@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { environmentService } from "../services/environment.services.js";
 import { ValidationError } from "../errors/ValidationError.js";
 import type { EnvironmentType } from "../types/database.js";
-import { parseEnvironmentTypesFromQuery } from "../utils/environment.utils.js";
+import { parseEnvironmentsFromQuery } from "../utils/environment.utils.js";
 import { ActorTypes } from "../types/enums.js";
 import { z } from "zod";
 
@@ -11,11 +11,62 @@ declare global {
     interface Request {
       environmentId: string;
       environmentIds: string[];
-      environmentType: EnvironmentType;
-      environmentTypes: EnvironmentType[];
+      environment: EnvironmentType;
+      environments: EnvironmentType[];
     }
   }
 }
+
+const assignEnvironmentContext = (
+  req: Request,
+  environments: Array<{ id: string; type: EnvironmentType }>,
+) => {
+  if (!environments || environments.length === 0) {
+    throw new ValidationError("No environments available for this actor", [
+      {
+        field: "environment",
+        message: "At least one environment is required",
+      },
+    ]);
+  }
+
+  req.environmentIds = environments.map((environment) => environment.id);
+  req.environments = environments.map((environment) => environment.type);
+
+  const primaryEnvironmentId = req.environmentIds[0];
+  const primaryEnvironmentType = req.environments[0];
+
+  if (!primaryEnvironmentId || !primaryEnvironmentType) {
+    throw new ValidationError("No environments available for this actor", [
+      {
+        field: "environment",
+        message: "At least one environment is required",
+      },
+    ]);
+  }
+
+  req.environmentId = primaryEnvironmentId;
+  req.environment = primaryEnvironmentType;
+};
+
+const getEnvironmentsForActor = async (req: Request) => {
+  if (req.actor.type === ActorTypes.API_KEY_CLIENT) {
+    const environment = await environmentService.getByActor(req.actor);
+    return [environment];
+  }
+
+  return await environmentService.getAllByActor(req.actor);
+};
+
+export const resolveEnvironmentContextFromActor = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+) => {
+  const environments = await getEnvironmentsForActor(req);
+  assignEnvironmentContext(req, environments);
+  return next();
+};
 
 export const resolveEnvironmentContext = async (
   req: Request,
@@ -25,24 +76,21 @@ export const resolveEnvironmentContext = async (
   let environments;
 
   if (req.actor.type === ActorTypes.API_KEY_CLIENT) {
-    const environment = await environmentService.getByActor(req.actor);
-    environments = [environment];
+    environments = await getEnvironmentsForActor(req);
   } else if (req.method === "GET") {
-    const environmentTypes = parseEnvironmentTypesFromQuery(
-      req.query.environmentType,
-    );
+    const requestEnvironments = parseEnvironmentsFromQuery(req.query.environment);
 
-    if (environmentTypes.length > 0) {
-      environments = await environmentService.getByActorAndTypes(
+    if (requestEnvironments.length > 0) {
+      environments = await environmentService.getByActorAndEnvironments(
         req.actor,
-        environmentTypes,
+        requestEnvironments,
       );
 
       if (environments.length === 0) {
-        throw new ValidationError("Invalid environmentType for this actor", [
+        throw new ValidationError("Invalid environment for this actor", [
           {
-            field: "environmentType",
-            message: `Environment ${environmentTypes.join(", ")} is not available for this actor`,
+            field: "environment",
+            message: `Environment ${requestEnvironments.join(", ")} is not available for this actor`,
           },
         ]);
       }
@@ -50,15 +98,14 @@ export const resolveEnvironmentContext = async (
       environments = await environmentService.getAllByActor(req.actor);
     }
   } else if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
-    const rawEnvironmentType = (req.body as { environmentType?: unknown })
-      .environmentType;
+    const rawEnvironment = (req.body as { environment?: unknown }).environment;
 
-    if (!rawEnvironmentType) {
-      throw new ValidationError("environmentType is required in request body", [
+    if (!rawEnvironment) {
+      throw new ValidationError("environment is required in request body", [
         {
-          field: "environmentType",
+          field: "environment",
           message:
-            "Provide a single environmentType (development, staging, or production) in the body",
+            "Provide a single environment (development, staging, or production) in the body",
         },
       ]);
     }
@@ -70,43 +117,18 @@ export const resolveEnvironmentContext = async (
     ] as [EnvironmentType, ...EnvironmentType[]]);
 
     const environmentType = EnvironmentTypeSchema.parse(
-      String(rawEnvironmentType).trim(),
+      String(rawEnvironment).trim(),
     );
 
-    const environment = await environmentService.getByActorAndType(
+    const environment = await environmentService.getByActorAndEnvironment(
       req.actor,
       environmentType,
     );
     environments = [environment];
   } else {
-    environments = await environmentService.getAllByActor(req.actor);
+    environments = await getEnvironmentsForActor(req);
   }
 
-  if (!environments || environments.length === 0) {
-    throw new ValidationError("No environments available for this actor", [
-      {
-        field: "environmentType",
-        message: "At least one environment is required",
-      },
-    ]);
-  }
-
-  req.environmentIds = environments.map((environment) => environment.id);
-  req.environmentTypes = environments.map((environment) => environment.type);
-
-  const primaryEnvironmentId = req.environmentIds[0];
-  const primaryEnvironmentType = req.environmentTypes[0];
-
-  if (!primaryEnvironmentId || !primaryEnvironmentType) {
-    throw new ValidationError("No environments available for this actor", [
-      {
-        field: "environmentType",
-        message: "At least one environment is required",
-      },
-    ]);
-  }
-
-  req.environmentId = primaryEnvironmentId;
-  req.environmentType = primaryEnvironmentType;
+  assignEnvironmentContext(req, environments);
   return next();
 };

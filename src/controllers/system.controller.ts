@@ -35,14 +35,14 @@ export const systemController = {
         name: system.name,
         orgName: organization.name,
         contactEmail: organization.email,
-        environmentTypes: environment.map((env) => env.type),
+        environments: environment.map((env) => env.type),
         createdAt: system.created_on,
       },
     });
   },
 
   me: async (req: Request, res: Response) => {
-    const { system, organization, environment } =
+    const { system, organization } =
       await systemService.getCurrentSystem(req.actor);
 
     res.status(200).json({
@@ -51,8 +51,6 @@ export const systemController = {
         name: system.name,
         orgName: organization.name,
         contactEmail: organization.email,
-        environmentType: environment.type,
-        status: "active",
         createdAt: system.created_on,
         updatedAt: system.modified_on,
       },

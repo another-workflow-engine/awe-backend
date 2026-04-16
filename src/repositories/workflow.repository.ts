@@ -309,12 +309,15 @@ export const workflowRepository = {
     environmentIds: string[],
     limit: number,
     offset: number,
+    search?: string,
+    createdSort: "asc" | "desc" = "desc",
     transaction?: Transaction<DB>,
   ): Promise<{
     items: Array<{
       workflow: WorkflowModel;
       status: WorkflowVersionStatus | null;
       latestVersionId: string | null;
+      latestVersionNumber: number | null;
     }>;
     total: number;
   }> => {
@@ -324,29 +327,53 @@ export const workflowRepository = {
 
     const dbConn = transaction ?? db;
 
-    const workflows = await dbConn
+    const normalizedSearch = search?.trim();
+    let workflowsQuery = dbConn
       .selectFrom("workflow")
       .selectAll()
       .where("environment_id", "in", environmentIds)
-      .where("is_deleted", "=", false)
-      .orderBy("workflow.created_on", "desc")
+      .where("is_deleted", "=", false);
+
+    if (normalizedSearch) {
+      const searchPattern = `%${normalizedSearch}%`;
+      workflowsQuery = workflowsQuery.where((eb) =>
+        eb.or([
+          eb("workflow.name", "ilike", searchPattern),
+          eb("workflow.description", "ilike", searchPattern),
+        ]),
+      );
+    }
+
+    const workflows = await workflowsQuery
+      .orderBy("workflow.created_on", createdSort)
       .limit(limit)
       .offset(offset)
       .execute();
 
-    const countResult = await dbConn
+    let countQuery = dbConn
       .selectFrom("workflow")
       .select((eb) => eb.fn.count<number>("id").as("count"))
       .where("environment_id", "in", environmentIds)
-      .where("is_deleted", "=", false)
-      .executeTakeFirstOrThrow();
+      .where("is_deleted", "=", false);
+
+    if (normalizedSearch) {
+      const searchPattern = `%${normalizedSearch}%`;
+      countQuery = countQuery.where((eb) =>
+        eb.or([
+          eb("workflow.name", "ilike", searchPattern),
+          eb("workflow.description", "ilike", searchPattern),
+        ]),
+      );
+    }
+
+    const countResult = await countQuery.executeTakeFirstOrThrow();
 
     const workflowIds = workflows.map((w) => w.id);
 
     if (workflowIds.length === 0) {
       return {
         items: [],
-        total: countResult.count,
+        total: Number(countResult.count),
       };
     }
 
@@ -378,6 +405,7 @@ export const workflowRepository = {
         workflow: wf,
         status: versionInfo?.status ?? null,
         latestVersionId: versionInfo?.id ?? null,
+        latestVersionNumber: versionInfo?.version ?? null,
       };
     });
 

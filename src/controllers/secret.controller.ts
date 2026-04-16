@@ -3,10 +3,14 @@ import { z } from "zod";
 import { ActorSchema } from "../schemas/actor.schema.js";
 import { secretService } from "../services/secrets/secret.service.js";
 import { EnvironmentTypes } from "../types/enums.js";
+import { parseEnvironmentsFromQuery } from "../utils/environment.utils.js";
+import type { EnvironmentType } from "../types/database.js";
 
 export const CreateNewSecretSchema = z.object({
   providerId: z.uuidv4(),
-  environmentType: z.enum(EnvironmentTypes),
+  environment: z.enum(
+    Object.values(EnvironmentTypes) as [EnvironmentType, ...EnvironmentType[]],
+  ),
   label: z.string(),
   key: z.string(),
   actor: ActorSchema,
@@ -18,13 +22,13 @@ const mapSecret = (s: {
   label: string;
   secret_key: string;
   created_on: Date | string | null;
-  environment_type?: string;
+  environment?: string;
 }) => ({
   id: s.id,
   providerId: s.provider_id,
   label: s.label,
   key: s.secret_key,
-  environmentType: s.environment_type ?? null,
+  environment: s.environment ?? null,
   createdAt: s.created_on,
 });
 
@@ -40,7 +44,7 @@ export const secretController = {
     return res.status(201).json({
       id: result.id,
       providerId: result.provider_id,
-      environmentType: data.environmentType,
+      environment: data.environment,
       label: result.label,
       key: result.secret_key,
       createdAt: result.created_on,
@@ -48,7 +52,11 @@ export const secretController = {
   },
 
   list: async (req: Request, res: Response) => {
-    const result = await secretService.listByActor(req.actor!);
+    const environments = parseEnvironmentsFromQuery(req.query.environment);
+    const result =
+      environments.length > 0
+        ? await secretService.listByActorAndEnvironments(req.actor!, environments)
+        : await secretService.listByActor(req.actor!);
     return res.status(200).json({
       secrets: result.map(mapSecret),
     });

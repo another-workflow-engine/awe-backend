@@ -3,6 +3,12 @@ import type { DB, TaskExecution } from "../types/database.js";
 import type { Insertable, Updateable, Transaction } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type { TaskExecutionModel } from "../types/models.js";
+import type {
+  ExecutionGraphConnection,
+  ExecutionGraphNode,
+  ExecutionSequenceData,
+  ExecutionSequenceExecution,
+} from "../types/taskExecution.js";
 
 type NewTaskExecution = Insertable<TaskExecution>;
 type UpdateTaskExecution = Updateable<TaskExecution>;
@@ -16,37 +22,13 @@ export type TaskExecutionWithNode = TaskExecutionModel & {
   user_task_execution_id: string | null;
 };
 
-export type WorkflowNodeForExecution = {
-  node_configuration: any;
+export type TaskDetailExecutionData = {
+  task_id: string;
+  task_status: DB["task"]["status"];
+  task_created_on: Date;
   node_id: string;
-  node_client_id: string;
-  node_type: string;
-  node_name: string | null;
-  created_on: Date;
-};
-
-export type TaskExecutionForGraph = TaskExecutionModel & {
-  node_id: string;
-  node_client_id: string;
-  node_type: string;
-  node_name: string | null;
-  user_task_execution_id: string | null;
-};
-
-export type WorkflowConnectionForExecution = {
-  edge_id: string;
-  edge_client_id: string;
-  condition_expression: string | null;
-  source_node_id: string;
-  source_node_client_id: string;
-  destination_node_id: string | null;
-  destination_node_client_id: string | null;
-};
-
-export type ExecutionGraphData = {
-  nodes: WorkflowNodeForExecution[];
-  connections: WorkflowConnectionForExecution[];
-  executions: TaskExecutionForGraph[];
+  input_variables: unknown;
+  output_variables: unknown;
 };
 
 export const taskExecutionRepository = {
@@ -121,10 +103,10 @@ export const taskExecutionRepository = {
     }
   },
 
-  findExecutionGraphByInstanceId: async (
+  findExecutionSequenceDataByInstanceId: async (
     instanceId: string,
     transaction?: Transaction<DB>,
-  ): Promise<ExecutionGraphData> => {
+  ): Promise<ExecutionSequenceData> => {
     try {
       const conn = transaction ?? db;
 
@@ -147,13 +129,12 @@ export const taskExecutionRepository = {
             eb.ref("node.client_id").as("node_client_id"),
             eb.ref("node.type").as("node_type"),
             eb.ref("node.name").as("node_name"),
-            eb.ref("node.configuration").as("node_configuration"),
             eb.ref("node.created_on").as("created_on"),
           ])
           .where("node.workflow_version_id", "=", instance.workflow_version_id)
           .where("node.is_deleted", "=", false)
           .orderBy("node.created_on", "asc")
-          .execute() as Promise<WorkflowNodeForExecution[]>,
+          .execute() as Promise<ExecutionGraphNode[]>,
 
         conn
           .selectFrom("edge as e")
@@ -164,11 +145,8 @@ export const taskExecutionRepository = {
             "e.destination_node_id",
           )
           .select((eb) => [
-            eb.ref("e.id").as("edge_id"),
-            eb.ref("e.client_id").as("edge_client_id"),
             eb.ref("e.condition_expression").as("condition_expression"),
             eb.ref("e.source_node_id").as("source_node_id"),
-            eb.ref("source.client_id").as("source_node_client_id"),
             eb.ref("e.destination_node_id").as("destination_node_id"),
             eb.ref("destination.client_id").as("destination_node_client_id"),
           ])
@@ -179,7 +157,7 @@ export const taskExecutionRepository = {
           )
           .where("e.is_deleted", "=", false)
           .orderBy("e.created_on", "asc")
-          .execute() as Promise<WorkflowConnectionForExecution[]>,
+          .execute() as Promise<ExecutionGraphConnection[]>,
 
         conn
           .selectFrom("task_execution")
@@ -190,8 +168,13 @@ export const taskExecutionRepository = {
             "user_task_execution.task_execution_id",
             "task_execution.id",
           )
-          .selectAll("task_execution")
           .select((eb) => [
+            eb.ref("task_execution.id").as("id"),
+            eb.ref("task_execution.task_id").as("task_id"),
+            eb.ref("task_execution.status").as("status"),
+            eb.ref("task_execution.started_on").as("started_on"),
+            eb.ref("task_execution.ended_on").as("ended_on"),
+            eb.ref("task_execution.created_on").as("created_on"),
             eb.ref("node.id").as("node_id"),
             eb.ref("node.client_id").as("node_client_id"),
             eb.ref("node.type").as("node_type"),
@@ -200,7 +183,7 @@ export const taskExecutionRepository = {
           ])
           .where("task.instance_id", "=", instanceId)
           .orderBy("task_execution.created_on", "asc")
-          .execute() as Promise<TaskExecutionForGraph[]>,
+          .execute() as Promise<ExecutionSequenceExecution[]>,
       ]);
 
       return {
@@ -210,7 +193,77 @@ export const taskExecutionRepository = {
       };
     } catch (err) {
       throw new RepositoryError(
-        `Find execution graph by instance_id=${instanceId} failed`,
+        `Find execution sequence data by instance_id=${instanceId} failed`,
+        err,
+      );
+    }
+  },
+
+  findLatestTaskDetailByInstanceIdAndTaskId: async (
+    instanceId: string,
+    taskId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskDetailExecutionData | null> => {
+    try {
+      const result = await (transaction ?? db)
+        .selectFrom("task_execution")
+        .innerJoin("task", "task.id", "task_execution.task_id")
+        .select((eb) => [
+          eb.ref("task.id").as("task_id"),
+          eb.ref("task.status").as("task_status"),
+          eb.ref("task.created_on").as("task_created_on"),
+          eb.ref("task.node_id").as("node_id"),
+          eb.ref("task_execution.input_variables").as("input_variables"),
+          eb.ref("task_execution.output_variables").as("output_variables"),
+        ])
+        .where("task.instance_id", "=", instanceId)
+        .where("task.id", "=", taskId)
+        .orderBy("task_execution.created_on", "desc")
+        .executeTakeFirst();
+
+      return (result as TaskDetailExecutionData | undefined) ?? null;
+    } catch (err) {
+      throw new RepositoryError(
+        `Find latest task detail by instance_id=${instanceId} task_id=${taskId} failed`,
+        err,
+      );
+    }
+  },
+
+  findLatestByTaskId: async (
+    taskId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskExecutionModel | null> => {
+    return (
+      (await (transaction ?? db)
+        .selectFrom("task_execution")
+        .selectAll()
+        .where("task_id", "=", taskId)
+        .orderBy("created_on", "desc")
+        .executeTakeFirst()) ?? null
+    );
+  },
+
+  findLatestUserTaskExecutionByTaskExecutionId: async (
+    taskExecutionId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskExecutionModel | null> => {
+    try {
+      const result = await (transaction ?? db)
+        .selectFrom("user_task_execution")
+        .innerJoin(
+          "task_execution",
+          "task_execution.id",
+          "user_task_execution.task_execution_id",
+        )
+        .selectAll("task_execution")
+        .where("task_execution.id", "=", taskExecutionId)
+        .executeTakeFirst();
+
+      return result ?? null;
+    } catch (err) {
+      throw new RepositoryError(
+        `Find latest user task execution by task_execution_id=${taskExecutionId} failed`,
         err,
       );
     }

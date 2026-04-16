@@ -18,38 +18,40 @@ export const environmentService = {
     return [];
   },
 
-  getByActorAndType: async (
+  getByActorAndEnvironment: async (
     actor: ActorModel,
-    environmentType: EnvironmentType,
+    environment: EnvironmentType,
   ): Promise<EnvironmentModel> => {
     const environments = await environmentService.getAllByActor(actor);
-    const environment = environments.find((env) => env.type === environmentType);
+    const selectedEnvironment = environments.find((env) => env.type === environment);
 
-    if (!environment) {
-      throw new ValidationError("Invalid environmentType for this actor", [
+    if (!selectedEnvironment) {
+      throw new ValidationError("Invalid environment for this actor", [
         {
-          field: "environmentType",
-          message: `Environment ${environmentType} is not available for this actor`,
+          field: "environment",
+          message: `Environment ${environment} is not available for this actor`,
         },
       ]);
     }
 
-    return environment;
+    return selectedEnvironment;
   },
 
-  getByActorAndTypes: async (
+  getByActorAndEnvironments: async (
     actor: ActorModel,
-    environmentTypes: EnvironmentType[],
+    environments: EnvironmentType[],
   ): Promise<EnvironmentModel[]> => {
-    const environments = await environmentService.getAllByActor(actor);
+    const availableEnvironments = await environmentService.getAllByActor(actor);
 
-    if (environmentTypes.length === 0) {
-      return environments;
+    if (environments.length === 0) {
+      return availableEnvironments;
     }
 
-    const byType = new Map(environments.map((environment) => [environment.type, environment]));
-    return environmentTypes
-      .map((environmentType) => byType.get(environmentType))
+    const byType = new Map(
+      availableEnvironments.map((availableEnvironment) => [availableEnvironment.type, availableEnvironment]),
+    );
+    return environments
+      .map((environment) => byType.get(environment))
       .filter((environment): environment is EnvironmentModel => Boolean(environment));
   },
 

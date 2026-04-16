@@ -144,3 +144,5 @@ dist
 test-report.json
 test-report.md
 coverage/
+
+tests/*

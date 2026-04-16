@@ -30,7 +30,6 @@ export type CreateProductionSystemOutput = {
 export type CurrentSystemOutput = {
   system: SystemModel;
   organization: OrganizationModel;
-  environment: EnvironmentModel;
 };
 
 export const systemService = {
@@ -90,7 +89,6 @@ export const systemService = {
     return {
       system,
       organization,
-      environment,
     };
   },
 };

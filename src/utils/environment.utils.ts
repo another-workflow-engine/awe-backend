@@ -8,7 +8,7 @@ const EnvironmentTypeSchema = z.enum([
   EnvironmentTypes.PRODUCTION,
 ]);
 
-export function parseEnvironmentTypesFromQuery(rawValue: unknown): EnvironmentType[] {
+export function parseEnvironmentsFromQuery(rawValue: unknown): EnvironmentType[] {
   if (rawValue === undefined || rawValue === null || rawValue === "") {
     return [];
   }
@@ -23,11 +23,11 @@ export function parseEnvironmentTypesFromQuery(rawValue: unknown): EnvironmentTy
   return [...new Set(parsedValues)];
 }
 
-export function getEnvironmentTypeById(
+export function getEnvironmentById(
   environmentIds: string[],
-  environmentTypes: EnvironmentType[],
+  environments: EnvironmentType[],
   environmentId: string,
 ): EnvironmentType | undefined {
   const index = environmentIds.indexOf(environmentId);
-  return index >= 0 ? environmentTypes[index] : undefined;
+  return index >= 0 ? environments[index] : undefined;
 }

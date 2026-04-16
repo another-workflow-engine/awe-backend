@@ -1,5 +1,5 @@
 import type { Insertable, Transaction } from "kysely";
-import type { DB, SecretReference } from "../types/database.js";
+import type { DB, EnvironmentType, SecretReference } from "../types/database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { db } from "../database.js";
 import type {
@@ -97,9 +97,10 @@ export const secretReferenceRepository = {
 
   findByActor: async (
     actorId: string,
+    environments?: EnvironmentType[],
     transaction?: Transaction<DB>,
   ) => {
-    return await (transaction ?? db)
+    let query = (transaction ?? db)
       .selectFrom("secret_reference")
       .innerJoin(
         "environment",
@@ -114,13 +115,18 @@ export const secretReferenceRepository = {
         "secret_reference.secret_key",
         "secret_reference.provider_id",
         "secret_reference.created_on",
-        "environment.type as environment_type",
+        "environment.type as environment",
       ])
       .where("organization.actor_id", "=", actorId)
       .where("organization.is_deleted", "=", false)
       .where("system.is_deleted", "=", false)
-      .where("environment.is_deleted", "=", false)
-      .execute();
+      .where("environment.is_deleted", "=", false);
+
+    if (environments && environments.length > 0) {
+      query = query.where("environment.type", "in", environments);
+    }
+
+    return await query.execute();
   },
 
   findByProviderAndActor: async (
@@ -143,7 +149,7 @@ export const secretReferenceRepository = {
         "secret_reference.secret_key",
         "secret_reference.provider_id",
         "secret_reference.created_on",
-        "environment.type as environment_type",
+        "environment.type as environment",
       ])
       .where("secret_reference.provider_id", "=", providerId)
       .where("organization.actor_id", "=", actorId)

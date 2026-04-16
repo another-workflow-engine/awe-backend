@@ -15,7 +15,7 @@ export const authController = {
   login: async (req: Request, res: Response) => {
     const { email, password } = LoginInput.parse(req.body);
 
-    const { organization, system, environment, accessToken, refreshToken } =
+    const { organization, system, accessToken, refreshToken } =
       await authService.login(email, password);
 
     res.status(200).json({
@@ -23,9 +23,7 @@ export const authController = {
         id: system.id,
         name: system.name,
         orgName: organization.name,
-        contactEmail: organization.email,
-        environmentType: environment.type,
-        status: "active",
+        contactEmail: organization.email
       },
       accessToken,
       refreshToken,

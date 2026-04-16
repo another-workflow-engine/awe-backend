@@ -18,33 +18,37 @@ import type { EnvironmentType } from "../types/database.js";
 export const apiKeyService = {
   getAll: async (
     actor: ActorModel,
-    environmentTypes?: EnvironmentType[],
-  ): Promise<Array<ApiKeyModel & { environmentType: EnvironmentType }>> => {
+    environments?: EnvironmentType[],
+  ): Promise<Array<ApiKeyModel & { environment: EnvironmentType }>> => {
     if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
 
     const apiKeys = await apiKeyRepository.findByOrganizationActorId(actor.id);
 
-    if (!environmentTypes || environmentTypes.length === 0) {
+    if (!environments || environments.length === 0) {
       return apiKeys;
     }
 
-    const selected = new Set(environmentTypes);
-    return apiKeys.filter((apiKey) => selected.has(apiKey.environmentType));
+    const selected = new Set(environments);
+    return apiKeys.filter((apiKey) => selected.has(apiKey.environment));
   },
 
-  createNew: async (label: string, environmentType: EnvironmentType, actor: ActorModel): Promise<{
+  createNew: async (
+    label: string | undefined,
+    environment: EnvironmentType,
+    actor: ActorModel,
+  ): Promise<{
     rawKey: string;
     apiKey: ApiKeyModel;
-    environmentType: EnvironmentType;
+    environment: EnvironmentType;
   }> => {
     if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
 
     const validTypes = Object.values(EnvironmentTypes);
-    if (!validTypes.includes(environmentType as (typeof validTypes)[number])) {
+    if (!validTypes.includes(environment as (typeof validTypes)[number])) {
       throw new AppError(
         `Invalid environment type. Must be one of: ${validTypes.join(", ")}`,
         400,
@@ -54,23 +58,25 @@ export const apiKeyService = {
     const environments = await environmentRepository.findByOrganizationActorId(
       actor.id,
     );
-    const environment = environments.find((e) => e.type === environmentType);
+    const selectedEnvironment = environments.find((e) => e.type === environment);
 
-    if (!environment) {
+    if (!selectedEnvironment) {
       throw new NotFoundError(
-        `Environment '${environmentType}' not found for this organization`,
+        `Environment '${environment}' not found for this organization`,
       );
     }
 
     const existingKeyCount = await apiKeyRepository.countActiveByEnvironmentId(
-      environment.id,
+      selectedEnvironment.id,
     );
     if (existingKeyCount > 0) {
       throw new AppError(
-        `API key already exists for environment '${environmentType}'. Revoke the existing key before creating a new one.`,
+        `API key already exists for environment '${environment}'. Revoke the existing key before creating a new one.`,
         409,
       );
     }
+
+    const resolvedLabel = label?.trim() || `API Key (${environment})`;
 
     const prefix = `${Config.API_KEY_PREFIX}_${crypto.randomBytes(4).toString("hex")}`;
     const secret = crypto.randomBytes(32).toString("hex");
@@ -88,15 +94,15 @@ export const apiKeyService = {
       const apiKey = await apiKeyRepository.insert(
         {
           actor_id: apiKeyActor.id,
-          environment_id: environment.id,
-          label: label,
+          environment_id: selectedEnvironment.id,
+          label: resolvedLabel,
           key_prefix: prefix,
           key_hash: secretHash,
         },
         transaction,
       );
 
-      return { rawKey, apiKey, environmentType: environment.type };
+      return { rawKey, apiKey, environment: selectedEnvironment.type };
     });
   },
 

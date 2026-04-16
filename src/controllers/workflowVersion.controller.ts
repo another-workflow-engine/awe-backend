@@ -14,7 +14,7 @@ import {
   parsePaginationFromRequest,
 } from "../utils/pagination.utils.js";
 import { WorkflowVersionStatuses } from "../types/enums.js";
-import { getEnvironmentTypeById } from "../utils/environment.utils.js";
+import { getEnvironmentById } from "../utils/environment.utils.js";
 
 export const workflowVersionController = {
   list: async (req: Request, res: Response) => {
@@ -31,9 +31,9 @@ export const workflowVersionController = {
       req.environmentIds,
     );
 
-    const environmentType = getEnvironmentTypeById(
+    const environment = getEnvironmentById(
       req.environmentIds,
-      req.environmentTypes,
+      req.environments,
       workflow.environment_id,
     );
 
@@ -44,7 +44,7 @@ export const workflowVersionController = {
       status: version.status,
       description: version.description,
       publishedAt: version.published_on,
-      environmentType,
+      environment,
       createdAt: version.created_on,
       updatedAt: version.modified_on,
     }));
@@ -104,9 +104,9 @@ export const workflowVersionController = {
     const { workflow, workflowVersion, nodes, edges, startVariables } =
       await workflowVersionService.getDetail(data, req.environmentIds);
 
-    const environmentType = getEnvironmentTypeById(
+    const environment = getEnvironmentById(
       req.environmentIds,
-      req.environmentTypes,
+      req.environments,
       workflow.environment_id,
     );
 
@@ -118,7 +118,7 @@ export const workflowVersionController = {
       publishedAt: workflowVersion.published_on,
       createdAt: workflowVersion.created_on,
       modifiedAt: workflowVersion.modified_on,
-      environmentType,
+      environment,
       nodes,
       edges,
       startVariables,
@@ -223,7 +223,7 @@ export const workflowVersionController = {
       actor: req.actor,
     });
 
-    const result = await workflowVersionService.promote(data, req.environmentId);
+    const result = await workflowVersionService.promote(data, req.environmentIds);
     return res.status(201).json(result);
   },
 };

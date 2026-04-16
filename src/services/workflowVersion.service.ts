@@ -25,7 +25,7 @@ import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { workflowValidatorService } from "./workflowValidator.service.js";
 import { Transaction } from "kysely";
-import type { DB, WorkflowVersionStatus } from "../types/database.js";
+import type { DB, EnvironmentType, WorkflowVersionStatus } from "../types/database.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
@@ -55,6 +55,82 @@ const isPromotionPathAllowed = (
     (sourceEnvironmentType === EnvironmentTypes.STAGING &&
       targetEnvironmentType === EnvironmentTypes.PRODUCTION)
   );
+};
+
+const promotionTargetPriority: Record<EnvironmentType, EnvironmentType[]> = {
+  [EnvironmentTypes.DEVELOPMENT]: [
+    EnvironmentTypes.STAGING,
+    EnvironmentTypes.PRODUCTION,
+  ],
+  [EnvironmentTypes.STAGING]: [EnvironmentTypes.PRODUCTION],
+  [EnvironmentTypes.PRODUCTION]: [],
+};
+
+const resolvePromotionTargetEnvironmentId = async (
+  sourceVersionId: string,
+  actorEnvironmentIds: string[],
+) => {
+  if (actorEnvironmentIds.length === 0) {
+    throw new ValidationError("Invalid promotion target", [
+      {
+        field: "environment",
+        message: "No available environments found for this actor",
+      },
+    ]);
+  }
+
+  const sourceVersion = await workflowVersionRepository.findById(sourceVersionId);
+  if (!sourceVersion) {
+    throw new NotFoundError("Workflow version");
+  }
+
+  const sourceWorkflow = await workflowRepository.findById(sourceVersion.workflow_id);
+  if (!sourceWorkflow) {
+    throw new NotFoundError("Workflow");
+  }
+
+  const sourceEnvironment = await environmentRepository.findById(
+    sourceWorkflow.environment_id,
+  );
+
+  if (!sourceEnvironment) {
+    throw new ValidationError("Invalid promotion target", [
+      {
+        field: "environment",
+        message: "Source environment could not be resolved for this workflow",
+      },
+    ]);
+  }
+
+  const actorEnvironments = (
+    await Promise.all(
+      actorEnvironmentIds.map(async (environmentId) => {
+        return await environmentRepository.findById(environmentId);
+      }),
+    )
+  ).filter((environment): environment is NonNullable<typeof environment> => {
+    return Boolean(environment);
+  });
+
+  const targetEnvironmentId = (promotionTargetPriority[sourceEnvironment.type] ?? [])
+    .map((environmentType) => {
+      return actorEnvironments.find((environment) => {
+        return environment.type === environmentType;
+      })?.id;
+    })
+    .find((environmentId): environmentId is string => Boolean(environmentId));
+
+  if (!targetEnvironmentId) {
+    throw new ValidationError("Invalid promotion target", [
+      {
+        field: "environment",
+        message:
+          `No valid promotion target found for source environment '${sourceEnvironment.type}' using actor environments`,
+      },
+    ]);
+  }
+
+  return targetEnvironmentId;
 };
 
 const getVersionOrThrow = async (
@@ -420,7 +496,7 @@ export const workflowVersionService = {
       if (!sourceEnvironment || !targetEnvironment) {
         throw new ValidationError("Invalid promotion target", [
           {
-            field: "environmentType",
+            field: "environment",
             message:
               "Source or target environment could not be resolved for this organization",
           },
@@ -430,7 +506,7 @@ export const workflowVersionService = {
       if (sourceEnvironment.id === targetEnvironment.id) {
         throw new ValidationError("Invalid promotion target", [
           {
-            field: "environmentType",
+            field: "environment",
             message: "Source and target environments must be different",
           },
         ]);
@@ -439,7 +515,7 @@ export const workflowVersionService = {
       if (!isPromotionPathAllowed(sourceEnvironment.type, targetEnvironment.type)) {
         throw new ValidationError("Invalid promotion path", [
           {
-            field: "environmentType",
+            field: "environment",
             message:
               `Promotion from '${sourceEnvironment.type}' to '${targetEnvironment.type}' is not allowed. Allowed paths: development -> staging, development -> production, staging -> production`,
           },
@@ -506,12 +582,17 @@ export const workflowVersionService = {
     });
   },
 
-  promote: async (data: PromoteVersionInput, targetEnvironmentId: string) => {
+  promote: async (data: PromoteVersionInput, actorEnvironmentIds: string[]) => {
     if (data.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError(
         "Only organization account actors are allowed to promote workflow versions",
       );
     }
+
+    const targetEnvironmentId = await resolvePromotionTargetEnvironmentId(
+      data.versionId,
+      actorEnvironmentIds,
+    );
 
     return await workflowVersionService.promoteWorkflowVersion(
       data.versionId,

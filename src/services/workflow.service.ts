@@ -16,6 +16,11 @@ export type UpdateWorkflowInput = {
   description?: string | null | undefined;
 };
 
+export type WorkflowListQuery = {
+  search?: string;
+  createdSort?: "asc" | "desc";
+};
+
 export const workflowService = {
   getAll: async (environmentIds: string[]) => {
     return await workflowRepository.findByEnvironmentIdsWithLatestVersion(
@@ -27,11 +32,14 @@ export const workflowService = {
     environmentIds: string[],
     limit: number,
     offset: number,
+    query?: WorkflowListQuery,
   ) => {
     return await workflowRepository.findByEnvironmentIdsWithLatestVersionPaginated(
       environmentIds,
       limit,
       offset,
+      query?.search,
+      query?.createdSort ?? "desc",
     );
   },
 

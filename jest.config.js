@@ -23,12 +23,12 @@ export default {
     "/node_modules/(?!(@bpmn-io|min-dash)/)"
   ],
 
-  setupFiles: ["<rootDir>/tests/setup.ts"],
+  setupFiles: ["<rootDir>/tests/setup.js"],
 
   moduleFileExtensions: ["ts", "js"],
 
   moduleNameMapper: {
-    "^(.*)\\.js$": "$1"
+    "^(\\.{1,2}/.*)\\.js$": "$1"
   },
 
   clearMocks: true,

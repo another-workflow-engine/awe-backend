@@ -8,6 +8,7 @@ import { secretProviderRepository } from "../../repositories/secretProvider.repo
 import { NotFoundError } from "../../errors/NotFoundError.js";
 import { InvalidOperationError } from "../../errors/InvalidOperationError.js";
 import { ActorSchema } from "../../schemas/actor.schema.js";
+import type { EnvironmentType } from "../../types/database.js";
 
 type CreateNewSecretSchemaType = z.infer<typeof CreateNewSecretSchema>;
 
@@ -53,9 +54,9 @@ function normalizeSecretValue(value: unknown, secretId: string): string {
 
 export const secretService = {
   createNew: async (data: CreateNewSecretSchemaType) => {
-    const environment = await environmentService.getByActorAndType(
+    const environment = await environmentService.getByActorAndEnvironment(
       data.actor,
-      data.environmentType,
+      data.environment,
     );
 
     const providerModel = await secretProviderRepository.findById(
@@ -115,6 +116,13 @@ export const secretService = {
 
   listByActor: async (actor: z.infer<typeof ActorSchema>) => {
     return await secretReferenceRepository.findByActor(actor.id);
+  },
+
+  listByActorAndEnvironments: async (
+    actor: z.infer<typeof ActorSchema>,
+    environments: EnvironmentType[],
+  ) => {
+    return await secretReferenceRepository.findByActor(actor.id, environments);
   },
 
   listByProvider: async (

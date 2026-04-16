@@ -11,6 +11,7 @@ import {
   LogEventTypes,
   InstanceStatuses,
   TaskStatuses,
+  NodeTypes,
 } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -137,6 +138,22 @@ export const instanceService = {
     );
   },
 
+  assertAccessible: async (
+    instanceId: string,
+    environmentIds: string[],
+  ): Promise<InstanceModel> => {
+    const instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
+
+    if (!instance) {
+      throw new NotFoundError("Instance");
+    }
+
+    return instance;
+  },
+
   get: async (
     instanceId: string,
     actorId: string,
@@ -165,7 +182,7 @@ export const instanceService = {
 
     const task = await taskRepository.findLatestByInstanceId(instance.id);
     if (!task) {
-      return { instance, workflowVersion, node: null, task: null };
+      return { instance, workflowVersion, node: null, task: null, latestTaskExecution: null, latestUserTaskExecution: null };
     }
 
     const node = await nodeService.getById(task.node_id);
@@ -173,7 +190,17 @@ export const instanceService = {
       throw new DataIntegrityError(`Node does not exist id = ${task.node_id}`);
     }
 
-    return { instance, workflow_name, workflowVersion, node, task };
+    const latestTaskExecution = await taskExecutionService.getLatestByTaskId(task.id);
+    if (!latestTaskExecution) {
+      return { instance, workflowVersion, node: null, task: null, latestTaskExecution: null, latestUserTaskExecution: null };
+    }
+
+    let latestUserTaskExecution;
+    if (node.type === NodeTypes.USER) {
+      latestUserTaskExecution = await taskExecutionService.getLatestUserTaskExecutionByTaskId(latestTaskExecution.id);
+    }
+
+    return { instance, workflow_name, workflowVersion, node, task, latestTaskExecution, latestUserTaskExecution };
   },
 
   getLockedInProgressOrPausedRelations: async (

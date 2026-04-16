@@ -45,6 +45,7 @@ export const instanceController = {
       status: instance.status,
       startedAt: instance.started_on,
       autoAdvance: instance.auto_advance,
+      environment: req.environment,
       workflow: {
         id: workflowVersion.workflow_id,
         version: workflowVersion.version,
@@ -54,9 +55,15 @@ export const instanceController = {
 
   get: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const { instance, workflow_name, workflowVersion, node, task } =
-      await instanceService.get(instanceId, req.actor.id, req.environmentIds);
-
+    const {
+      instance,
+      workflow_name,
+      workflowVersion,
+      node,
+      task,
+      latestTaskExecution,
+      latestUserTaskExecution,
+    } = await instanceService.get(instanceId, req.actor.id, req.environmentIds);
 
     return res.json({
       id: instance.id,
@@ -78,6 +85,8 @@ export const instanceController = {
           : {
               id: task.id,
               nodeId: node.client_id,
+              latestTaskExecution: latestTaskExecution?.id ?? null,
+              latestUserTaskExecution: latestUserTaskExecution?.id ?? null,
               type: node.type,
               name: node.name,
               status: task.status,
@@ -96,18 +105,30 @@ export const instanceController = {
     return res.json({ instance });
   },
 
-  getExecutionLogs: async (req: Request, res: Response) => {
+  getExecutionSequence: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
+    await instanceService.assertAccessible(instanceId, req.environmentIds);
+    const sequence =
+      await taskExecutionService.getExecutionSequence(instanceId);
+    return res.json({ success: true, data: sequence });
+  },
 
-    await instanceService.get(
-      instanceId,
-      req.actor.id,
-      req.environmentIds,
-    );
+  getTaskDetail: async (req: Request, res: Response) => {
+    const { instanceId, taskId } = req.params as {
+      instanceId: string;
+      taskId: string;
+    };
 
-    const executionLogs =
-      await taskExecutionService.getExecutionLogs(instanceId);
-    return res.json(executionLogs);
+    await instanceService.assertAccessible(instanceId, req.environmentIds);
+    const detail = await taskExecutionService.getTaskDetail(instanceId, taskId);
+    if (!detail) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+        code: "TASK_NOT_FOUND",
+      });
+    }
+    return res.json({ success: true, data: detail });
   },
 
   pause: async (req: Request, res: Response) => {

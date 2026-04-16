@@ -11,7 +11,13 @@ import {
   buildPaginatedResponse,
   parsePaginationFromRequest,
 } from "../utils/pagination.utils.js";
-import { getEnvironmentTypeById } from "../utils/environment.utils.js";
+import { getEnvironmentById } from "../utils/environment.utils.js";
+import { z } from "zod";
+
+const WorkflowListQuerySchema = z.object({
+  search: z.string().trim().optional(),
+  createdSort: z.enum(["asc", "desc"]).optional().default("desc"),
+});
 
 export const workflowGroupController = {
   create: async (req: Request, res: Response) => {
@@ -34,23 +40,32 @@ export const workflowGroupController = {
 
   list: async (req: Request, res: Response) => {
     const { page, limit, offset } = parsePaginationFromRequest(req);
+    const { search, createdSort } = WorkflowListQuerySchema.parse(req.query);
+    const listQuery = {
+      createdSort,
+      ...(search ? { search } : {}),
+    };
     const { items, total } = await workflowService.getAllPaginated(
       req.environmentIds,
       limit,
       offset,
+      listQuery,
     );
 
     const formattedWorkflows = items.map(
-      ({ workflow, status, latestVersionId }) => {
+      ({ workflow, status, latestVersionId, latestVersionNumber }) => {
         return {
           id: workflow.id,
           name: workflow.name,
           description: workflow.description,
-          status: status,
-          latestVersionId: latestVersionId,
-          environmentType: getEnvironmentTypeById(
+          latestVersion: {
+            latestVersionId: latestVersionId,
+            status: status,
+            latestVersionNumber: latestVersionNumber,
+          },
+          environment: getEnvironmentById(
             req.environmentIds,
-            req.environmentTypes,
+            req.environments,
             workflow.environment_id,
           ),
           createdAt: workflow.created_on,
@@ -81,9 +96,9 @@ export const workflowGroupController = {
       id: updatedWorkflow.id,
       name: updatedWorkflow.name,
       description: updatedWorkflow.description,
-      environmentType: getEnvironmentTypeById(
+      environment: getEnvironmentById(
         req.environmentIds,
-        req.environmentTypes,
+        req.environments,
         updatedWorkflow.environment_id,
       ),
       updatedAt: updatedWorkflow.modified_on,
@@ -100,9 +115,9 @@ export const workflowGroupController = {
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      environmentType: getEnvironmentTypeById(
+      environment: getEnvironmentById(
         req.environmentIds,
-        req.environmentTypes,
+        req.environments,
         workflow.environment_id,
       ),
       createdAt: workflow.created_on,

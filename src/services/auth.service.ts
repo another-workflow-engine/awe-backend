@@ -57,7 +57,6 @@ export const authService = {
     return {
       organization: result.organization,
       system: result.system,
-      environment: result.environment,
       ...(await generateTokens(result.actor, result.organization.id)),
     };
   },

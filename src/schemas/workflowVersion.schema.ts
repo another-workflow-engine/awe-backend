@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ActorSchema } from "./actor.schema.js";
 import { NodeSchema, EdgeSchema } from "./node.schema.js";
-import { WorkflowVersionStatuses } from "../types/enums.js";
+import { EnvironmentTypes, WorkflowVersionStatuses } from "../types/enums.js";
 
 export const WorkflowVersionCreateSchema = z.object({
   workflowId: z.uuidv4(),
@@ -46,4 +46,17 @@ export const WorkflowVersionUpdateSchema = z.object({
 export const WorkflowVersionPromoteSchema = z.object({
   versionId: z.uuidv4(),
   actor: ActorSchema,
+});
+
+export const WorkflowVersionPromoteResponseSchema = z.object({
+  workflowId: z.uuidv4(),
+  versionId: z.uuidv4(),
+  sourceEnvironment: z.enum([
+    EnvironmentTypes.DEVELOPMENT,
+    EnvironmentTypes.STAGING,
+  ]),
+  targetEnvironment: z.enum([
+    EnvironmentTypes.STAGING,
+    EnvironmentTypes.PRODUCTION,
+  ]),
 });

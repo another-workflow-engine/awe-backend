@@ -53,7 +53,7 @@ export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
-export type NodeType = "decision" | "end" | "script" | "service" | "start" | "user";
+export type NodeType = "decision" | "email" | "end" | "script" | "service" | "start" | "user";
 
 export type Numeric = ColumnType<string, number | string, number | string>;
 

@@ -5,6 +5,7 @@ import {
   WorkflowVersionDetailSchema,
   WorkflowVersionListSchema,
   WorkflowVersionPromoteSchema,
+  WorkflowVersionPromoteResponseSchema,
   WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
@@ -224,6 +225,7 @@ export const workflowVersionController = {
     });
 
     const result = await workflowVersionService.promote(data, req.environmentIds);
-    return res.status(201).json(result);
+    const response = WorkflowVersionPromoteResponseSchema.parse(result);
+    return res.status(201).json(response);
   },
 };

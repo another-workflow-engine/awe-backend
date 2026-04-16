@@ -146,3 +146,4 @@ test-report.md
 coverage/
 
 tests/*
+scratch/

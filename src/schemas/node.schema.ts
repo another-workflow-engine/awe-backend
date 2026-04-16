@@ -144,6 +144,26 @@ export const ScriptNodeConfigurationSchema = z.object({
   ),
 });
 
+const EmailRecipientSchema = z.object({
+  valueExpression: z.string(),
+});
+
+export const EmailNodeConfigurationSchema = z.object({
+  provider: z.string().min(1).default("google_smtp"),
+  senderExpression: z.string(),
+  authUserExpression: z.string(),
+  authPassExpression: z.string(),
+  to: z.array(EmailRecipientSchema),
+  cc: z.array(EmailRecipientSchema).optional().default([]),
+  bcc: z.array(EmailRecipientSchema).optional().default([]),
+  subjectExpression: z.string(),
+  bodyExpression: z.string(),
+  maxAttempts: z.number().optional().default(1),
+  backoff: BackoffSchema,
+  failurePolicy: z.enum(["fail", "continue"]).optional().default("fail"),
+  responseMap: z.array(ServiceResponseSchema).optional().default([]),
+});
+
 export const RuleSchema = z.object({
   id: z.string(),
   label: z.string().optional(),
@@ -177,6 +197,10 @@ export const NodeSchema = z
     z.object({
       type: z.literal(NodeTypes.SCRIPT),
       configuration: ScriptNodeConfigurationSchema,
+    }),
+    z.object({
+      type: z.literal(NodeTypes.EMAIL),
+      configuration: EmailNodeConfigurationSchema,
     }),
     z.object({
       type: z.literal(NodeTypes.DECISION),

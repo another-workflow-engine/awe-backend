@@ -4,6 +4,7 @@ import { nodeSchemaService } from "./nodeSchema.service.js";
 import type { EdgeModel, NodeModel } from "../types/models.js";
 import {
   DecisionNodeConfigurationSchema,
+  EmailNodeConfigurationSchema,
   EndNodeConfigurationSchema,
   ScriptNodeConfigurationSchema,
   ServiceNodeConfigurationSchema,
@@ -648,6 +649,199 @@ function validateServiceNode(
   return errors;
 }
 
+function validateEmailNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const assignedOutputs = new Set<string>();
+  const config = converterUtils.parseOrThrow(
+    EmailNodeConfigurationSchema,
+    node.configuration,
+  );
+
+  validateRequired(
+    config.provider,
+    node.client_id,
+    "Email task provider must not be empty",
+    errors,
+  );
+
+  const hasSender = validateRequired(
+    config.senderExpression,
+    node.client_id,
+    "Email task sender expression must not be empty",
+    errors,
+  );
+  if (hasSender) {
+    validateExpression(
+      config.senderExpression,
+      node.client_id,
+      "Email task: invalid sender expression",
+      errors,
+      validateFeelExpression,
+      inputVariables,
+    );
+  }
+
+  const hasAuthUser = validateRequired(
+    config.authUserExpression,
+    node.client_id,
+    "Email task auth user expression must not be empty",
+    errors,
+  );
+  if (hasAuthUser) {
+    validateExpression(
+      config.authUserExpression,
+      node.client_id,
+      "Email task: invalid auth user expression",
+      errors,
+      validateFeelExpression,
+      inputVariables,
+    );
+  }
+
+  const hasAuthPass = validateRequired(
+    config.authPassExpression,
+    node.client_id,
+    "Email task auth password expression must not be empty",
+    errors,
+  );
+  if (hasAuthPass) {
+    validateExpression(
+      config.authPassExpression,
+      node.client_id,
+      "Email task: invalid auth password expression",
+      errors,
+      validateFeelExpression,
+      inputVariables,
+    );
+  }
+
+  if ((config.to ?? []).length === 0) {
+    errors.push({
+      code: ValidationErrorCode.NODE_MISSING_REQUIRED_CONFIGURATION,
+      message: "Email task must have at least one recipient in To",
+      nodeId: node.client_id,
+    });
+  }
+
+  config.to.forEach((recipient, index) => {
+    const hasValue = validateRequired(
+      recipient.valueExpression,
+      node.client_id,
+      `Email task To recipient ${index + 1}: value expression must not be empty`,
+      errors,
+    );
+    if (hasValue) {
+      validateExpression(
+        recipient.valueExpression,
+        node.client_id,
+        `Email task To recipient ${index + 1}: invalid value expression`,
+        errors,
+        validateFeelExpression,
+        inputVariables,
+      );
+    }
+  });
+
+  config.cc?.forEach((recipient, index) => {
+    const hasValue = validateRequired(
+      recipient.valueExpression,
+      node.client_id,
+      `Email task Cc recipient ${index + 1}: value expression must not be empty`,
+      errors,
+    );
+    if (hasValue) {
+      validateExpression(
+        recipient.valueExpression,
+        node.client_id,
+        `Email task Cc recipient ${index + 1}: invalid value expression`,
+        errors,
+        validateFeelExpression,
+        inputVariables,
+      );
+    }
+  });
+
+  config.bcc?.forEach((recipient, index) => {
+    const hasValue = validateRequired(
+      recipient.valueExpression,
+      node.client_id,
+      `Email task Bcc recipient ${index + 1}: value expression must not be empty`,
+      errors,
+    );
+    if (hasValue) {
+      validateExpression(
+        recipient.valueExpression,
+        node.client_id,
+        `Email task Bcc recipient ${index + 1}: invalid value expression`,
+        errors,
+        validateFeelExpression,
+        inputVariables,
+      );
+    }
+  });
+
+  const hasSubject = validateRequired(
+    config.subjectExpression,
+    node.client_id,
+    "Email task subject expression must not be empty",
+    errors,
+  );
+  if (hasSubject) {
+    validateExpression(
+      config.subjectExpression,
+      node.client_id,
+      "Email task: invalid subject expression",
+      errors,
+      validateFeelExpression,
+      inputVariables,
+    );
+  }
+
+  const hasBody = validateRequired(
+    config.bodyExpression,
+    node.client_id,
+    "Email task body expression must not be empty",
+    errors,
+  );
+  if (hasBody) {
+    validateExpression(
+      config.bodyExpression,
+      node.client_id,
+      "Email task: invalid body expression",
+      errors,
+      validateFeelExpression,
+      inputVariables,
+    );
+  }
+
+  config.responseMap?.forEach((entry, index) => {
+    validateJsonPath(
+      entry.jsonPath,
+      node.client_id,
+      `Email task response field ${index + 1}: jsonPath is invalid`,
+      errors,
+    );
+
+    const hasContextName = validateRequired(
+      entry.contextVariableName,
+      node.client_id,
+      `Email task response field ${index + 1}: context variable name must not be empty`,
+      errors,
+    );
+
+    if (hasContextName) {
+      assignedOutputs.add(entry.contextVariableName.trim());
+    }
+  });
+
+  validateOutputAssignments(node, assignedOutputs, errors);
+
+  return errors;
+}
+
 function validateScriptNode(
   node: NodeModel,
   inputVariables: Set<string>,
@@ -863,6 +1057,7 @@ export const workflowValidatorService = {
       [NodeTypes.END]: validateEndNode,
       [NodeTypes.USER]: validateUserNode,
       [NodeTypes.SERVICE]: validateServiceNode,
+      [NodeTypes.EMAIL]: validateEmailNode,
       [NodeTypes.SCRIPT]: validateScriptNode,
       [NodeTypes.DECISION]: validateDecisionNode,
     };

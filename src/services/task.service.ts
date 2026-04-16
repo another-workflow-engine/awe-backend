@@ -140,7 +140,8 @@ async function createExecution(
 
   if (
     nodeSchema.type === NodeTypes.SERVICE ||
-    nodeSchema.type === NodeTypes.SCRIPT
+    nodeSchema.type === NodeTypes.SCRIPT ||
+    nodeSchema.type === NodeTypes.EMAIL
   ) {
     attempts.delay = convertToMilliseconds(
       nodeSchema.configuration.backoff.delay,

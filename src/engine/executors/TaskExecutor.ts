@@ -7,6 +7,7 @@ import { NodeTypes, TaskStatuses } from "../../types/enums.js";
 import type { NodeModel, TaskModel } from "../../types/models.js";
 import type { BaseExecutor } from "./BaseExecutor.js";
 import { DecisionNodeExecutor } from "./DecisionNodeExecutor.js";
+import { EmailNodeExecutor } from "./EmailNodeExecutor.js";
 import { EndNodeExecutor } from "./EndNodeExecutor.js";
 import { ScriptNodeExecutor } from "./ScriptNodeExecutor.js";
 import { ServiceNodeExecutor } from "./ServiceNodeExecuter.js";
@@ -24,6 +25,7 @@ const ExecutorMap: Record<
   [NodeTypes.START]: StartNodeExecutor,
   [NodeTypes.SERVICE]: ServiceNodeExecutor,
   [NodeTypes.SCRIPT]: ScriptNodeExecutor,
+  [NodeTypes.EMAIL]: EmailNodeExecutor,
   [NodeTypes.DECISION]: DecisionNodeExecutor,
   [NodeTypes.END]: EndNodeExecutor,
 };

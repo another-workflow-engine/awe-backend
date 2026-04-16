@@ -7,6 +7,7 @@ import type {
   NodeInputSchema,
   NodeOuputSchema,
   ScriptNodeConfiguration,
+  EmailNodeConfiguration,
   ServiceNodeConfiguration,
   StartNodeConfiguration,
   StartNodeDataMap,
@@ -106,6 +107,25 @@ function getScriptSchema(config: ScriptNodeConfiguration): SchemaResult {
   });
 }
 
+function getEmailSchema(config: EmailNodeConfiguration): SchemaResult {
+  return buildSchema({
+    expressions: [
+      config.senderExpression,
+      config.authUserExpression,
+      config.authPassExpression,
+      config.subjectExpression,
+      config.bodyExpression,
+      ...config.to.map((recipient) => recipient.valueExpression),
+      ...(config.cc ?? []).map((recipient) => recipient.valueExpression),
+      ...(config.bcc ?? []).map((recipient) => recipient.valueExpression),
+    ],
+    outputVariables: (config.responseMap ?? []).map(
+      (r) => r.contextVariableName,
+    ),
+    includeSecrets: true,
+  });
+}
+
 function getDecisionSchema(config: DecisionNodeConfiguration): SchemaResult {
   return buildSchema({
     expressions: config.rules.map((r) => r.conditionExpression),
@@ -125,6 +145,7 @@ type SchemaGetters = {
 const schemaGetters: SchemaGetters = {
   start: getStartSchema,
   service: getServiceSchema,
+  email: getEmailSchema,
   script: getScriptSchema,
   user: getUserSchema,
   decision: getDecisionSchema,

@@ -28,6 +28,7 @@ export const NodeTypes = {
   END: "end",
   SCRIPT: "script",
   SERVICE: "service",
+  EMAIL: "email",
   USER: "user",
 } as const satisfies Record<string, NodeType>;
 

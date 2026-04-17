@@ -131,10 +131,7 @@ export const contextUtils = {
         throw new EngineError(`Secret ${variableName} could not evalauted`);
       }
 
-      evaluatedContext.secret[variableName] = normalizeSecretValue(
-        value,
-        variableName,
-      );
+      evaluatedContext.secret[variableName] = value;
     }
 
     const fetchedResponses: Record<string, unknown> = {};
@@ -214,14 +211,16 @@ export const contextUtils = {
           ([varName, { urlId }]) => {
             const urlSettings = urls[urlId];
             const missingVariables = urlSettings
-              ? getReferencedVariables(urlSettings.urlExpression, urlSettings.headers).filter(
-                  (name) => !(name in evaluatedContext.context),
-                )
+              ? getReferencedVariables(
+                  urlSettings.urlExpression,
+                  urlSettings.headers,
+                ).filter((name) => !(name in evaluatedContext.context))
               : [];
             const missingSecrets = urlSettings
-              ? getReferencedSecrets(urlSettings.urlExpression, urlSettings.headers).filter(
-                  (name) => !(name in evaluatedContext.secret),
-                )
+              ? getReferencedSecrets(
+                  urlSettings.urlExpression,
+                  urlSettings.headers,
+                ).filter((name) => !(name in evaluatedContext.secret))
               : [];
 
             const missingParts = [

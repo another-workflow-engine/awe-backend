@@ -13,11 +13,11 @@ export const statusUtils = {
   },
 
   instanceCanExecute: (instance: InstanceModel): boolean => {
-    return !(
-      instance.auto_advance &&
-      instance.status === InstanceStatuses.PAUSED &&
-      statusUtils.instanceHasEnded(instance.status)
-    );
+    if (instance.auto_advance && instance.status === InstanceStatuses.PAUSED) {
+      return false;
+    }
+
+    return !statusUtils.instanceHasEnded(instance.status);
   },
 
   taskHasEnded: (status: TaskStatus): boolean => {

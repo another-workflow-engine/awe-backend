@@ -133,8 +133,6 @@ export class EmailNodeExecutor extends Executor<typeof NodeTypes.EMAIL> {
         FeelDataType.STRING,
       );
 
-      console.log("Sending email with", { authUser, authPass });
-
       const sendResult = await provider.send(
         {
           from,

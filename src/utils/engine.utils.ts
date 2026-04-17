@@ -19,23 +19,6 @@ import { getLogger } from "../logger.js";
 import { statusUtils } from "./status.utils.js";
 import { taskCompletionHandler } from "./taskCompletion.handler.js";
 
-const controlHandlers = {
-  [InstanceControlSignals.PAUSE]: {
-    task: taskService.pause,
-    instance: instanceService.pause,
-    taskMessage: "Instance was paused",
-    instanceMessage: (taskId: string) =>
-      `Paused due to signal. Paused at task id=${taskId}`,
-  },
-  [InstanceControlSignals.TERMINATE]: {
-    task: taskService.terminate,
-    instance: instanceService.terminate,
-    taskMessage: "Instance was terminated",
-    instanceMessage: (taskId: string) =>
-      `Terminated due to signal. Terminated at task id=${taskId}`,
-  },
-};
-
 async function dispatchNextNode(params: {
   instance: InstanceModel;
   transaction: DbTransaction;
@@ -95,6 +78,23 @@ export const engineUtils = {
     task: TaskModel;
     transaction: Transaction<DB>;
   }): Promise<{ instance: InstanceModel; task: TaskModel }> => {
+    const controlHandlers = {
+      [InstanceControlSignals.PAUSE]: {
+        task: taskService.pause,
+        instance: instanceService.pause,
+        taskMessage: "Instance was paused",
+        instanceMessage: (taskId: string) =>
+          `Paused due to signal. Paused at task id=${taskId}`,
+      },
+      [InstanceControlSignals.TERMINATE]: {
+        task: taskService.terminate,
+        instance: instanceService.terminate,
+        taskMessage: "Instance was terminated",
+        instanceMessage: (taskId: string) =>
+          `Terminated due to signal. Terminated at task id=${taskId}`,
+      },
+    };
+
     let { instance, task } = params;
 
     if (!instance.control_signal) {
@@ -235,10 +235,10 @@ export const engineUtils = {
           return;
         }
 
-        await dispatchNextNode({ instance, transaction }).catch((error) => {
+        await dispatchNextNode({ instance, transaction }).catch(() => {
           instanceService.fail(
             instance.id,
-            { message: "Unable to dispatch next node", error },
+            { message: "Task creation failed" },
             transaction,
           );
         });

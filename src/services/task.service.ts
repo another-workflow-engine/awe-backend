@@ -231,6 +231,14 @@ export const taskService = {
         node,
         transaction,
         attemptsMade: 0,
+      }).catch(async (error) => {
+        taskService.fail(
+          instance.id,
+          task.id,
+          { message: "Failed to create task", error },
+          transaction,
+        );
+        throw error;
       });
     }
 

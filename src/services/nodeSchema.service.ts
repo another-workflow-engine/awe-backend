@@ -175,7 +175,7 @@ export const nodeSchemaService = {
   ): Record<string, NodeInputSchema> => {
     const schemas: Record<string, NodeInputSchema> = {};
 
-    for (const fetchable of fetchables ?? []) {
+    for (const fetchable of fetchables) {
       schemas[fetchable.id] = buildSchema({
         expressions: [
           fetchable.urlExpression,
@@ -210,11 +210,11 @@ export const nodeSchemaService = {
     inputSchema: NodeInputSchema;
     outputSchema: NodeOuputSchema;
   } => {
-    const schemas = (
-      schemaGetters[node.type] as (
-        config: NodeConfiguration<typeof node.type>,
-      ) => SchemaResult
-    )(node.configuration);
+    const schemaBuilder = schemaGetters[node.type] as (
+      config: NodeConfiguration<typeof node.type>,
+    ) => SchemaResult;
+
+    const schemas = schemaBuilder(node.configuration);
 
     const inputSchemas = schemas.inputSchema.variableNames.flatMap(
       (variableName) => {
@@ -226,12 +226,8 @@ export const nodeSchemaService = {
     inputSchemas.push(schemas.inputSchema);
 
     schemas.inputSchema = {
-      variableNames: [
-        ...new Set(inputSchemas.flatMap((s) => s.variableNames)),
-      ],
-      secretNames: [
-        ...new Set(inputSchemas.flatMap((s) => s.secretNames)),
-      ],
+      variableNames: [...new Set(inputSchemas.flatMap((s) => s.variableNames))],
+      secretNames: [...new Set(inputSchemas.flatMap((s) => s.secretNames))],
     };
 
     return schemas;

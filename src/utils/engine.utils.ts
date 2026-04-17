@@ -194,33 +194,6 @@ export const engineUtils = {
     });
   },
 
-  getLockedModelsForJob: async (params: {
-    jobData: QueueJobData;
-    transaction: Transaction<DB>;
-  }): Promise<
-    { instance: InstanceModel; task: TaskModel; node: NodeModel } | undefined
-  > => {
-    const { instanceId, taskId, nodeId } = params.jobData;
-    const { transaction } = params;
-    const logger = getLogger();
-    const logData = { instanceId, taskId, nodeId };
-
-    let [{ instance, task }, node] = await Promise.all([
-      instanceService.getLockedInProgressOrPausedRelations(
-        instanceId,
-        transaction,
-      ),
-      nodeService.getByIdOrThrow(nodeId),
-    ]);
-
-    if (!instance || !task) {
-      throw new DataIntegrityError(
-        `Unable to lock data for job data=${params.jobData}`,
-      );
-    }
-    return { instance, task, node };
-  },
-
   completeTask: async (params: {
     jobData: QueueJobData;
     executionResult: ExecutorResult;

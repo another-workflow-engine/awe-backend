@@ -16,19 +16,22 @@ import {
 } from "../../types/workflow.js";
 import { contextUtils } from "../../utils/context.utils.js";
 
-export abstract class BaseExecutor<T extends NodeType> {
-  protected node: NodeModel;
-  protected inputVariables: Context;
+export abstract class Executor<T extends NodeType> {
+  protected readonly node: NodeModel;
+  protected readonly inputVariables: Context;
   protected outputVariables: Record<string, unknown> = {};
-  protected configuration: NodeConfiguration<T>;
+  protected readonly configuration: NodeConfiguration<T>;
+  private readonly executionId: string;
 
   protected abstract execute(
     evaluatedContext: EvaluatedContext,
   ): Promise<ExecutorResult>;
 
-  constructor(node: NodeModel, inputVariables: Context) {
+  constructor(node: NodeModel, inputVariables: Context, executionId: string) {
     this.node = node;
     this.inputVariables = inputVariables;
+    this.executionId = executionId;
+
     this.configuration = converterUtils.parseOrThrow(
       NodeConfigurationSchemaMap[node.type] as unknown as z.ZodType<
         NodeConfiguration<T>
@@ -46,6 +49,7 @@ export abstract class BaseExecutor<T extends NodeType> {
 
   protected getFailedResult(message: string, error?: object): ExecutorResult {
     return {
+      executionId: this.executionId,
       status: TaskStatuses.FAILED,
       outputVariables: this.outputVariables,
       nextNodeId: null,
@@ -70,6 +74,7 @@ export abstract class BaseExecutor<T extends NodeType> {
     }
 
     return {
+      executionId: this.executionId,
       status: TaskStatuses.COMPLETED,
       outputVariables: this.outputVariables,
       nextNodeId: nextNodeId,

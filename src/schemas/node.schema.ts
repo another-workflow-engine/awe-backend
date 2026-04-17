@@ -1,8 +1,13 @@
 import { z } from "zod";
-import { FeelDataType, NodeTypes, TimeUnit } from "../types/enums.js";
+import {
+  BackoffType,
+  FeelDataType,
+  NodeTypes,
+  TimeUnit,
+} from "../types/enums.js";
 import { HttpMethodSchema } from "../types/http.js";
 
-export const FeelDataTypeSchema = z.enum(Object.values(FeelDataType));
+export const FeelDataTypeSchema = z.enum(FeelDataType);
 
 const HttpHeaderSchema = z.object({
   key: z.string(),
@@ -100,8 +105,8 @@ const ServiceResponseSchema = z.object({
   contextVariableName: z.string(),
 });
 
-const BackoffSchema = z.object({
-  type: z.enum(["fixed", "exponential"]),
+export const BackoffSchema = z.object({
+  type: z.enum(BackoffType),
   delay: z.number().positive().optional().default(1000),
   unit: z.enum(TimeUnit).optional().default(TimeUnit.MILLISECOND),
 });

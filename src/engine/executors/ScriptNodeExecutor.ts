@@ -1,4 +1,4 @@
-import { BaseExecutor } from "./BaseExecutor.js";
+import { Executor } from "./Executor.js";
 import { contextUtils } from "../../utils/context.utils.js";
 import { NodeTypes, TaskStatuses } from "../../types/enums.js";
 import type {
@@ -16,7 +16,7 @@ const executionServiceRegistry: Record<string, ScriptExecutionService> = {
   jdoodle: new JDoodleService(),
 };
 
-export class ScriptNodeExecutor extends BaseExecutor<typeof NodeTypes.SCRIPT> {
+export class ScriptNodeExecutor extends Executor<typeof NodeTypes.SCRIPT> {
   async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
     const parameters = (this.configuration.parameterMap ?? []).map((dataMap) =>
       contextUtils.getFeelEvaluatedValue(

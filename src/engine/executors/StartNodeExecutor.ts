@@ -1,4 +1,4 @@
-import { BaseExecutor } from "./BaseExecutor.js";
+import { Executor } from "./Executor.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import type {
   EvaluatedContext,
@@ -11,7 +11,7 @@ import type { Fetchable, StartNodeDataMap } from "../../types/workflow.js";
 import { NodeTypes } from "../../types/enums.js";
 import { isValidFeelType } from "../../utils/feel.utils.js";
 
-export class StartNodeExecutor extends BaseExecutor<typeof NodeTypes.START> {
+export class StartNodeExecutor extends Executor<typeof NodeTypes.START> {
   private addFetchable(
     fetchables: Record<string, FetchableSettings>,
     urls: Record<string, UrlSettings>,

@@ -1,6 +1,11 @@
 import { taskRepository } from "../repositories/task.repository.js";
 import type { DB, InstanceEventType, TaskStatus } from "../types/database.js";
-import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
+import type {
+  DbTransaction,
+  InstanceModel,
+  NodeModel,
+  TaskModel,
+} from "../types/models.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import type { Transaction } from "kysely";
@@ -15,21 +20,15 @@ import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { getLogger } from "../logger.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
-import { engineUtils } from "../utils/engine.utils.js";
 import { EngineError } from "../errors/EngineError.js";
-import { taskExecutionService } from "./taskExecution.service.js";
 import { NodeSchema } from "../schemas/node.schema.js";
-import { convertToMilliseconds } from "../utils/converter.utils.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { ContextSchema } from "../schemas/context.schema.js";
 
 const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
 const SECRET_REFERENCE_REGEX = /\bsecret\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
 
-function extractReferences(
-  expression: string,
-  regex: RegExp,
-): string[] {
+function extractReferences(expression: string, regex: RegExp): string[] {
   const refs = new Set<string>();
 
   for (const match of expression.matchAll(regex)) {
@@ -41,7 +40,10 @@ function extractReferences(
   return [...refs];
 }
 
-function getReferencedVariables(urlExpression: string, headers: Record<string, string>): string[] {
+function getReferencedVariables(
+  urlExpression: string,
+  headers: Record<string, string>,
+): string[] {
   const refs = new Set<string>();
 
   for (const ref of extractReferences(urlExpression, CONTEXT_REFERENCE_REGEX)) {
@@ -57,7 +59,10 @@ function getReferencedVariables(urlExpression: string, headers: Record<string, s
   return [...refs];
 }
 
-function getReferencedSecrets(urlExpression: string, headers: Record<string, string>): string[] {
+function getReferencedSecrets(
+  urlExpression: string,
+  headers: Record<string, string>,
+): string[] {
   const refs = new Set<string>();
 
   for (const ref of extractReferences(urlExpression, SECRET_REFERENCE_REGEX)) {
@@ -123,93 +128,35 @@ async function updateTaskStatusAndLog(
   return task;
 }
 
-async function createExecution(
-  instance: InstanceModel,
-  task: TaskModel,
-  node: NodeModel,
-  previousAttemptCount: number = 0,
-  transaction: Transaction<DB>,
-) {
+async function scheduleNodeExecution(params: {
+  instance: InstanceModel;
+  task: TaskModel;
+  node: NodeModel;
+  transaction: DbTransaction;
+  attemptsMade?: number;
+}) {
+  const { instance, task, node, transaction, attemptsMade } = params;
+
   const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
 
-  const attempts = {
-    type: "fixed",
-    delay: 1000,
-    max: 1,
+  const jobData = {
+    instanceId: instance.id,
+    taskId: task.id,
+    nodeId: node.id,
   };
 
-  if (
-    nodeSchema.type === NodeTypes.SERVICE ||
-    nodeSchema.type === NodeTypes.SCRIPT
-  ) {
-    attempts.delay = convertToMilliseconds(
-      nodeSchema.configuration.backoff.delay,
-      nodeSchema.configuration.backoff.unit,
-    );
-    attempts.type = nodeSchema.configuration.backoff.type;
-    attempts.max = Math.max(
-      1,
-      nodeSchema.configuration.maxAttempts - previousAttemptCount,
-    );
-  }
-
-  if (node.type !== NodeTypes.USER) {
-    await queueService
-      .enqueue(
-        {
-          instanceId: instance.id,
-          taskId: task.id,
-          nodeId: node.id,
-        },
-        attempts.max,
-        attempts.type,
-        attempts.delay,
-      )
-      .then(() => task)
-      .catch(async (error: Error) => {
-        await engineUtils.onExecutionFailure({
-          error,
-          taskId: task.id,
-          instanceId: task.instance_id,
-        });
-        throw new EngineError("Unable to create task.");
+  nodeSchema.type !== NodeTypes.USER
+    ? await queueService.enqueue({
+        jobData,
+        nodeConfiguration: nodeSchema.configuration,
+        ...(attemptsMade && { attemptsMade }),
+      })
+    : await userTaskService.create({
+        jobData,
+        nodeConfiguration: nodeSchema.configuration,
+        taskContext: taskService.getTaskContext(instance, node),
+        transaction,
       });
-
-    return task;
-  }
-
-  try {
-    const executionContext = taskService.getTaskContext(instance, node);
-
-    const taskExecution = await taskExecutionService.create(
-      instance.id,
-      task.id,
-      executionContext,
-      transaction,
-    );
-
-    await userTaskService
-      .create(node, taskExecution, executionContext, transaction)
-      .then(() => task)
-      .catch(async (error: Error) => {
-        await engineUtils.onExecutionFailure({
-          error,
-          taskId: task.id,
-          instanceId: task.instance_id,
-        });
-        throw new EngineError("Unable to create task.");
-      });
-  } catch (error) {
-    await engineUtils.onExecutionFailure({
-      error,
-      taskId: task.id,
-      instanceId: task.instance_id,
-    });
-    throw new EngineError("Unable to create task.");
-  }
-  getLogger().info("Created user task");
-
-  return task;
 }
 
 export const taskService = {
@@ -245,49 +192,25 @@ export const taskService = {
     return { instance, node, task };
   },
 
-  create: async (
-    node: NodeModel,
-    instance: InstanceModel,
-    transaction: Transaction<DB>,
-  ): Promise<TaskModel> => {
-    const executeCallback = async (transaction: Transaction<DB>) => {
-      const task = await taskRepository.insert(
-        {
-          instance_id: instance.id,
-          node_id: node.id,
-          status: TaskStatuses.IN_PROGRESS,
-        },
-        transaction,
-      );
+  create: async (params: {
+    instance: InstanceModel;
+    node: NodeModel;
+    taskStatus?: TaskStatus;
+    transaction: DbTransaction;
+  }): Promise<TaskModel> => {
+    if (!params.taskStatus) {
+      params.taskStatus = params.instance.auto_advance
+        ? TaskStatuses.IN_PROGRESS
+        : TaskStatuses.PAUSED;
+    }
 
-      await eventLogService.createTaskLog(
-        instance.id,
-        task.id,
-        LogEventTypes.STARTED,
-        undefined,
-        undefined,
-        transaction,
-      );
+    const { instance, node, taskStatus, transaction } = params;
 
-      return await createExecution(instance, task, node, 0, transaction);
-    };
-
-    return transaction
-      ? await executeCallback(transaction)
-      : await db.transaction().execute(executeCallback);
-  },
-
-  createWithStatus: async (
-    node: NodeModel,
-    instance: InstanceModel,
-    status: TaskStatus,
-    transaction: Transaction<DB>,
-  ): Promise<TaskModel> => {
     const task = await taskRepository.insert(
       {
         instance_id: instance.id,
         node_id: node.id,
-        status,
+        status: taskStatus,
       },
       transaction,
     );
@@ -295,11 +218,21 @@ export const taskService = {
     await eventLogService.createTaskLog(
       instance.id,
       task.id,
-      taskStatusToEventMap[status],
+      taskStatusToEventMap[taskStatus],
       undefined,
       undefined,
       transaction,
     );
+
+    if (taskStatus === TaskStatuses.IN_PROGRESS) {
+      await scheduleNodeExecution({
+        instance,
+        task,
+        node,
+        transaction,
+        attemptsMade: 0,
+      });
+    }
 
     return task;
   },
@@ -315,10 +248,8 @@ export const taskService = {
       transaction,
     );
     if (!task) {
-      return await taskService.create(node, instance, transaction);
+      return await taskService.create({ instance, node, transaction });
     }
-
-    const taskExecutions = await taskExecutionService.getByTaskId(task.id);
 
     task = await taskRepository.updateById(
       task.id,
@@ -337,13 +268,8 @@ export const taskService = {
       transaction,
     );
 
-    return await createExecution(
-      instance,
-      task,
-      node,
-      taskExecutions.length,
-      transaction,
-    );
+    await scheduleNodeExecution({ instance, task, node, transaction });
+    return task;
   },
 
   retry: async (
@@ -362,8 +288,6 @@ export const taskService = {
       throw new StateTransitionError("Only failed tasks can be retried");
     }
 
-    const taskExecutions = await taskExecutionService.getByTaskId(task.id);
-
     task = await taskRepository.updateById(
       task.id,
       {
@@ -375,29 +299,29 @@ export const taskService = {
     await eventLogService.createTaskLog(
       instance.id,
       task.id,
-      LogEventTypes.RESUMED,
+      LogEventTypes.RETRIED,
       { message: "Manual retry of failed task" },
       actorId,
       transaction,
     );
 
-    return await createExecution(
-      instance,
-      task,
-      node,
-      taskExecutions.length,
-      transaction,
-    );
+    await scheduleNodeExecution({ instance, task, node, transaction });
+    return task;
   },
 
-  getTaskContext: (instance: InstanceModel, node: NodeModel) => {
+  getTaskContext: (instance: InstanceModel, node: NodeModel): Context => {
+    const taskContext: Context = {
+      constants: {},
+      fetchables: {},
+      urls: {},
+      secrets: {},
+    };
+
     if (node.type === NodeTypes.START) {
-      return {
-        constants: converterUtils.jsonValueToObject(instance.input_variables),
-        fetchables: {},
-        urls: {},
-        secrets: {},
-      };
+      taskContext.constants = converterUtils.jsonValueToObject(
+        instance.input_variables,
+      );
+      return taskContext;
     }
 
     const instanceContext: Context = converterUtils.parseOrThrow(
@@ -408,13 +332,6 @@ export const taskService = {
     const nodeInputSchema = converterUtils.jsonValueToNodeInputSchema(
       node.input_schema,
     );
-
-    const taskContext: Context = {
-      constants: {},
-      fetchables: {},
-      urls: {},
-      secrets: {},
-    };
 
     const addFetchableDependencies = (fetchableName: string): void => {
       const fetchable = instanceContext.fetchables[fetchableName];

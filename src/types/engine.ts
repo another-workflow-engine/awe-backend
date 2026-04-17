@@ -13,6 +13,7 @@ export type FetchableSettings = z.infer<typeof FetchableSettingsSchema>;
 export type Context = z.infer<typeof ContextSchema>;
 
 export interface ExecutorResult {
+  executionId: string;
   status: TaskStatus;
   outputVariables: Record<string, unknown>; // variableName: value
   nextNodeId: string | null;

@@ -1,17 +1,11 @@
 import type { ActorModel, SecretProviderModel } from "../../types/models.js";
-import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { organizationRepository } from "../../repositories/organization.repository.js";
 import { NotFoundError } from "../../errors/NotFoundError.js";
-import Config from "../../config.js";
 import type { SecretProvider } from "../../types/secrets.js";
 import { secretProviderRepository } from "../../repositories/secretProvider.repository.js";
 import { InvalidOperationError } from "../../errors/InvalidOperationError.js";
 import { converterUtils } from "../../utils/converter.utils.js";
 import { providerClassMap } from "./providers/providerMap.js";
-
-export const secretsClient = new SecretsManagerClient({
-  region: Config.AWS_REGION,
-});
 
 export const secretProviderService = {
   createNew: async (

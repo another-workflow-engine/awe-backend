@@ -1,7 +1,7 @@
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import type { JsonValue } from "../types/database.js";
 import { TimeUnit } from "../types/enums.js";
-import type { LogDetailSchema } from "../types/instanceLog.js";
+import type { NodeModel } from "../types/models.js";
 import type { NodeInputSchema } from "../types/workflow.js";
 import { z } from "zod";
 
@@ -35,22 +35,11 @@ export const converterUtils = {
     return {
       variableNames: obj.variableNames as string[],
       secretNames: Array.isArray(obj.secretNames)
-        ? obj.secretNames.filter((name): name is string => typeof name === "string")
+        ? obj.secretNames.filter(
+            (name): name is string => typeof name === "string",
+          )
         : [],
     };
-  },
-
-  jsonValueToLogDetailSchema: (value: JsonValue): LogDetailSchema => {
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value) &&
-      typeof value.message === "string"
-    ) {
-      return { message: value.message };
-    }
-
-    throw new DataIntegrityError("Invalid Instance Log Detail schema");
   },
 
   parseOrThrow<T>(

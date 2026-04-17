@@ -1,4 +1,4 @@
-import { BaseExecutor } from "./BaseExecutor.js";
+import { Executor } from "./Executor.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { FeelDataType, NodeTypes } from "../../types/enums.js";
 import type { EvaluatedContext, ExecutorResult } from "../../types/engine.js";
@@ -6,9 +6,7 @@ import { contextUtils } from "../../utils/context.utils.js";
 import { httpService } from "../../services/http.service.js";
 import { isValidFeelType } from "../../utils/feel.utils.js";
 
-export class ServiceNodeExecutor extends BaseExecutor<
-  typeof NodeTypes.SERVICE
-> {
+export class ServiceNodeExecutor extends Executor<typeof NodeTypes.SERVICE> {
   private setByJsonPath(
     obj: Record<string, unknown>,
     path: string,

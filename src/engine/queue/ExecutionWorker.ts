@@ -1,17 +1,15 @@
 import { UnrecoverableError, Worker, type Job } from "bullmq";
 import type { ConnectionOptions } from "bullmq";
 import Config from "../../config.js";
-import type { ExecutorResult, QueueJobData } from "../../types/engine.js";
+import type { QueueJobData } from "../../types/engine.js";
 import { getLogger } from "../../logger.js";
-import { taskService } from "../../services/task.service.js";
 import { engineUtils } from "../../utils/engine.utils.js";
-import TaskExecutor from "../executors/TaskExecutor.js";
 import type { Logger } from "pino";
-import { TaskStatuses } from "../../types/enums.js";
-import type { InstanceModel, TaskModel } from "../../types/models.js";
+import { taskExecutionService } from "../../services/taskExecution.service.js";
+import { executorMap } from "../executors/executorMap.js";
 import { EngineError } from "../../errors/EngineError.js";
-import { db } from "../../database.js";
-import { DataIntegrityError } from "../../errors/DataIntegrity.js";
+import { NodeTypes, TaskStatuses } from "../../types/enums.js";
+import { taskService } from "../../services/task.service.js";
 
 export class ExecutionWorker {
   private readonly worker: Worker<QueueJobData>;
@@ -43,142 +41,74 @@ export class ExecutionWorker {
     await this.worker.close();
   }
 
-  private canExecute(instance: InstanceModel, task: TaskModel): boolean {
-    try {
-      engineUtils.validateInstanceCanExecuteOrThrow(instance);
-      engineUtils.validateTaskCanExecuteOrThrow(task);
-      return true;
-    } catch (err) {
-      this.logger.error(
-        {
-          error: err,
-        },
-        `Cannot execute task id=${task.id} because instance status=${instance.status} and task status=${task.status}`,
-      );
-      return false;
-    }
-  }
+  private async processJob(job: Job<QueueJobData>): Promise<void> {
+    await this.execute(job.data)
+      .then((res) => {
+        if (!res.success) {
+          throw new Error(
+            `Task execution for task id=${job.data.taskId} failed`,
+          );
+        }
+      })
+      .catch(async (error) => {
+        this.logger.error(error, "Encountered an unrecoverable error");
+        const { instanceId, taskId } = job.data;
 
-  private async initializeExecution(
-    jobData: QueueJobData,
-  ): Promise<{ executor: TaskExecutor; executionId: string } | undefined> {
-    const { instanceId, taskId, nodeId } = jobData;
-
-    return await db.transaction().execute(async (transaction) => {
-      const models = await engineUtils.getLockedModels({
-        ...jobData,
-        transaction,
-      });
-      if (!models) {
-        throw new DataIntegrityError(
-          `Unable to lock data for job data=${jobData}`,
-        );
-      }
-
-      let { instance, task, node } = models;
-
-      if (!this.canExecute(instance, task)) {
-        return;
-      }
-
-      if (instance.control_signal) {
-        const models = await engineUtils.handleInstanceControlSignal({
+        await engineUtils.onTaskFailure({
           instanceId,
-          controlSignal: instance.control_signal,
           taskId,
-          node,
-          transaction,
+          message: error.message,
+          error,
         });
 
-        if (!models.task) {
-          throw new DataIntegrityError(`Task not found for id=${taskId}`);
+        throw new UnrecoverableError(
+          error instanceof Error ? error.message : "Unknown error",
+        );
+      });
+  }
+
+  private async execute(jobData: QueueJobData) {
+    const executor = await engineUtils.lockAndExecute(
+      jobData,
+      async (instance, task, node, transaction) => {
+        ({ instance, task } = await engineUtils.processControlSignal({
+          instance,
+          task,
+          transaction,
+        }));
+
+        engineUtils.validateInstanceCanExecuteOrThrow(instance);
+        engineUtils.validateTaskCanExecuteOrThrow(task);
+
+        const taskContext = taskService.getTaskContext(instance, node);
+
+        if (node.type == NodeTypes.USER) {
+          throw new EngineError(
+            `User task cannot be executed by engine - Task id=${task.id}`,
+          );
         }
 
-        ({ instance, task } = models);
-        return undefined;
-      }
-
-      const executionContext = taskService.getTaskContext(instance, node);
-      const executor = new TaskExecutor(task, node, executionContext);
-      const executionId = await executor.start(transaction);
-
-      return { executor, executionId };
-    });
-  }
-
-  private async processJob(job: Job<QueueJobData>): Promise<void> {
-    const { instanceId, taskId } = job.data;
-
-    try {
-      const data = await this.initializeExecution(job.data);
-      if (!data) {
-        return;
-      }
-
-      this.logger.info(
-        { ...job.data },
-        `Executing task. Attempt: ${job.attemptsMade + 1}/${job.opts.attempts}`,
-      );
-
-      const isLastAttempt = job.attemptsMade + 1 === job.opts.attempts;
-
-      const result = await data.executor.run();
-
-      this.logger.info(result, "Task execution completed");
-
-      await this.finalizeExecution(
-        job.data,
-        data.executionId,
-        data.executor,
-        result,
-      );
-      if (result.status === TaskStatuses.COMPLETED || isLastAttempt) {
-        return;
-      }
-    } catch (error) {
-      if (job.data?.instanceId && job.data?.taskId) {
-        await engineUtils.onExecutionFailure({ error, instanceId: job.data.instanceId, taskId: job.data.taskId });
-      }
-      throw new UnrecoverableError(
-        error instanceof Error ? error.message : "Unknown error",
-      );
-    }
-
-    if (job.data?.taskId) {
-        throw new EngineError(`Task execution for task id=${job.data.taskId} failed`);
-    } else {
-        throw new EngineError(`Task execution failed`);
-    }
-  }
-
-  private async finalizeExecution(
-    jobData: QueueJobData,
-    executionId: string,
-    executor: TaskExecutor,
-    result: ExecutorResult,
-  ) {
-    return await db.transaction().execute(async (transaction) => {
-      const models = await engineUtils.getLockedModels({
-        ...jobData,
-        transaction,
-      });
-      if (!models) {
-        throw new DataIntegrityError(
-          `Unable to lock data for job data=${jobData}`,
+        const taskExecution = await taskExecutionService.create(
+          task.instance_id,
+          task.id,
+          taskContext,
+          transaction,
         );
-      }
 
-      await executor.end(executionId, result, transaction);
+        const ExecutorClass = executorMap[node.type];
+        return new ExecutorClass(node, taskContext, taskExecution.id);
+      },
+    );
 
-      const { instance, task, node } = models;
+    const result = await executor.run();
 
-      await engineUtils.updateInstanceAndRelations({
-        instance,
-        task,
-        node,
-        result,
-        transaction,
-      });
+    await engineUtils.completeTask({
+      jobData,
+      executionResult: result,
     });
+
+    return {
+      success: result.status === TaskStatuses.COMPLETED,
+    };
   }
 }

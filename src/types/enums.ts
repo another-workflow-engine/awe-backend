@@ -97,6 +97,11 @@ export enum TimeUnit {
   MINUTE = "minute",
 }
 
+export enum BackoffType {
+  FIXED = "fixed",
+  EXPONENTIAL = "exponential",
+}
+
 export const SecretProviderTypes = {
   AWS_SECRETS_MANAGER: "aws_secrets_manager",
   DEFAULT: "default",

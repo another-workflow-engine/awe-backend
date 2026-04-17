@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import type { ConnectionOptions } from "bullmq";
+import type { BackoffOptions, ConnectionOptions } from "bullmq";
 import Config from "../../config.js";
 import type { QueueJobData } from "../../types/engine.js";
 import { getLogger } from "../../logger.js";
@@ -15,16 +15,12 @@ export class BullMQQueue {
 
   async enqueue(
     jobData: QueueJobData,
-    maxAttempts: number,
-    backoffType: string,
-    backoffDelay: number,
+    attempts?: number,
+    backoff?: BackoffOptions,
   ): Promise<void> {
     await this.queue.add("execute-node", jobData, {
-      attempts: maxAttempts,
-      backoff: {
-        type: backoffType,
-        delay: backoffDelay,
-      },
+      ...(attempts !== undefined && { attempts }),
+      ...(backoff !== undefined && { backoff }),
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 5000 },
     });

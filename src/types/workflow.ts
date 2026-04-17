@@ -12,6 +12,7 @@ import {
   StartNodeDataMapSchema,
   RuleSchema,
   DefaultRuleSchema,
+  BackoffSchema,
 } from "../schemas/node.schema.js";
 import type { NodeType } from "./database.js";
 import { NodeTypes } from "./enums.js";
@@ -37,10 +38,10 @@ export type DecisionNodeConfiguration = z.infer<
 >;
 
 export type Node = z.infer<typeof NodeSchema>;
+// //
+// export type NodeConfiguration = Node["configuration"];
 
 export type Edge = z.infer<typeof EdgeSchema>;
-
-export type StartNode = Extract<Node, { type: "start" }>;
 
 export type NodeInputSchema = {
   variableNames: string[];
@@ -64,9 +65,11 @@ export const NodeConfigurationSchemaMap = {
   [NodeTypes.END]: EndNodeConfigurationSchema,
 } as const;
 
-export type NodeConfiguration<T extends NodeType> = z.infer<
+export type NodeConfiguration<T extends NodeType = NodeType> = z.infer<
   (typeof NodeConfigurationSchemaMap)[T]
 >;
 
 export type DecisionNodeRule = z.infer<typeof RuleSchema>;
 export type DecisionNodeDefaultRule = z.infer<typeof DefaultRuleSchema>;
+
+export type BackoffSettings = z.infer<typeof BackoffSchema>;

@@ -281,35 +281,11 @@ export const instanceService = {
         transaction: transaction,
       });
 
-      if (instance.auto_advance === false) {
-        await taskService.createWithStatus(
-          startNode,
-          instance,
-          TaskStatuses.PAUSED,
-          transaction,
-        );
-        return { instance, workflowVersion };
-      }
-
-      try {
-        await taskService.create(startNode, instance, transaction);
-      } catch (err) {
-        let message = "Unexpected error";
-
-        if (err instanceof Error) {
-          message = err.message || message;
-        }
-
-        instance = await instanceService.fail(
-          instance.id,
-          {
-            message,
-            error: err,
-          },
-          transaction,
-        );
-      }
-
+      await taskService.create({
+        instance,
+        node: startNode,
+        transaction,
+      });
       return { instance, workflowVersion };
     });
   },
@@ -483,7 +459,9 @@ export const instanceService = {
       const instanceContext = instance.current_variables
         ? converterUtils.parseOrThrow(ContextSchema, instance.current_variables)
         : {
-            constants: converterUtils.jsonValueToObject(instance.input_variables),
+            constants: converterUtils.jsonValueToObject(
+              instance.input_variables,
+            ),
             fetchables: {},
             urls: {},
             secrets: {},

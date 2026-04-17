@@ -39,7 +39,9 @@ function validateInstanceCanBeSignaledOrThrow(
     controlSignal === InstanceControlSignals.PAUSE &&
     instance.status === InstanceStatuses.PAUSED
   ) {
-    throw new StateTransitionError(`Instance is already ${InstanceStatuses.PAUSED}`);
+    throw new StateTransitionError(
+      `Instance is already ${InstanceStatuses.PAUSED}`,
+    );
   }
 
   if (
@@ -122,11 +124,9 @@ async function updateInstanceControlSignal(
       );
     }
 
-    ({ instance } = await engineUtils.handleInstanceControlSignal({
-      instanceId: instance.id,
-      controlSignal,
-      taskId: task.id,
-      node,
+    ({ instance } = await engineUtils.processControlSignal({
+      instance,
+      task,
       transaction,
     }));
 

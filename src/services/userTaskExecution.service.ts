@@ -10,7 +10,7 @@ import {
   FeelDataType,
 } from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
-import type { Context, ExecutorResult } from "../types/engine.js";
+import type { Context, ExecutorResult, QueueJobData } from "../types/engine.js";
 import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 import type {
@@ -30,32 +30,34 @@ import type { DB } from "../types/database.js";
 import { db } from "../database.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { ContextSchema } from "../schemas/context.schema.js";
+import type { UserNodeConfiguration } from "../types/workflow.js";
+import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 
 export const userTaskService = {
-  create: async (
-    node: UserNodeModel,
-    taskExecution: TaskExecutionModel,
-    executionContext: Context,
-    transaction: Transaction<DB>,
-  ): Promise<UserTaskExecutionModel> => {
-    const configObject = converterUtils.jsonValueToObject(node.configuration);
-    const configuration = converterUtils.parseOrThrow(
-      UserNodeConfigurationSchema,
-      configObject,
+  create: async (params: {
+    jobData: QueueJobData;
+    nodeConfiguration: UserNodeConfiguration;
+    taskContext: Context;
+    transaction: Transaction<DB>;
+  }): Promise<UserTaskExecutionModel> => {
+    const { jobData, nodeConfiguration, taskContext, transaction } = params;
+    const { instanceId, taskId } = jobData;
+
+    const taskExecution = await taskExecutionService.create(
+      instanceId,
+      taskId,
+      taskContext,
+      transaction,
     );
 
-
-    let assignee: string | null = null;
-    if (configuration.assignee?.trim()) {
-      const evaluatedContext = await contextUtils.evaluateContext(executionContext);
-      assignee = contextUtils.getFeelEvaluatedValue(
-        configuration.assignee,
-        evaluatedContext,
-        FeelDataType.STRING,
-      );
-    }
-
-    const title = configuration.title ?? null;
+    const assignee = nodeConfiguration.assignee
+      ? contextUtils.getFeelEvaluatedValue(
+          nodeConfiguration.assignee,
+          await contextUtils.evaluateContext(taskContext),
+          FeelDataType.STRING,
+        )
+      : null;
+    const title = nodeConfiguration.title ?? null;
 
     return await userTaskExecutionRepository.insert(
       {
@@ -233,41 +235,22 @@ export const userTaskService = {
       node.id,
     );
 
-    return await db.transaction().execute(async (transaction) => {
-      const models = await engineUtils.getLockedModels({
-        instanceId: instance.id,
+    const executionResult: ExecutorResult = {
+      executionId: taskExecution.id,
+      status: TaskStatuses.COMPLETED,
+      outputVariables: outputVariables,
+      nextNodeId: nextNodeId ?? null,
+    };
+
+    await engineUtils.completeTask({
+      jobData: {
+        instanceId: task.instance_id,
         taskId: task.id,
-        nodeId: node.id,
-        transaction,
-      });
-      if (!models) {
-        throw new DataIntegrityError(
-          `Unable to lock data for user task id=${taskExecution.id}`,
-        );
-      }
-
-      const updatedtaskExecution = await taskExecutionService.complete(
-        instance.id,
-        taskExecution.id,
-        outputVariables,
-        transaction,
-      );
-
-      const result: ExecutorResult = {
-        status: updatedtaskExecution.status,
-        outputVariables: outputVariables,
-        nextNodeId: nextNodeId ?? null,
-      };
-
-      await engineUtils.updateInstanceAndRelations({
-        instance,
-        task,
-        node,
-        result,
-        transaction,
-      });
-
-      return { taskExecution: updatedtaskExecution, userTaskExecution };
+        nodeId: task.node_id,
+      },
+      executionResult,
     });
+
+    return { taskExecution, userTaskExecution };
   },
 };

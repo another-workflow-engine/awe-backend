@@ -1,7 +1,8 @@
-import type { Selectable } from "kysely";
+import type { Selectable, Transaction } from "kysely";
 import type {
   Actor,
   ApiKey,
+  DB,
   Edge,
   Environment,
   Instance,
@@ -20,6 +21,8 @@ import type {
 } from "./database.js";
 import type {} from "./workflow.js";
 import { NodeTypes } from "./enums.js";
+
+export type DbTransaction = Transaction<DB>;
 
 export type ActorModel = Selectable<Actor>;
 

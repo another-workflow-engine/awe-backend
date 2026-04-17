@@ -1,4 +1,4 @@
-import { BaseExecutor } from "./BaseExecutor.js";
+import { Executor } from "./Executor.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { FeelDataType, NodeTypes } from "../../types/enums.js";
 import type { ExecutorResult, EvaluatedContext } from "../../types/engine.js";
@@ -9,9 +9,7 @@ import type {
   DecisionNodeRule,
 } from "../../types/workflow.js";
 
-export class DecisionNodeExecutor extends BaseExecutor<
-  typeof NodeTypes.DECISION
-> {
+export class DecisionNodeExecutor extends Executor<typeof NodeTypes.DECISION> {
   async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
     let matchedRule: DecisionNodeRule | DecisionNodeDefaultRule | undefined;
 

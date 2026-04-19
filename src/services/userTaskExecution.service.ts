@@ -138,7 +138,12 @@ export const userTaskService = {
       return {
         fieldId: data.fieldId,
         label: data.label,
+        type: data.type,
         dataType: data.type,
+        required: data.required,
+        defaultValue: data.defaultValue,
+        uiType: data.uiType,
+        options: data.options,
       };
     });
 

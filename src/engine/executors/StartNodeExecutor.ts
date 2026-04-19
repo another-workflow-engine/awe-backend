@@ -69,9 +69,19 @@ export class StartNodeExecutor extends BaseExecutor<typeof NodeTypes.START> {
         continue;
       }
 
-      const value = contextUtils.getByJsonPath(inputJson, dataMap.jsonPath);
+      let value = contextUtils.getByJsonPath(inputJson, dataMap.jsonPath);
       if (value === undefined) {
-        return this.getFailedResult(`"${dataMap.jsonPath}" is missing`);
+        if (dataMap.required !== false) {
+          return this.getFailedResult(`"${dataMap.jsonPath}" is missing`);
+        }
+
+        if (dataMap.defaultValue === undefined) {
+          return this.getFailedResult(
+            `"${dataMap.contextVariableName}" is optional but has no defaultValue`,
+          );
+        }
+
+        value = dataMap.defaultValue;
       }
 
       if (!isValidFeelType(value, dataMap.dataType)) {

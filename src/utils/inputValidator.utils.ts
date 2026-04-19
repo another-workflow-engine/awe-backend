@@ -147,8 +147,9 @@ export function validateField(
   defaultValue?: unknown,
 ): InputValidationResult {
   let value = input[fieldKey];
+  const isMissing = value === undefined || value === null || value === "";
 
-  if (value === undefined || value === null) {
+  if (isMissing) {
     if (defaultValue !== undefined) {
       value = defaultValue;
     } else if (required) {
@@ -204,6 +205,7 @@ export type InputFieldConfig = {
   dataType: FeelDataType;
   contextVariableName: string;
   required?: boolean | undefined;
+  defaultValue?: unknown;
   default?: unknown;
   fetchableId?: string | undefined;
 };
@@ -212,6 +214,7 @@ export type ResponseFieldConfig = {
   fieldId: string;
   type: FeelDataType;
   required?: boolean | undefined;
+  defaultValue?: unknown;
   default?: unknown;
   validationExpression?: string | undefined;
 };
@@ -257,7 +260,7 @@ export function validateInstanceInput(
       field.jsonPath,
       field.dataType as FeelDataType,
       field.required ?? false,
-      field.default,
+      field.defaultValue ?? field.default,
     );
 
     if (!result.valid && result.error) {
@@ -289,7 +292,8 @@ export async function validateUserTaskInput(
       userInput,
       field.fieldId,
       field.type as FeelDataType,
-      true,
+      field.required ?? true,
+      field.defaultValue ?? field.default,
     );
 
     if (!typeResult.valid && typeResult.error) {
@@ -299,6 +303,8 @@ export async function validateUserTaskInput(
       });
       continue;
     }
+
+    userInput[field.fieldId] = typeResult.value;
 
     if (field.validationExpression && typeResult.value !== undefined) {
       const validationResult = await evaluateValidationExpression(

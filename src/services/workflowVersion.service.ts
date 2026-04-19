@@ -221,7 +221,12 @@ export const workflowVersionService = {
       edgeService.toEdgeSchema(edge, nodeModels),
     );
 
-    const startVariables: { jsonPath: string; dataType: FeelDataType }[] = [];
+    const startVariables: {
+      jsonPath: string;
+      dataType: FeelDataType;
+      required: boolean;
+      defaultValue?: unknown;
+    }[] = [];
 
     const startNode = nodes.find((node) => node.type === NodeTypes.START);
 
@@ -240,6 +245,10 @@ export const workflowVersionService = {
           startVariables.push({
             jsonPath: data.jsonPath,
             dataType: data.dataType,
+            required: data.required !== false,
+            ...(data.required === false
+              ? { defaultValue: data.defaultValue }
+              : {}),
           });
         }
       });

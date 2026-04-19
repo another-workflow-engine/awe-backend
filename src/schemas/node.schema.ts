@@ -22,6 +22,20 @@ export const StartNodeDataMapSchema = z.object({
   dataType: FeelDataTypeSchema,
   contextVariableName: z.string(),
   fetchableId: z.string().optional(),
+  required: z.boolean().optional().default(true),
+  defaultValue: z.unknown().optional(),
+}).superRefine((value, ctx) => {
+  if (value.fetchableId) {
+    return;
+  }
+
+  if (value.required === false && value.defaultValue === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["defaultValue"],
+      message: "Optional start input must define defaultValue",
+    });
+  }
 });
 
 export const SecretDataMapSchema = z.object({
@@ -65,6 +79,8 @@ export const UserNodeConfigurationSchema = z.object({
       label: z.string(),
       contextVariableName: z.string(),
       type: FeelDataTypeSchema,
+      required: z.boolean().optional().default(true),
+      defaultValue: z.unknown().optional(),
 
       uiType: z
         .enum([
@@ -85,9 +101,54 @@ export const UserNodeConfigurationSchema = z.object({
           }),
         )
         .optional(),
+    }).superRefine((value, ctx) => {
+      if (value.required === false && value.defaultValue === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["defaultValue"],
+          message: "Optional user input field must define defaultValue",
+        });
+      }
     }),
   ),
 });
+
+export const OnErrorOutputMapSchema = z.discriminatedUnion("fromType", [
+  z.object({
+    fromType: z.literal("jsonPath"),
+    jsonPath: z.string(),
+    dataType: FeelDataTypeSchema,
+    contextVariableName: z.string(),
+  }),
+  z.object({
+    fromType: z.literal("expression"),
+    valueExpression: z.string(),
+    contextVariableName: z.string(),
+  }),
+]);
+
+export const OnErrorConfigurationSchema = z
+  .object({
+    mode: z.enum(["terminate", "continue"]).optional().default("terminate"),
+    outputMap: z.array(OnErrorOutputMapSchema).optional().default([]),
+  })
+  .superRefine((value, ctx) => {
+    if (value.mode === "continue" && value.outputMap.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["outputMap"],
+        message: "onError outputMap must be configured when mode is continue",
+      });
+    }
+
+    if (value.mode === "terminate" && value.outputMap.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["outputMap"],
+        message: "onError outputMap is only allowed when mode is continue",
+      });
+    }
+  });
 
 const ServiceBodySchema = z.object({
   jsonPath: z.string(),
@@ -111,8 +172,12 @@ export const ServiceNodeConfigurationSchema = z.object({
   urlExpression: z.string(),
 
   maxAttempts: z.number().optional().default(1),
-  timeoutMs: z.number().optional(),
+  timeoutMs: z.number().int().positive().optional(),
   backoff: BackoffSchema,
+  onError: OnErrorConfigurationSchema.optional().default({
+    mode: "terminate",
+    outputMap: [],
+  }),
 
   body: z.array(ServiceBodySchema).optional(),
   headers: z.array(HttpHeaderSchema).optional(),
@@ -123,7 +188,12 @@ export const ServiceNodeConfigurationSchema = z.object({
 export const ScriptNodeConfigurationSchema = z.object({
   runtime: z.literal("python3"),
   maxAttempts: z.number().optional().default(1),
+  timeoutMs: z.number().int().positive().optional(),
   backoff: BackoffSchema,
+  onError: OnErrorConfigurationSchema.optional().default({
+    mode: "terminate",
+    outputMap: [],
+  }),
   sourceCode: z.string(),
   entryFunctionName: z.string(),
   executionService: z.enum(["jdoodle", "gemini"]).optional().default("jdoodle"),

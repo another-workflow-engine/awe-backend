@@ -66,7 +66,7 @@ function getStartSchema(config: StartNodeConfiguration): SchemaResult {
   return {
     inputSchema: {
       variableNames: config.inputDataMap
-        .filter((i) => i.fetchableId === undefined)
+        .filter((i) => i.fetchableId === undefined && i.required !== false)
         .map((i) => i.contextVariableName),
       secretNames: [],
     },
@@ -87,6 +87,11 @@ function getUserSchema(config: UserNodeConfiguration): SchemaResult {
 }
 
 function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
+  const onErrorOutputVariables =
+    config.onError.mode === "continue"
+      ? config.onError.outputMap.map((m) => m.contextVariableName)
+      : [];
+
   return buildSchema({
     expressions: [
       config.urlExpression,
@@ -94,15 +99,26 @@ function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
 
       ...(config.headers?.map((h) => h.valueExpression) ?? []),
     ],
-    outputVariables: config.responseMap.map((r) => r.contextVariableName),
+    outputVariables: [
+      ...config.responseMap.map((r) => r.contextVariableName),
+      ...onErrorOutputVariables,
+    ],
     includeSecrets: true,
   });
 }
 
 function getScriptSchema(config: ScriptNodeConfiguration): SchemaResult {
+  const onErrorOutputVariables =
+    config.onError.mode === "continue"
+      ? config.onError.outputMap.map((m) => m.contextVariableName)
+      : [];
+
   return buildSchema({
     expressions: config.parameterMap.map((p) => p.valueExpression),
-    outputVariables: config.responseMap.map((r) => r.contextVariableName),
+    outputVariables: [
+      ...config.responseMap.map((r) => r.contextVariableName),
+      ...onErrorOutputVariables,
+    ],
     includeSecrets: true,
   });
 }

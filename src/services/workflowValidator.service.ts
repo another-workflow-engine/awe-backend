@@ -1,4 +1,4 @@
-import { NodeTypes } from "../types/enums.js";
+import { FeelDataType, NodeTypes } from "../types/enums.js";
 import { v4 as uuidv4 } from "uuid";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import type { EdgeModel, NodeModel } from "../types/models.js";
@@ -13,6 +13,7 @@ import {
 } from "../schemas/node.schema.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import {
+  isValidFeelType,
   validateConditionExpression,
   validateFeelExpression,
   validateUrlExpression,
@@ -61,6 +62,9 @@ export enum ValidationErrorCode {
   SCRIPT_PARAM_INVALID,
   OUTPUT_SCHEMA_VARIABLE_UNASSIGNED,
   INVALID_OUTGOING_EDGE_COUNT,
+  INVALID_DEFAULT_VALUE,
+  INVALID_TIMEOUT_CONFIGURATION,
+  INVALID_ON_ERROR_CONFIGURATION,
 }
 
 type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
@@ -333,6 +337,41 @@ function validateHeaders(
   });
 }
 
+function validateDefaultValue(
+  value: unknown,
+  dataType: FeelDataType,
+  nodeId: string,
+  message: string,
+  errors: ValidationError[],
+): void {
+  if (!isValidFeelType(value, dataType)) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_DEFAULT_VALUE,
+      message,
+      nodeId,
+    });
+  }
+}
+
+function validateTimeoutMs(
+  timeoutMs: number | undefined,
+  nodeId: string,
+  nodeLabel: string,
+  errors: ValidationError[],
+): void {
+  if (timeoutMs === undefined) {
+    return;
+  }
+
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_TIMEOUT_CONFIGURATION,
+      message: `${nodeLabel} timeoutMs must be a positive integer`,
+      nodeId,
+    });
+  }
+}
+
 function calculateDataFlow(
   nodes: NodeModel[],
   edges: EdgeModel[],
@@ -429,6 +468,24 @@ function validateStartNode(
       // if (!entry.fetchableId) {
         startNodeInputVariables.add(entry.contextVariableName.trim());
       // }
+    }
+
+    if (!entry.fetchableId && entry.required === false) {
+      if (entry.defaultValue === undefined) {
+        errors.push({
+          code: ValidationErrorCode.INVALID_DEFAULT_VALUE,
+          message: `Start node input ${index + 1}: optional input must define defaultValue`,
+          nodeId: node.client_id,
+        });
+      } else {
+        validateDefaultValue(
+          entry.defaultValue,
+          entry.dataType,
+          node.client_id,
+          `Start node input ${index + 1}: defaultValue does not match declared type ${entry.dataType}`,
+          errors,
+        );
+      }
     }
   });
 
@@ -542,6 +599,24 @@ function validateUserNode(
       assignedOutputs.add(entry.contextVariableName.trim());
     }
 
+    if (entry.required === false) {
+      if (entry.defaultValue === undefined) {
+        errors.push({
+          code: ValidationErrorCode.INVALID_DEFAULT_VALUE,
+          message: `User task response field ${index + 1}: optional input must define defaultValue`,
+          nodeId: node.client_id,
+        });
+      } else {
+        validateDefaultValue(
+          entry.defaultValue,
+          entry.type,
+          node.client_id,
+          `User task response field ${index + 1}: defaultValue does not match declared type ${entry.type}`,
+          errors,
+        );
+      }
+    }
+
     entry.options?.forEach((option, optionIndex) => {
       validateExpression(
         option.valueExpression,
@@ -579,6 +654,8 @@ function validateServiceNode(
     ServiceNodeConfigurationSchema,
     node.configuration,
   );
+
+  validateTimeoutMs(config.timeoutMs, node.client_id, "Service task", errors);
 
   const hasUrl = validateRequired(
     config.urlExpression,
@@ -641,6 +718,63 @@ function validateServiceNode(
 
     if (hasContextName) {
       assignedOutputs.add(entry.contextVariableName.trim());
+    }
+  });
+
+  if (config.onError.mode === "continue" && config.onError.outputMap.length === 0) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_ON_ERROR_CONFIGURATION,
+      message: "Service task onError outputMap is required when mode is continue",
+      nodeId: node.client_id,
+    });
+  }
+
+  if (config.onError.mode === "terminate" && config.onError.outputMap.length > 0) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_ON_ERROR_CONFIGURATION,
+      message: "Service task onError outputMap is only supported when mode is continue",
+      nodeId: node.client_id,
+    });
+  }
+
+  config.onError.outputMap.forEach((entry, index) => {
+    const hasContextName = validateRequired(
+      entry.contextVariableName,
+      node.client_id,
+      `Service task onError map ${index + 1}: context variable name must not be empty`,
+      errors,
+    );
+
+    if (hasContextName) {
+      assignedOutputs.add(entry.contextVariableName.trim());
+    }
+
+    if (entry.fromType === "jsonPath") {
+      validateJsonPath(
+        entry.jsonPath,
+        node.client_id,
+        `Service task onError map ${index + 1}: jsonPath is invalid`,
+        errors,
+      );
+      return;
+    }
+
+    const hasValue = validateRequired(
+      entry.valueExpression,
+      node.client_id,
+      `Service task onError map ${index + 1}: value expression must not be empty`,
+      errors,
+    );
+
+    if (hasValue) {
+      validateExpression(
+        entry.valueExpression,
+        node.client_id,
+        `Service task onError map ${index + 1}: invalid value expression`,
+        errors,
+        validateFeelExpression,
+        inputVariables,
+      );
     }
   });
 
@@ -853,6 +987,8 @@ function validateScriptNode(
     node.configuration,
   );
 
+  validateTimeoutMs(config.timeoutMs, node.client_id, "Script task", errors);
+
   const hasSourceCode = validateRequired(
     config.sourceCode,
     node.client_id,
@@ -972,6 +1108,63 @@ function validateScriptNode(
 
     if (hasContextName) {
       assignedOutputs.add(entry.contextVariableName.trim());
+    }
+  });
+
+  if (config.onError.mode === "continue" && config.onError.outputMap.length === 0) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_ON_ERROR_CONFIGURATION,
+      message: "Script task onError outputMap is required when mode is continue",
+      nodeId: node.client_id,
+    });
+  }
+
+  if (config.onError.mode === "terminate" && config.onError.outputMap.length > 0) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_ON_ERROR_CONFIGURATION,
+      message: "Script task onError outputMap is only supported when mode is continue",
+      nodeId: node.client_id,
+    });
+  }
+
+  config.onError.outputMap.forEach((entry, index) => {
+    const hasContextName = validateRequired(
+      entry.contextVariableName,
+      node.client_id,
+      `Script task onError map ${index + 1}: context variable name must not be empty`,
+      errors,
+    );
+
+    if (hasContextName) {
+      assignedOutputs.add(entry.contextVariableName.trim());
+    }
+
+    if (entry.fromType === "jsonPath") {
+      validateJsonPath(
+        entry.jsonPath,
+        node.client_id,
+        `Script task onError map ${index + 1}: jsonPath is invalid`,
+        errors,
+      );
+      return;
+    }
+
+    const hasValue = validateRequired(
+      entry.valueExpression,
+      node.client_id,
+      `Script task onError map ${index + 1}: value expression must not be empty`,
+      errors,
+    );
+
+    if (hasValue) {
+      validateExpression(
+        entry.valueExpression,
+        node.client_id,
+        `Script task onError map ${index + 1}: invalid value expression`,
+        errors,
+        validateFeelExpression,
+        inputVariables,
+      );
     }
   });
 

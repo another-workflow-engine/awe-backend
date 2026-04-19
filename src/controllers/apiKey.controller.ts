@@ -17,7 +17,7 @@ const createApiKeySchema = z.object({
 
 export const apiKeyController = {
   list: async (req: Request, res: Response) => {
-    const apiKeys = await apiKeyService.getAll(req.context.actor);
+    const apiKeys = await apiKeyService.getAll(req.context);
 
     return res.status(200).json({
       apiKeys: apiKeys.map((apiKey) => {
@@ -39,7 +39,7 @@ export const apiKeyController = {
     const { apiKey, rawKey } = await apiKeyService.createNew(
       label,
       environment,
-      req.context.actor,
+      req.context,
     );
 
     return res.status(201).json({
@@ -53,7 +53,7 @@ export const apiKeyController = {
 
   revoke: async (req: Request, res: Response) => {
     const params = apiKeyIdParam.parse(req.params);
-    const apiKey = await apiKeyService.revoke(params.keyId, req.context.actor);
+    const apiKey = await apiKeyService.revoke(params.keyId, req.context);
 
     return res.status(200).json({
       id: apiKey.id,

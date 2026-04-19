@@ -3,7 +3,7 @@ import { dashboardService } from "../services/dashboard.service.js";
 import { z } from "zod";
 import { organizationService } from "../services/organization.services.js";
 
-const RegisterSystemInput = z.object({
+const RegisterOrganizationInput = z.object({
   name: z.string().max(255),
   orgName: z.string().max(255),
   contactEmail: z.email(),
@@ -11,9 +11,9 @@ const RegisterSystemInput = z.object({
   description: z.string().nullable().optional(),
 });
 
-export const systemController = {
+export const organizationController = {
   register: async (req: Request, res: Response) => {
-    const data = RegisterSystemInput.parse(req.body);
+    const data = RegisterOrganizationInput.parse(req.body);
     const { organization, environments } = await organizationService.register({
       name: data.orgName,
       email: data.contactEmail,
@@ -33,18 +33,16 @@ export const systemController = {
   },
 
   me: async (req: Request, res: Response) => {
-    const { system, organization } = await organizationService.getCurrent(
-      req.context,
-    );
+    const organization = req.context.organization;
 
     res.status(200).json({
       system: {
-        id: system.id,
-        name: system.name,
+        id: "b8840793-c067-4dee-b392-4e0ea104bdfa",
+        name: "none",
         orgName: organization.name,
         contactEmail: organization.email,
-        createdAt: system.created_on,
-        updatedAt: system.modified_on,
+        createdAt: organization.created_on,
+        updatedAt: organization.modified_on,
       },
     });
   },

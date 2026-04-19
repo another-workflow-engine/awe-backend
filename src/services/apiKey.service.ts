@@ -6,7 +6,7 @@ import { NotFoundError } from "../errors/NotFoundError.js";
 import { apiKeyRepository } from "../repositories/apiKey.repository.js";
 import { environmentRepository } from "../repositories/environment.repository.js";
 import { ActorTypes, EnvironmentTypes } from "../types/enums.js";
-import type { ActorModel } from "../types/models.js";
+import type { ActorModel, OrganizationModel } from "../types/models.js";
 import crypto from "node:crypto";
 import argon2 from "argon2";
 import { db } from "../database.js";
@@ -18,14 +18,16 @@ import type { RequestContext } from "../types/auth.js";
 
 export const apiKeyService = {
   getAll: async (
-    actor: ActorModel,
+    requestContext: RequestContext,
     environments?: EnvironmentType[],
   ): Promise<Array<ApiKeyModel & { environment: EnvironmentType }>> => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+    if (requestContext.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
 
-    const apiKeys = await apiKeyRepository.findByOrganizationActorId(actor.id);
+    const apiKeys = await apiKeyRepository.findByOrganizationId(
+      requestContext.organization.id,
+    );
 
     if (!environments || environments.length === 0) {
       return apiKeys;
@@ -38,13 +40,13 @@ export const apiKeyService = {
   createNew: async (
     label: string | undefined,
     environment: EnvironmentType,
-    actor: ActorModel,
+    requestContext: RequestContext,
   ): Promise<{
     rawKey: string;
     apiKey: ApiKeyModel;
     environment: EnvironmentType;
   }> => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+    if (requestContext.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
 
@@ -56,10 +58,7 @@ export const apiKeyService = {
       );
     }
 
-    const environments = await environmentRepository.findByOrganizationActorId(
-      actor.id,
-    );
-    const selectedEnvironment = environments.find(
+    const selectedEnvironment = requestContext.environments.find(
       (e) => e.type === environment,
     );
 
@@ -109,26 +108,19 @@ export const apiKeyService = {
     });
   },
 
-  revoke: async (id: string, actor: ActorModel) => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+  revoke: async (id: string, requestContext: RequestContext) => {
+    if (requestContext.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
-    }
-
-    const environments = await environmentRepository.findByOrganizationActorId(
-      actor.id,
-    );
-    if (!environments) {
-      throw new NotFoundError("Environment not found");
     }
 
     const apiKey = await apiKeyRepository.findById(
       id,
-      environments.map((env) => env.id),
+      requestContext.environments.map((env) => env.id),
     );
 
     if (!apiKey) {
       baseLogger.warn(
-        { apiKeyId: id, actorId: actor.id },
+        { apiKeyId: id, actorId: requestContext.actor.id },
         "API key revoke failed: Key not found",
       );
       throw new NotFoundError("API key not found");

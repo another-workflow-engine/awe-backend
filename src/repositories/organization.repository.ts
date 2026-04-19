@@ -7,14 +7,12 @@ import type {
   ActorModel,
   EnvironmentModel,
   OrganizationModel,
-  SystemModel,
 } from "../types/models.js";
 import { columnMapper } from "./utils/columnMapper.util.js";
 import {
   actorColumns,
   environmentColumns,
   organizationColumns,
-  systemColumns,
 } from "../types/columnNames.js";
 
 type NewOrganization = Insertable<Organization>;
@@ -96,24 +94,18 @@ export const organizationRepository = {
 
   findByEmailWithRelations: async (
     email: string,
-    transaction?: Transaction<DB>,
   ): Promise<
     | {
         organization: OrganizationModel;
         actor: ActorModel;
-        system: SystemModel;
       }
     | undefined
   > => {
-    const result = await (transaction ?? db)
+    const result = await db
       .selectFrom("organization")
       .innerJoin("actor", "actor.id", "organization.actor_id")
-      .innerJoin("system", "system.organization_id", "organization.id")
-      .innerJoin("environment", "environment.system_id", "system.id")
       .where("organization.email", "=", email)
       .where("organization.is_deleted", "=", false)
-      .where("system.is_deleted", "=", false)
-      .where("environment.is_deleted", "=", false)
       .select((eb) => [
         ...columnMapper.prefixedColumns<OrganizationModel>(
           eb,
@@ -122,12 +114,6 @@ export const organizationRepository = {
         ),
 
         ...columnMapper.prefixedColumns<ActorModel>(eb, "actor", actorColumns),
-
-        ...columnMapper.prefixedColumns<SystemModel>(
-          eb,
-          "system",
-          systemColumns,
-        ),
       ])
       .executeTakeFirst();
 
@@ -141,7 +127,6 @@ export const organizationRepository = {
         "organization",
       ),
       actor: columnMapper.extractPrefixed<ActorModel>(result, "actor"),
-      system: columnMapper.extractPrefixed<SystemModel>(result, "system"),
     };
   },
 

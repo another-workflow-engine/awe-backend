@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { systemRouter } from "./system.routes.js";
+import { organizationRouter } from "./organization.routes.js";
 import { authRouter } from "./auth.routes.js";
 import { workflowRouter } from "./workflow.routes.js";
 import { instanceRouter } from "./instance.routes.js";
@@ -10,7 +10,7 @@ import { secretProviderRouter } from "./secretProvider.routes.js";
 export const router = Router();
 
 const apiRouter = Router();
-apiRouter.use("/systems", systemRouter);
+apiRouter.use("/systems", organizationRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/workflows", workflowRouter);
 apiRouter.use("/instances", instanceRouter);

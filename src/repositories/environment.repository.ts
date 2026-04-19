@@ -29,28 +29,15 @@ export const environmentRepository = {
       .executeTakeFirst();
   },
 
-  findBySystemId: async (systemId: string, transaction?: Transaction<DB>) => {
-    return await (transaction ?? db)
-      .selectFrom("environment")
-      .selectAll()
-      .where("system_id", "=", systemId)
-      .where("is_deleted", "=", false)
-      .execute();
-  },
-
-  findByOrganizationActorId: async (
-    actorId: string,
+  findByOrganizationId: async (
+    organizationId: string,
     transaction?: Transaction<DB>,
   ): Promise<EnvironmentModel[]> => {
     return await (transaction ?? db)
       .selectFrom("environment")
-      .innerJoin("system", "system.id", "environment.system_id")
-      .innerJoin("organization", "organization.id", "system.organization_id")
-      .selectAll("environment")
-      .where("organization.actor_id", "=", actorId)
-      .where("organization.is_deleted", "=", false)
-      .where("system.is_deleted", "=", false)
-      .where("environment.is_deleted", "=", false)
+      .selectAll()
+      .where("organization_id", "=", organizationId)
+      .where("is_deleted", "=", false)
       .execute();
   },
 

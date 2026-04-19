@@ -35,7 +35,7 @@ export const environmentService = {
 
   getAllByActor: async (actor: ActorModel): Promise<EnvironmentModel[]> => {
     if (actor.type == ActorTypes.ORGANIZATION_ACCOUNT) {
-      return await environmentRepository.findByOrganizationActorId(actor.id);
+      return await environmentRepository.findByOrganizationId(actor.id);
     }
 
     if (actor.type === ActorTypes.API_KEY_CLIENT) {

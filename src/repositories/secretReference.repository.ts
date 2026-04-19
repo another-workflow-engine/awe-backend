@@ -1,5 +1,9 @@
 import type { Insertable, Transaction } from "kysely";
-import type { DB, EnvironmentType, SecretReference } from "../types/database.js";
+import type {
+  DB,
+  EnvironmentType,
+  SecretReference,
+} from "../types/database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { db } from "../database.js";
 import type {
@@ -95,67 +99,50 @@ export const secretReferenceRepository = {
     }
   },
 
-  findByActor: async (
-    actorId: string,
-    environments?: EnvironmentType[],
-    transaction?: Transaction<DB>,
+  findByOrganizationIdAndEnvironmentIds: async (
+    organizationId: string,
+    environmentIds: string[],
   ) => {
-    let query = (transaction ?? db)
-      .selectFrom("secret_reference")
-      .innerJoin(
-        "environment",
-        "environment.id",
-        "secret_reference.environment_id",
-      )
-      .innerJoin("system", "system.id", "environment.system_id")
-      .innerJoin("organization", "organization.id", "system.organization_id")
-      .select([
-        "secret_reference.id",
-        "secret_reference.label",
-        "secret_reference.secret_key",
-        "secret_reference.provider_id",
-        "secret_reference.created_on",
-        "environment.type as environment",
-      ])
-      .where("organization.actor_id", "=", actorId)
-      .where("organization.is_deleted", "=", false)
-      .where("system.is_deleted", "=", false)
-      .where("environment.is_deleted", "=", false);
-
-    if (environments && environments.length > 0) {
-      query = query.where("environment.type", "in", environments);
+    if (environmentIds.length === 0) {
+      return [];
     }
 
-    return await query.execute();
-  },
-
-  findByProviderAndActor: async (
-    providerId: string,
-    actorId: string,
-    transaction?: Transaction<DB>,
-  ) => {
-    return await (transaction ?? db)
+    return await db
       .selectFrom("secret_reference")
       .innerJoin(
         "environment",
         "environment.id",
         "secret_reference.environment_id",
       )
-      .innerJoin("system", "system.id", "environment.system_id")
-      .innerJoin("organization", "organization.id", "system.organization_id")
-      .select([
-        "secret_reference.id",
-        "secret_reference.label",
-        "secret_reference.secret_key",
-        "secret_reference.provider_id",
-        "secret_reference.created_on",
-        "environment.type as environment",
-      ])
+      .innerJoin(
+        "organization",
+        "organization.id",
+        "environment.organization_id",
+      )
+      .selectAll("secret_reference")
+      .select("environment.type as environment")
+      .where("organization.id", "=", organizationId)
+      .where("environment.id", "in", environmentIds)
+      .execute();
+  },
+
+  findByProviderAndActor: async (providerId: string, actorId: string) => {
+    return await db
+      .selectFrom("secret_reference")
+      .innerJoin(
+        "environment",
+        "environment.id",
+        "secret_reference.environment_id",
+      )
+      .innerJoin(
+        "organization",
+        "organization.id",
+        "environment.organization_id",
+      )
+      .selectAll("secret_reference")
+      .select("environment.type as environment")
       .where("secret_reference.provider_id", "=", providerId)
       .where("organization.actor_id", "=", actorId)
-      .where("organization.is_deleted", "=", false)
-      .where("system.is_deleted", "=", false)
-      .where("environment.is_deleted", "=", false)
       .execute();
   },
 

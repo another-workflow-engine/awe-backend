@@ -53,13 +53,7 @@ export const secretController = {
 
   list: async (req: Request, res: Response) => {
     const environments = parseEnvironmentsFromQuery(req.query.environment);
-    const result =
-      environments.length > 0
-        ? await secretService.listByActorAndEnvironments(
-            req.context.actor,
-            environments,
-          )
-        : await secretService.listByActor(req.context.actor);
+    const result = await secretService.list(environments, req.context);
     return res.status(200).json({
       secrets: result.map(mapSecret),
     });
@@ -77,7 +71,7 @@ export const secretController = {
   },
   delete: async (req: Request, res: Response) => {
     const secretId = req.params.secretId as string;
-    const deleted = await secretService.delete(secretId, req.context.actor);
+    const deleted = await secretService.delete(secretId, req.context);
 
     if (!deleted) {
       return res.status(404).json({

@@ -1,7 +1,7 @@
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
 import { organizationRepository } from "../repositories/organization.repository.js";
-import type { ActorModel } from "../types/models.js";
+import type { ActorModel, OrganizationModel } from "../types/models.js";
 import Config from "../config.js";
 import { AuthError } from "../errors/AuthError.js";
 import { refreshTokenRepository } from "../repositories/refreshToken.repository.js";
@@ -47,7 +47,14 @@ const generateTokens = async (actor: ActorModel, organizationId: string) => {
 };
 
 export const authService = {
-  login: async (email: string, password: string) => {
+  login: async (
+    email: string,
+    password: string,
+  ): Promise<{
+    organization: OrganizationModel;
+    accessToken: string;
+    refreshToken: string;
+  }> => {
     const result = await organizationRepository.findByEmailWithRelations(email);
 
     if (
@@ -59,7 +66,6 @@ export const authService = {
 
     return {
       organization: result.organization,
-      system: result.system,
       ...(await generateTokens(result.actor, result.organization.id)),
     };
   },

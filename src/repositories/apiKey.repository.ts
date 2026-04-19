@@ -20,25 +20,14 @@ type NewApiKey = Insertable<ApiKey>;
 type UpdateApiKey = Updateable<ApiKey>;
 
 export const apiKeyRepository = {
-  findByOrganizationActorId: async (actorId: string) => {
+  findByOrganizationId: async (organizationId: string) => {
     return await db
       .selectFrom("api_key")
       .innerJoin("environment", "environment.id", "api_key.environment_id")
-      .innerJoin("system", "system.id", "environment.system_id")
-      .innerJoin("organization", "organization.id", "system.organization_id")
       .selectAll("api_key")
       .select("environment.type as environment")
-      .where("organization.actor_id", "=", actorId)
+      .where("environment.organization_id", "=", organizationId)
       .where("api_key.is_deleted", "=", false)
-      .execute();
-  },
-
-  findByEnvironmentId: async (environmentId: string) => {
-    return await db
-      .selectFrom("api_key")
-      .selectAll()
-      .where("environment_id", "=", environmentId)
-      .where("is_deleted", "=", false)
       .execute();
   },
 

@@ -4,26 +4,28 @@ import { z } from "zod";
 
 const LoginInput = z.object({
   email: z.email(),
-  password: z.string()
+  password: z.string(),
 });
 
 const TokenInput = z.object({
-  refreshToken: z.string()
+  refreshToken: z.string(),
 });
 
 export const authController = {
   login: async (req: Request, res: Response) => {
     const { email, password } = LoginInput.parse(req.body);
 
-    const { organization, system, accessToken, refreshToken } =
-      await authService.login(email, password);
+    const { organization, accessToken, refreshToken } = await authService.login(
+      email,
+      password,
+    );
 
     res.status(200).json({
       system: {
-        id: system.id,
-        name: system.name,
+        id: "b8840793-c067-4dee-b392-4e0ea104bdfa",
+        name: "none",
         orgName: organization.name,
-        contactEmail: organization.email
+        contactEmail: organization.email,
       },
       accessToken,
       refreshToken,

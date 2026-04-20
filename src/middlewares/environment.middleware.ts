@@ -83,6 +83,10 @@ export const resolveEnvironmentContext = async (
         ]);
       }
     }
+
+    environments = environments.filter((e) =>
+      requestEnvironments.includes(e.type),
+    );
   } else if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
     const rawEnvironment = (req.body as { environment?: unknown }).environment;
 
@@ -106,8 +110,11 @@ export const resolveEnvironmentContext = async (
       String(rawEnvironment).trim(),
     );
 
+    console.log(rawEnvironment);
     environments = environments.filter((e) => e.type === environmentType);
   }
+
+  console.log(environments);
 
   assignEnvironmentContext(req, environments);
   return next();

@@ -38,15 +38,19 @@ export class ScriptNodeExecutor extends Executor<typeof NodeTypes.SCRIPT> {
     }
 
     const credentials: Record<string, string> = {};
-    for (const [key, valueExpression] of Object.entries(
-      this.configuration.credentials ?? {},
-    )) {
-      const value = contextUtils.getFeelEvaluatedValue(
-        valueExpression ?? "",
-        evaluatedContext,
-        FeelDataType.STRING,
-      );
-      credentials[key] = value;
+    if (this.configuration.credentials) {
+      for (const [key, valueExpression] of Object.entries(
+        this.configuration.credentials,
+      )) {
+        if (typeof valueExpression === "string" && valueExpression.trim()) {
+          const value = contextUtils.getFeelEvaluatedValue(
+            valueExpression,
+            evaluatedContext,
+            FeelDataType.STRING,
+          );
+          credentials[key] = value;
+        }
+      }
     }
 
     const result = await service.executeScript(

@@ -74,6 +74,7 @@ export const workflowVersionController = {
       createdAt: workflowVersion.created_on,
       valid: result.valid,
       errors: result.errors,
+      warnings: (result as unknown as { warnings?: unknown[] }).warnings ?? [],
     });
   },
 

@@ -100,8 +100,22 @@ function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
 }
 
 function getScriptSchema(config: ScriptNodeConfiguration): SchemaResult {
+  const expressions = [...config.parameterMap.map((p) => p.valueExpression)];
+
+  if (config.credentials) {
+    if ("clientId" in config.credentials && config.credentials.clientId) {
+      expressions.push(config.credentials.clientId);
+    }
+    if ("clientSecret" in config.credentials && config.credentials.clientSecret) {
+      expressions.push(config.credentials.clientSecret);
+    }
+    if ("apiKey" in config.credentials && config.credentials.apiKey) {
+      expressions.push(config.credentials.apiKey);
+    }
+  }
+
   return buildSchema({
-    expressions: config.parameterMap.map((p) => p.valueExpression),
+    expressions,
     outputVariables: config.responseMap.map((r) => r.contextVariableName),
     includeSecrets: true,
   });

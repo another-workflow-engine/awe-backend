@@ -73,20 +73,20 @@ export const resolveEnvironmentContext = async (
       req.query.environment,
     );
 
-    if (requestEnvironments.length > 0) {
-      if (environments.length === 0) {
-        throw new ValidationError("Invalid environment for this actor", [
-          {
-            field: "environment",
-            message: `Environment ${requestEnvironments.join(", ")} is not available for this actor`,
-          },
-        ]);
-      }
+    if (requestEnvironments.length > 0 && environments.length === 0) {
+      throw new ValidationError("Invalid environment for this actor", [
+        {
+          field: "environment",
+          message: `Environment ${requestEnvironments.join(", ")} is not available for this actor`,
+        },
+      ]);
     }
 
-    environments = environments.filter((e) =>
-      requestEnvironments.includes(e.type),
-    );
+    if (requestEnvironments.length > 0) {
+      environments = environments.filter((e) =>
+        requestEnvironments.includes(e.type),
+      );
+    }
   } else if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
     const rawEnvironment = (req.body as { environment?: unknown }).environment;
 

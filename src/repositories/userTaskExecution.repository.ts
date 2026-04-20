@@ -153,7 +153,7 @@ export const userTaskExecutionRepository = {
         ),
         ...columnMapper.prefixedColumns<WorkflowModel>(
           eb,
-          "worflow",
+          "workflow",
           workflowColumns,
         ),
       ])

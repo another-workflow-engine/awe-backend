@@ -24,7 +24,12 @@ workflowRouter.post(
   workflowGroupController.create,
 );
 
-// CREATE VERSION
+workflowRouter.post(
+  "/:workflowId/draft",
+  resolveEnvironmentContextFromActor,
+  workflowVersionController.create,
+);
+
 workflowRouter.post(
   "/:workflowId/versions",
   resolveEnvironmentContextFromActor,

@@ -135,6 +135,7 @@ export const workflowGroupController = {
           description: version.description,
           version: version.version,
           status: version.status,
+          publishedAt: version.published_on ?? null,
           createdAt: version.created_on,
           updatedAt: version.modified_on,
         };

@@ -25,11 +25,10 @@ export const authController = {
     );
 
     res.status(200).json({
-      system: {
-        id: "b8840793-c067-4dee-b392-4e0ea104bdfa",
-        name: "none",
-        orgName: organization.name,
-        contactEmail: organization.email,
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        email: organization.email,
       },
       accessToken,
       refreshToken,

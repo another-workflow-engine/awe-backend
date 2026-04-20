@@ -5,30 +5,22 @@ import { organizationService } from "../services/organization.services.js";
 
 const RegisterOrganizationInput = z.object({
   name: z.string().max(255),
-  orgName: z.string().max(255),
-  contactEmail: z.email(),
+  email: z.email(),
   password: z.string(),
-  description: z.string().nullable().optional(),
 });
 
 export const organizationController = {
   register: async (req: Request, res: Response) => {
     const data = RegisterOrganizationInput.parse(req.body);
-    const { organization, environments } = await organizationService.register({
-      name: data.orgName,
-      email: data.contactEmail,
-      password: data.password,
-    });
+    const { organization, environments } =
+      await organizationService.register(data);
 
     res.status(201).json({
-      system: {
-        id: organization.id,
-        name: organization.name,
-        orgName: organization.name,
-        contactEmail: organization.email,
-        environments: environments.map((env) => env.type),
-        createdAt: organization.created_on,
-      },
+      id: organization.id,
+      name: organization.name,
+      email: organization.email,
+      environments: environments.map((env) => env.type),
+      createdAt: organization.created_on,
     });
   },
 
@@ -36,14 +28,11 @@ export const organizationController = {
     const organization = req.context.organization;
 
     res.status(200).json({
-      system: {
-        id: "b8840793-c067-4dee-b392-4e0ea104bdfa",
-        name: "none",
-        orgName: organization.name,
-        contactEmail: organization.email,
-        createdAt: organization.created_on,
-        updatedAt: organization.modified_on,
-      },
+      id: organization.id,
+      name: organization.name,
+      email: organization.email,
+      createdAt: organization.created_on,
+      updatedAt: organization.modified_on,
     });
   },
 

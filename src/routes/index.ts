@@ -7,15 +7,17 @@ import { taskRouter } from "./task.routes.js";
 import { auditRouter } from "./audit.routes.js";
 import { secretRouter } from "./secret.routes.js";
 import { secretProviderRouter } from "./secretProvider.routes.js";
+import { apiKeyRouter } from "./apiKey.routes.js";
 export const router = Router();
 
 const apiRouter = Router();
-apiRouter.use("/systems", organizationRouter);
+apiRouter.use("/", organizationRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/workflows", workflowRouter);
 apiRouter.use("/instances", instanceRouter);
 apiRouter.use("/tasks", taskRouter);
 apiRouter.use("/audit", auditRouter);
+apiRouter.use("/api-keys", apiKeyRouter);
 apiRouter.use("/secrets", secretRouter);
 apiRouter.use("/secret-providers", secretProviderRouter);
 

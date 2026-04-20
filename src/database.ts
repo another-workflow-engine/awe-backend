@@ -1,6 +1,6 @@
 import type { DB } from "./types/database.js";
 import { Pool } from "pg";
-import { Kysely, PostgresDialect } from "kysely";
+import { Kysely, PostgresDialect, sql } from "kysely";
 import Config from "./config.js";
 
 export const db = new Kysely<DB>({
@@ -23,8 +23,7 @@ export function isDbError(
 
 export async function checkDb() {
   await db
-    .selectFrom("extensions.pg_stat_statements")
-    .select("dbid")
-    .limit(1)
+    .selectFrom(sql`(SELECT 1)`.as("ping"))
+    .select(sql<number>`1`.as("ping"))
     .execute();
 }

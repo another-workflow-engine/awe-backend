@@ -7,14 +7,6 @@ import type { ActorModel } from "../types/models.js";
 type NewActor = Insertable<Actor>;
 
 export const actorRepository = {
-  findById: async (id: string, transaction?: Transaction<DB>) => {
-    return await (transaction ?? db)
-      .selectFrom("actor")
-      .selectAll()
-      .where("id", "=", id)
-      .executeTakeFirst();
-  },
-
   insert: async (
     data: NewActor,
     transaction?: Transaction<DB>,

@@ -24,7 +24,7 @@ export const workflowGroupController = {
     const { name, description } = WorkflowGroupCreateSchema.parse(req.body);
     const workflow = await workflowService.create(
       { name, description },
-      req.actor,
+      req.context.actor,
       req.environmentId,
     );
 
@@ -94,7 +94,7 @@ export const workflowGroupController = {
     });
     const updatedWorkflow = await workflowService.update(
       data,
-      req.actor,
+      req.context.actor,
       req.environmentIds,
     );
 
@@ -144,7 +144,11 @@ export const workflowGroupController = {
 
   delete: async (req: Request, res: Response) => {
     const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
-    await workflowService.delete(workflowId, req.actor, req.environmentIds);
+    await workflowService.delete(
+      workflowId,
+      req.context.actor,
+      req.environmentIds,
+    );
     res.status(200).json({});
   },
 

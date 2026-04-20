@@ -21,7 +21,7 @@ export const instanceController = {
     const { page, limit, offset } = parsePaginationFromRequest(req);
 
     const { items, total } = await instanceService.listPaginated(
-      req.actor.id,
+      req.context.actor.id,
       req.environmentIds,
       limit,
       offset,
@@ -36,7 +36,7 @@ export const instanceController = {
     const data = InstanceCreateSchema.parse({ ...req.body });
     const { instance, workflowVersion } = await instanceService.createNew(
       data,
-      req.actor,
+      req.context.actor,
       req.environmentIds,
     );
     return res.status(201).json({
@@ -99,7 +99,7 @@ export const instanceController = {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const instance = await instanceService.resume(
       instanceId,
-      req.actor,
+      req.context.actor,
       req.environmentIds,
     );
     return res.json({ instance });
@@ -135,7 +135,7 @@ export const instanceController = {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const instance = await instanceSignalService.signalPause(
       instanceId,
-      req.actor,
+      req.context.actor,
       req.environmentIds,
     );
     return res.json({ instance });
@@ -145,7 +145,7 @@ export const instanceController = {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const instance = await instanceSignalService.signalTerminate(
       instanceId,
-      req.actor,
+      req.context.actor,
       req.environmentIds,
     );
     return res.json({ instance });
@@ -156,7 +156,7 @@ export const instanceController = {
     const { constants } = RetryInstanceBodySchema.parse(req.body ?? {});
     const instance = await instanceService.retry(
       instanceId,
-      req.actor,
+      req.context.actor,
       req.environmentIds,
       undefined,
       constants,
@@ -168,7 +168,7 @@ export const instanceController = {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const constants = await instanceService.getRetryConstants(
       instanceId,
-      req.actor,
+      req.context.actor,
       req.environmentIds,
     );
 

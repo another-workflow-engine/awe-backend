@@ -36,7 +36,7 @@ export const secretController = {
   create: async (req: Request, res: Response) => {
     const data = CreateNewSecretSchema.parse({
       ...req.body,
-      actor: req.actor,
+      actor: req.context.actor,
     });
 
     const result = await secretService.createNew(data);
@@ -53,10 +53,7 @@ export const secretController = {
 
   list: async (req: Request, res: Response) => {
     const environments = parseEnvironmentsFromQuery(req.query.environment);
-    const result =
-      environments.length > 0
-        ? await secretService.listByActorAndEnvironments(req.actor!, environments)
-        : await secretService.listByActor(req.actor!);
+    const result = await secretService.list(environments, req.context);
     return res.status(200).json({
       secrets: result.map(mapSecret),
     });
@@ -64,24 +61,27 @@ export const secretController = {
 
   listByProvider: async (req: Request, res: Response) => {
     const providerId = req.params.providerId as string;
-    const result = await secretService.listByProvider(providerId, req.actor!);
+    const result = await secretService.listByProvider(
+      providerId,
+      req.context.actor,
+    );
     return res.status(200).json({
       secrets: result.map(mapSecret),
     });
   },
-    delete: async (req: Request, res: Response) => {
-      const secretId = req.params.secretId as string;
-      const deleted = await secretService.delete(secretId, req.actor!);
-    
-      if (!deleted) {
-        return res.status(404).json({
-          error: "Secret not found",
-        });
-      }
+  delete: async (req: Request, res: Response) => {
+    const secretId = req.params.secretId as string;
+    const deleted = await secretService.delete(secretId, req.context);
 
-      return res.status(200).json({
-        success: true,
-        message: "Secret deleted successfully",
+    if (!deleted) {
+      return res.status(404).json({
+        error: "Secret not found",
       });
-    },
-   };
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Secret deleted successfully",
+    });
+  },
+};

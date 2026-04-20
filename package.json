@@ -7,7 +7,7 @@
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsc",
     "start": "node --env-file=.env dist/index.js",
-    "codegen": "kysely-codegen --dialect postgres --out-file src/types/database.ts && npx tsx scripts/generateColumns.ts",
+    "codegen": "kysely-codegen --dialect postgres --include-pattern \"public.*\"  --out-file src/types/database.ts && npx tsx scripts/generateColumns.ts",
     "tokengen": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
     "typechecker": "npx tsc --noEmit",
     "test": "jest",

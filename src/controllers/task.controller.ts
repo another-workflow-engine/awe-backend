@@ -4,7 +4,7 @@ import { taskService } from "../services/task.service.js";
 import { z } from "zod";
 
 const TaskParamsSchema = z.object({
-  taskId: z.string().uuid(),
+  taskId: z.uuidv4(),
 });
 
 export const taskController = {
@@ -16,7 +16,7 @@ export const taskController = {
 
     const instance = await instanceService.retry(
       instanceId,
-      req.actor,
+      req.context.actor,
       req.environmentIds,
       taskId,
     );

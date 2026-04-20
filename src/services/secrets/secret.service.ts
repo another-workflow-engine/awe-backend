@@ -9,11 +9,17 @@ import { NotFoundError } from "../../errors/NotFoundError.js";
 import { InvalidOperationError } from "../../errors/InvalidOperationError.js";
 import { ActorSchema } from "../../schemas/actor.schema.js";
 import type { EnvironmentType } from "../../types/database.js";
+import type {
+  EnvironmentModel,
+  OrganizationModel,
+} from "../../types/models.js";
+import type { RequestContext } from "../../types/auth.js";
 
 type CreateNewSecretSchemaType = z.infer<typeof CreateNewSecretSchema>;
 
 function getProviderClass(providerType: string) {
-  const ProviderClass = providerClassMap[providerType as keyof typeof providerClassMap];
+  const ProviderClass =
+    providerClassMap[providerType as keyof typeof providerClassMap];
 
   if (!ProviderClass) {
     throw new EngineError(
@@ -114,15 +120,19 @@ export const secretService = {
     return secrets;
   },
 
-  listByActor: async (actor: z.infer<typeof ActorSchema>) => {
-    return await secretReferenceRepository.findByActor(actor.id);
-  },
-
-  listByActorAndEnvironments: async (
-    actor: z.infer<typeof ActorSchema>,
-    environments: EnvironmentType[],
+  list: async (
+    environmentTypes: EnvironmentType[],
+    requestContext: RequestContext,
   ) => {
-    return await secretReferenceRepository.findByActor(actor.id, environments);
+    return await secretReferenceRepository.findByOrganizationIdAndEnvironmentIds(
+      requestContext.organization.id,
+      requestContext.environments.reduce<string[]>((acc, env) => {
+        if (env.id && environmentTypes.includes(env.type)) {
+          acc.push(env.id);
+        }
+        return acc;
+      }, []),
+    );
   },
 
   listByProvider: async (
@@ -137,16 +147,18 @@ export const secretService = {
 
   delete: async (
     secretId: string,
-    actor: z.infer<typeof ActorSchema>,
+    requestContext: RequestContext,
   ): Promise<boolean> => {
-    // Verify the secret belongs to this actor
     const secret = await secretReferenceRepository.findById(secretId);
     if (!secret) {
       throw new NotFoundError("Secret");
     }
 
-    // Verify that the actor has access to this secret
-    const userSecrets = await secretReferenceRepository.findByActor(actor.id);
+    const userSecrets =
+      await secretReferenceRepository.findByOrganizationIdAndEnvironmentIds(
+        requestContext.organization.id,
+        requestContext.environments.map((env) => env.id),
+      );
     if (!userSecrets.some((s) => s.id === secretId)) {
       throw new InvalidOperationError(
         "You do not have permission to delete this secret",

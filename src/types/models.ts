@@ -12,7 +12,6 @@ import type {
   RefreshToken,
   SecretProvider,
   SecretReference,
-  System,
   Task,
   TaskExecution,
   UserTaskExecution,
@@ -27,8 +26,6 @@ export type DbTransaction = Transaction<DB>;
 export type ActorModel = Selectable<Actor>;
 
 export type OrganizationModel = Selectable<Organization>;
-
-export type SystemModel = Selectable<System>;
 
 export type EnvironmentModel = Selectable<Environment>;
 

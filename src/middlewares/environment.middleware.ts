@@ -1,9 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
-import { environmentService } from "../services/environment.services.js";
 import { ValidationError } from "../errors/ValidationError.js";
 import type { EnvironmentType } from "../types/database.js";
 import { parseEnvironmentsFromQuery } from "../utils/environment.utils.js";
-import { ActorTypes } from "../types/enums.js";
 import { z } from "zod";
 
 declare global {
@@ -22,7 +20,7 @@ const assignEnvironmentContext = (
   environments: Array<{ id: string; type: EnvironmentType }>,
 ) => {
   if (!environments || environments.length === 0) {
-    throw new ValidationError("No environments available for this actor", [
+    throw new ValidationError("No environments available for this actor 2", [
       {
         field: "environment",
         message: "At least one environment is required",
@@ -49,21 +47,14 @@ const assignEnvironmentContext = (
   req.environment = primaryEnvironmentType;
 };
 
-const getEnvironmentsForActor = async (req: Request) => {
-  if (req.actor.type === ActorTypes.API_KEY_CLIENT) {
-    const environment = await environmentService.getByActor(req.actor);
-    return [environment];
-  }
-
-  return await environmentService.getAllByActor(req.actor);
-};
-
 export const resolveEnvironmentContextFromActor = async (
   req: Request,
   _res: Response,
   next: NextFunction,
 ) => {
-  const environments = await getEnvironmentsForActor(req);
+  const environments = req.context.environments.map((env) => {
+    return { id: env.id, type: env.type };
+  });
   assignEnvironmentContext(req, environments);
   return next();
 };
@@ -73,19 +64,16 @@ export const resolveEnvironmentContext = async (
   _res: Response,
   next: NextFunction,
 ) => {
-  let environments;
+  let environments = req.context.environments.map((env) => {
+    return { id: env.id, type: env.type };
+  });
 
-  if (req.actor.type === ActorTypes.API_KEY_CLIENT) {
-    environments = await getEnvironmentsForActor(req);
-  } else if (req.method === "GET") {
-    const requestEnvironments = parseEnvironmentsFromQuery(req.query.environment);
+  if (req.method === "GET") {
+    const requestEnvironments = parseEnvironmentsFromQuery(
+      req.query.environment,
+    );
 
     if (requestEnvironments.length > 0) {
-      environments = await environmentService.getByActorAndEnvironments(
-        req.actor,
-        requestEnvironments,
-      );
-
       if (environments.length === 0) {
         throw new ValidationError("Invalid environment for this actor", [
           {
@@ -94,9 +82,11 @@ export const resolveEnvironmentContext = async (
           },
         ]);
       }
-    } else {
-      environments = await environmentService.getAllByActor(req.actor);
     }
+
+    environments = environments.filter((e) =>
+      requestEnvironments.includes(e.type),
+    );
   } else if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
     const rawEnvironment = (req.body as { environment?: unknown }).environment;
 
@@ -120,14 +110,11 @@ export const resolveEnvironmentContext = async (
       String(rawEnvironment).trim(),
     );
 
-    const environment = await environmentService.getByActorAndEnvironment(
-      req.actor,
-      environmentType,
-    );
-    environments = [environment];
-  } else {
-    environments = await getEnvironmentsForActor(req);
+    console.log(rawEnvironment);
+    environments = environments.filter((e) => e.type === environmentType);
   }
+
+  console.log(environments);
 
   assignEnvironmentContext(req, environments);
   return next();

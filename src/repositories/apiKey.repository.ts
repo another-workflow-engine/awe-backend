@@ -1,32 +1,33 @@
 import { db } from "../database.js";
 import type { ApiKey, DB } from "../types/database.js";
 import type { Insertable, Transaction, Updateable } from "kysely";
-import type { ApiKeyModel } from "../types/models.js";
+import {
+  type ActorModel,
+  type ApiKeyModel,
+  type EnvironmentModel,
+  type OrganizationModel,
+} from "../types/models.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
+import { columnMapper } from "./utils/columnMapper.util.js";
+import {
+  actorColumns,
+  apiKeyColumns,
+  environmentColumns,
+  organizationColumns,
+} from "../types/columnNames.js";
 
 type NewApiKey = Insertable<ApiKey>;
 type UpdateApiKey = Updateable<ApiKey>;
 
 export const apiKeyRepository = {
-  findByOrganizationActorId: async (actorId: string) => {
+  findByOrganizationId: async (organizationId: string) => {
     return await db
       .selectFrom("api_key")
       .innerJoin("environment", "environment.id", "api_key.environment_id")
-      .innerJoin("system", "system.id", "environment.system_id")
-      .innerJoin("organization", "organization.id", "system.organization_id")
       .selectAll("api_key")
       .select("environment.type as environment")
-      .where("organization.actor_id", "=", actorId)
+      .where("environment.organization_id", "=", organizationId)
       .where("api_key.is_deleted", "=", false)
-      .execute();
-  },
-
-  findByEnvironmentId: async (environmentId: string) => {
-    return await db
-      .selectFrom("api_key")
-      .selectAll()
-      .where("environment_id", "=", environmentId)
-      .where("is_deleted", "=", false)
       .execute();
   },
 
@@ -43,13 +44,60 @@ export const apiKeyRepository = {
     return Number(result?.count ?? 0);
   },
 
-  findByPrefix: async (prefix: string) => {
-    return await db
+  findByPrefixWithRelations: async (
+    prefix: string,
+  ): Promise<
+    | {
+        apiKey: ApiKeyModel;
+        organization: OrganizationModel;
+        environment: EnvironmentModel;
+        actor: ActorModel;
+      }
+    | undefined
+  > => {
+    const row = await db
       .selectFrom("api_key")
-      .selectAll()
+      .innerJoin("environment", "environment.id", "api_key.environment_id")
+      .innerJoin("organization", "organization.id", "organization.actor_id")
+      .innerJoin("actor", "actor.id", "api_key.actor_id")
+      .select((eb) => [
+        ...columnMapper.prefixedColumns<ApiKeyModel>(
+          eb,
+          "api_key",
+          apiKeyColumns,
+        ),
+        ...columnMapper.prefixedColumns<EnvironmentModel>(
+          eb,
+          "environment",
+          environmentColumns,
+        ),
+        ...columnMapper.prefixedColumns<OrganizationModel>(
+          eb,
+          "organization",
+          organizationColumns,
+        ),
+        ...columnMapper.prefixedColumns<ActorModel>(eb, "actor", actorColumns),
+      ])
       .where("key_prefix", "=", prefix)
       .where("is_deleted", "=", false)
       .executeTakeFirst();
+
+    if (!row) {
+      return row;
+    }
+
+    return {
+      actor: columnMapper.extractPrefixed<ActorModel>(row, "actor"),
+      organization: columnMapper.extractPrefixed<OrganizationModel>(
+        row,
+        "organization",
+      ),
+      environment: columnMapper.extractPrefixed<EnvironmentModel>(
+        row,
+        "environment",
+      ),
+      apiKey: columnMapper.extractPrefixed<ApiKeyModel>(row, "api_key"),
+    };
   },
 
   findById: async (id: string, environments: string[]) => {

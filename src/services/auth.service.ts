@@ -1,7 +1,7 @@
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
 import { organizationRepository } from "../repositories/organization.repository.js";
-import type { ActorModel } from "../types/models.js";
+import type { ActorModel, OrganizationModel } from "../types/models.js";
 import Config from "../config.js";
 import { AuthError } from "../errors/AuthError.js";
 import { refreshTokenRepository } from "../repositories/refreshToken.repository.js";
@@ -9,6 +9,9 @@ import type { StringValue } from "ms";
 import { randomUUID } from "node:crypto";
 import { AppError } from "../errors/AppError.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
+import type { RequestContext } from "../types/auth.js";
+import { organizationService } from "./organization.services.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 type RefreshTokenPayload = {
   actor: ActorModel;
@@ -44,7 +47,14 @@ const generateTokens = async (actor: ActorModel, organizationId: string) => {
 };
 
 export const authService = {
-  login: async (email: string, password: string) => {
+  login: async (
+    email: string,
+    password: string,
+  ): Promise<{
+    organization: OrganizationModel;
+    accessToken: string;
+    refreshToken: string;
+  }> => {
     const result = await organizationRepository.findByEmailWithRelations(email);
 
     if (
@@ -56,7 +66,6 @@ export const authService = {
 
     return {
       organization: result.organization,
-      system: result.system,
       ...(await generateTokens(result.actor, result.organization.id)),
     };
   },
@@ -100,13 +109,27 @@ export const authService = {
     }
   },
 
-  getActorOrThrow: (accessToken: string) => {
+  getRequestContextOrThrow: async (
+    accessToken: string,
+  ): Promise<RequestContext> => {
     try {
       const payload = jwt.verify(accessToken, Config.JWT_ACCESS_SECRET) as {
         actor: ActorModel;
       };
 
-      return payload.actor;
+      const models = await organizationService.getByActorIdWithEnvironments(
+        payload.actor.id,
+      );
+
+      if (!models) {
+        throw new DataIntegrityError(`Invalid actor=${payload.actor}`);
+      }
+
+      return {
+        actor: payload.actor,
+        organization: models.organization,
+        environments: models.environments,
+      };
     } catch (err) {
       if (err instanceof jwt.JsonWebTokenError) {
         throw new AuthError("Invalid access token", err);

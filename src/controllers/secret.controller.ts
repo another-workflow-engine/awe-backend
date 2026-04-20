@@ -93,4 +93,21 @@ export const secretController = {
       message: "Secret deleted successfully",
     });
   },
+
+  listAllSecrets: async (req: Request, res: Response) => {
+    const data = ListAllSecretsSchema.parse({
+      ...req.params,
+      ...req.query,
+      actor: req.context.actor,
+    });
+    const result = await secretService.listAllSecrets(
+      data.providerId,
+      data.environment,
+      data.actor,
+    );
+    return res.status(200).json({
+      secrets: result,
+    });
+  },
 };
+  

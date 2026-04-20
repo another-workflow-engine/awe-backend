@@ -169,9 +169,9 @@ export const secretService = {
   },
 
   listAllSecrets: async (
-    actor: z.infer<typeof ActorSchema>,
-    environments: EnvironmentType[],
     providerId: string,
+    environment: EnvironmentType,
+    actor: z.infer<typeof ActorSchema>,
   ) => {
 
     

@@ -86,7 +86,6 @@ export interface Environment {
   id: Generated<string>;
   is_deleted: Generated<boolean>;
   organization_id: string;
-  system_id: string | null;
   type: EnvironmentType;
 }
 
@@ -179,17 +178,6 @@ export interface SecretReference {
   secret_key: string;
 }
 
-export interface System {
-  created_on: Generated<Timestamp>;
-  deleted_on: Timestamp | null;
-  description: string | null;
-  id: Generated<string>;
-  is_deleted: Generated<boolean>;
-  modified_on: Generated<Timestamp>;
-  name: string;
-  organization_id: string;
-}
-
 export interface Task {
   created_on: Generated<Timestamp>;
   id: Generated<string>;
@@ -260,7 +248,6 @@ export interface DB {
   refresh_token: RefreshToken;
   secret_provider: SecretProvider;
   secret_reference: SecretReference;
-  system: System;
   task: Task;
   task_execution: TaskExecution;
   user_task_execution: UserTaskExecution;

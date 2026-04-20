@@ -1,4 +1,4 @@
-import type { Actor, ApiKey, Edge, Environment, Instance, InstanceLog, Node, Organization, RefreshToken, SecretProvider, SecretReference, System, Task, TaskExecution, UserTaskExecution, Workflow, WorkflowVersion } from "./database.js";
+import type { Actor, ApiKey, Edge, Environment, Instance, InstanceLog, Node, Organization, RefreshToken, SecretProvider, SecretReference, Task, TaskExecution, UserTaskExecution, Workflow, WorkflowVersion } from "./database.js";
 
 
 
@@ -8,7 +8,7 @@ export const apiKeyColumns = ["actor_id","created_on","deleted_on","environment_
 
 export const edgeColumns = ["client_id","condition_expression","created_by","created_on","deleted_by","deleted_on","destination_node_id","id","is_deleted","modified_by","modified_on","name","rule_id","source_node_id"] as const satisfies (keyof Edge)[];
 
-export const environmentColumns = ["created_on","deleted_on","id","is_deleted","organization_id","system_id","type"] as const satisfies (keyof Environment)[];
+export const environmentColumns = ["created_on","deleted_on","id","is_deleted","organization_id","type"] as const satisfies (keyof Environment)[];
 
 export const instanceColumns = ["auto_advance","control_signal","created_by","created_on","current_node_id","current_variables","ended_on","id","input_variables","is_deleted","output_variables","started_on","status","workflow_version_id"] as const satisfies (keyof Instance)[];
 
@@ -23,8 +23,6 @@ export const refreshTokenColumns = ["created_on","expires_at","id","organization
 export const secretProviderColumns = ["configuration","created_on","id","label","organization_id","type","updated_on"] as const satisfies (keyof SecretProvider)[];
 
 export const secretReferenceColumns = ["created_on","environment_id","id","label","provider_id","secret_key"] as const satisfies (keyof SecretReference)[];
-
-export const systemColumns = ["created_on","deleted_on","description","id","is_deleted","modified_on","name","organization_id"] as const satisfies (keyof System)[];
 
 export const taskColumns = ["created_on","id","instance_id","node_id","status"] as const satisfies (keyof Task)[];
 

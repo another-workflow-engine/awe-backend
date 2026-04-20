@@ -66,14 +66,6 @@ export const userTaskService = {
     );
   },
 
-  getPending: async (actor: ActorModel): Promise<PendingUserTaskList[]> => {
-    const environments = await environmentService.getAllByActor(actor);
-    return await userTaskExecutionRepository.findByEnvironmentIdsAndStatus(
-      environments.map((environment) => environment.id),
-      TaskStatuses.IN_PROGRESS,
-    );
-  },
-
   getPendingPaginated: async (
     actor: ActorModel,
     environmentIds: string[],

@@ -11,8 +11,17 @@ import type {
 } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { WorkflowVersionModel } from "../types/models.js";
+import type {
+  DbTransaction,
+  WorkflowModel,
+  WorkflowVersionModel,
+} from "../types/models.js";
 import { WorkflowVersionStatuses } from "../types/enums.js";
+import { columnMapper } from "./utils/columnMapper.util.js";
+import {
+  workflowColumns,
+  workflowVersionColumns,
+} from "../types/columnNames.js";
 
 export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 export type UpdateWorkflowVersion = Updateable<WorkflowVersion>;
@@ -27,35 +36,59 @@ export const workflowVersionRepository = {
       .executeTakeFirst();
   },
 
-  findByIdAndEnvironmentId: async (
+  findByIdWithWorkflow: async (
     id: string,
-    environmentId: string,
-    transaction?: Transaction<DB>,
-  ) => {
-    return await (transaction ?? db)
+  ): Promise<
+    | {
+        workflowVersion: WorkflowVersionModel;
+        workflow: WorkflowModel;
+      }
+    | undefined
+  > => {
+    const result = await db
       .selectFrom("workflow_version")
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .selectAll("workflow_version")
+      .select((eb) => [
+        ...columnMapper.prefixedColumns<WorkflowVersionModel>(
+          eb,
+          "workflow_version",
+          workflowVersionColumns,
+        ),
+        ...columnMapper.prefixedColumns<WorkflowModel>(
+          eb,
+          "workflow",
+          workflowColumns,
+        ),
+      ])
       .where("workflow_version.id", "=", id)
-      .where("workflow.environment_id", "=", environmentId)
       .where("workflow_version.is_deleted", "=", false)
       .where("workflow.is_deleted", "=", false)
       .executeTakeFirst();
+
+    if (!result) {
+      return result;
+    }
+
+    return {
+      workflowVersion: columnMapper.extractPrefixed<WorkflowVersionModel>(
+        result,
+        "workflow_version",
+      ),
+      workflow: columnMapper.extractPrefixed<WorkflowModel>(result, "workflow"),
+    };
   },
 
-  findByIdAndEnvironmentIds: async (
-    id: string,
-    environmentIds: string[],
-    transaction?: Transaction<DB>,
+  findLatestNonNullVersionByWorkflowId: async (
+    workflowId: string,
+    transaction: DbTransaction,
   ) => {
     return await (transaction ?? db)
       .selectFrom("workflow_version")
-      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .selectAll("workflow_version")
-      .where("workflow_version.id", "=", id)
-      .where("workflow.environment_id", "in", environmentIds)
-      .where("workflow_version.is_deleted", "=", false)
-      .where("workflow.is_deleted", "=", false)
+      .selectAll()
+      .where("workflow_id", "=", workflowId)
+      .where("is_deleted", "=", false)
+      .orderBy("modified_on", "desc")
+      .limit(1)
       .executeTakeFirst();
   },
 
@@ -118,7 +151,7 @@ export const workflowVersionRepository = {
 
   findByWorkflowIdAndVersion: async (
     workflowId: string,
-    version: number,
+    version: string,
     transaction?: Transaction<DB>,
   ): Promise<WorkflowVersionModel> => {
     try {
@@ -161,6 +194,28 @@ export const workflowVersionRepository = {
     return await filteredQuery.executeTakeFirst();
   },
 
+  insert: async (
+    data: {
+      version: string | null;
+      description: string | null;
+      created_by: string;
+      modified_by: string;
+      status: WorkflowVersionStatus;
+      workflow_id: string;
+    },
+    transaction?: Transaction<DB>,
+  ) => {
+    try {
+      return await (transaction ?? db)
+        .insertInto("workflow_version")
+        .values(data)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    } catch (err) {
+      throw new RepositoryError("Insert workflow version failed", err);
+    }
+  },
+
   insertNextVersion: async (
     data: {
       description: string | null;
@@ -176,7 +231,7 @@ export const workflowVersionRepository = {
         .insertInto("workflow_version")
         .values({
           ...data,
-          version: sql<number>`
+          version: sql<string>`
       coalesce(
         (
           select max(version) + 1
@@ -225,7 +280,7 @@ export const workflowVersionRepository = {
       .execute();
   },
 
-  doesDraftOrValidVersionExists: async (
+  draftOrValidVersionExists: async (
     workflowId: string,
     transaction?: Transaction<DB>,
   ): Promise<boolean> => {
@@ -239,7 +294,7 @@ export const workflowVersionRepository = {
       ])
       .where("is_deleted", "=", false)
       .executeTakeFirst();
-    
+
     return result ? result.count > 0 : false;
   },
 };

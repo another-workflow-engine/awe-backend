@@ -1,7 +1,6 @@
 import { db } from "../database.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
-import { environmentRepository } from "../repositories/environment.repository.js";
 import {
   ActorTypes,
   EnvironmentTypes,
@@ -9,7 +8,12 @@ import {
   NodeTypes,
   WorkflowVersionStatuses,
 } from "../types/enums.js";
-import type { WorkflowVersionModel } from "../types/models.js";
+import type {
+  ActorModel,
+  DbTransaction,
+  EnvironmentModel,
+  WorkflowVersionModel,
+} from "../types/models.js";
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
 import {
@@ -18,22 +22,26 @@ import {
   WorkflowVersionListSchema,
   WorkflowVersionPromoteSchema,
   WorkflowVersionPromoteResponseSchema,
-  WorkflowVersionSaveSchema,
   WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
 } from "../schemas/workflowVersion.schema.js";
 import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
-import { workflowValidatorService } from "./workflowValidator.service.js";
+import {
+  workflowValidatorService,
+  type ValidationResult,
+} from "./workflowValidator.service.js";
 import { Transaction } from "kysely";
-import type { DB, EnvironmentType, WorkflowVersionStatus } from "../types/database.js";
+import type { DB, EnvironmentType } from "../types/database.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
-import { ValidationError } from "../errors/ValidationError.js";
 import { AuthError } from "../errors/AuthError.js";
+import type { Edge, Node } from "../types/workflow.js";
+import { converterUtils } from "../utils/converter.utils.js";
+import { coerce } from "semver";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 export type StatusPartialUpdateInput = z.infer<
@@ -43,7 +51,6 @@ export type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
 export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
-export type SaveVersionInput = z.infer<typeof WorkflowVersionSaveSchema>;
 export type PromoteVersionInput = z.infer<typeof WorkflowVersionPromoteSchema>;
 export type PromoteVersionOutput = z.infer<
   typeof WorkflowVersionPromoteResponseSchema
@@ -58,104 +65,46 @@ const nextPromotionTargetByEnvironment: Record<
   [EnvironmentTypes.PRODUCTION]: null,
 };
 
-const getNextPromotionTargetEnvironmentType = (
-  sourceEnvironmentType: EnvironmentType,
-): EnvironmentType | null => {
-  return nextPromotionTargetByEnvironment[sourceEnvironmentType] ?? null;
-};
-
-const resolvePromotionTargetEnvironmentId = async (
-  sourceVersionId: string,
-  actorEnvironmentIds: string[],
-) => {
-  if (actorEnvironmentIds.length === 0) {
-    throw new ValidationError("Invalid promotion target", [
-      {
-        field: "environment",
-        message: "No available environments found for this actor",
-      },
-    ]);
-  }
-
-  const sourceVersion = await workflowVersionRepository.findById(sourceVersionId);
-  if (!sourceVersion) {
-    throw new NotFoundError("Workflow version");
-  }
-
-  const sourceWorkflow = await workflowRepository.findById(sourceVersion.workflow_id);
-  if (!sourceWorkflow) {
-    throw new NotFoundError("Workflow");
-  }
-
-  const sourceEnvironment = await environmentRepository.findById(
-    sourceWorkflow.environment_id,
-  );
-
-  if (!sourceEnvironment) {
-    throw new ValidationError("Invalid promotion target", [
-      {
-        field: "environment",
-        message: "Source environment could not be resolved for this workflow",
-      },
-    ]);
-  }
-
-  const requiredTargetEnvironmentType = getNextPromotionTargetEnvironmentType(
-    sourceEnvironment.type,
-  );
-
-  if (!requiredTargetEnvironmentType) {
-    throw new ValidationError("Invalid promotion path", [
-      {
-        field: "environment",
-        message:
-          `Promotion from '${sourceEnvironment.type}' is not allowed. Allowed paths: development -> staging, staging -> production`,
-      },
-    ]);
-  }
-
-  const actorEnvironments = (
-    await Promise.all(
-      actorEnvironmentIds.map(async (environmentId) => {
-        return await environmentRepository.findById(environmentId);
-      }),
-    )
-  ).filter((environment): environment is NonNullable<typeof environment> => {
-    return Boolean(environment);
-  });
-
-  const targetEnvironment = actorEnvironments.find((environment) => {
-    return environment.type === requiredTargetEnvironmentType;
-  });
-
-  if (!targetEnvironment) {
-    throw new ValidationError("Invalid promotion target", [
-      {
-        field: "environment",
-        message:
-          `Actor does not have access to required target environment '${requiredTargetEnvironmentType}' for promotion from '${sourceEnvironment.type}'`,
-      },
-    ]);
-  }
-
-  return targetEnvironment.id;
-};
-
 const getVersionOrThrow = async (
   versionId: string,
-  environmentIds: string[],
-  transaction?: Transaction<DB>,
+  environments: EnvironmentModel[],
 ) => {
-  const version = await workflowVersionRepository.findByIdAndEnvironmentIds(
-    versionId,
-    environmentIds,
-    transaction,
-  );
-  if (!version) {
+  const models =
+    await workflowVersionRepository.findByIdWithWorkflow(versionId);
+
+  if (
+    !models ||
+    !models.workflowVersion ||
+    !environments.find((env) => env.id === models.workflow.environment_id)
+  ) {
     throw new NotFoundError("Workflow version");
   }
-  return version;
+  return models;
 };
+
+async function createNodesEdgesAndValid(params: {
+  nodes: Node[];
+  edges: Edge[];
+  actor: ActorModel;
+  workflowVersion: WorkflowVersionModel;
+  transaction: DbTransaction;
+}): Promise<ValidationResult> {
+  const nodeModels = await nodeService.createMany(
+    params.nodes,
+    params.actor,
+    params.workflowVersion,
+    params.transaction,
+  );
+
+  const edgeModels = await edgeService.createMany(
+    params.edges,
+    nodeModels,
+    params.actor,
+    params.transaction,
+  );
+
+  return workflowValidatorService.validate(nodeModels, edgeModels);
+}
 
 export const workflowVersionService = {
   listPaginated: async (
@@ -197,20 +146,11 @@ export const workflowVersionService = {
     );
   },
 
-  getDetail: async (data: DetailInput, environmentIds: string[]) => {
-    const workflowVersion = await getVersionOrThrow(
+  getDetail: async (data: DetailInput, environments: EnvironmentModel[]) => {
+    const { workflowVersion, workflow } = await getVersionOrThrow(
       data.versionId,
-      environmentIds,
+      environments,
     );
-
-    const workflow = await workflowRepository.findByIdAndEnvironmentIds(
-      workflowVersion.workflow_id,
-      environmentIds,
-    );
-
-    if (!workflow) {
-      throw new NotFoundError("Workflow");
-    }
 
     const nodeModels = await nodeService.getByWorkflowVersion(workflowVersion);
     const edgeModels = await edgeService.getByNodes(nodeModels);
@@ -232,15 +172,6 @@ export const workflowVersionService = {
 
     const startNode = nodes.find((node) => node.type === NodeTypes.START);
 
-    if (
-      !startNode &&
-      workflowVersion.status !== WorkflowVersionStatuses.DRAFT
-    ) {
-      throw new DataIntegrityError(
-        `Workflow version id = ${workflowVersion.id} does not have start node for its status = ${workflowVersion.status}`,
-      );
-    }
-
     if (startNode) {
       startNode.configuration.inputDataMap.forEach((data) => {
         if (!data.fetchableId) {
@@ -261,24 +192,24 @@ export const workflowVersionService = {
 
   update: async (
     data: UpdateVersionInput,
-    environmentIds: string[],
-  ): Promise<WorkflowVersionModel> => {
-    return db.transaction().execute(async (transaction) => {
-      const workflowVersion = await getVersionOrThrow(
-        data.versionId,
-        environmentIds,
-        transaction,
+    actor: ActorModel,
+    environments: EnvironmentModel[],
+  ) => {
+    let { workflowVersion } = await getVersionOrThrow(
+      data.versionId,
+      environments,
+    );
+
+    if (
+      workflowVersion.status === WorkflowVersionStatuses.PUBLISHED ||
+      workflowVersion.status === WorkflowVersionStatuses.ACTIVE
+    ) {
+      throw new StateTransitionError(
+        `Workflow version ${workflowVersion.id} cannot be updated because it is in ${workflowVersion.status} status`,
       );
+    }
 
-      if (
-        workflowVersion.status === WorkflowVersionStatuses.PUBLISHED ||
-        workflowVersion.status === WorkflowVersionStatuses.ACTIVE
-      ) {
-        throw new StateTransitionError(
-          `Workflow version ${workflowVersion.id} cannot be updated because it is in ${workflowVersion.status} status`,
-        );
-      }
-
+    return db.transaction().execute(async (transaction) => {
       const existingNodes = await nodeService.getByWorkflowVersion(
         workflowVersion,
         transaction,
@@ -287,100 +218,38 @@ export const workflowVersionService = {
       await edgeService.deleteByNodes(existingNodes, transaction);
       await nodeService.deleteByWorkflowVersion(workflowVersion, transaction);
 
-      const newNodes = await nodeService.createMany(
-        data.nodes,
-        data.actor,
+      const result = await createNodesEdgesAndValid({
+        nodes: data.nodes,
+        edges: data.edges,
+        actor,
         workflowVersion,
         transaction,
-      );
+      });
+      const status = result.valid
+        ? WorkflowVersionStatuses.VALID
+        : WorkflowVersionStatuses.DRAFT;
 
-      await edgeService.createMany(
-        data.edges,
-        newNodes,
-        data.actor,
-        transaction,
-      );
-
-      return await workflowVersionRepository.updateById(
+      workflowVersion = await workflowVersionRepository.updateById(
         workflowVersion.id,
         {
           ...(data.description !== undefined && {
             description: data.description,
           }),
-          modified_by: data.actor.id,
+          modified_by: actor.id,
           modified_on: new Date(),
-          status: WorkflowVersionStatuses.DRAFT,
+          status,
         },
         transaction,
       );
+
+      return { result, workflowVersion };
     });
   },
 
-  createNew: async (
-    data: CreateVersionInput,
-    status?: WorkflowVersionStatus,
-    existingTransaction?: Transaction<DB>,
-    environmentIds?: string[],
-  ): Promise<WorkflowVersionModel> => {
-    const createInTransaction = async (transaction: Transaction<DB>) => {
-      if (environmentIds) {
-        const workflow = await workflowRepository.findByIdAndEnvironmentIds(
-          data.workflowId,
-          environmentIds,
-          transaction,
-        );
-
-        if (!workflow) {
-          throw new NotFoundError("Workflow");
-        }
-      }
-
-      const exists =
-        await workflowVersionRepository.doesDraftOrValidVersionExists(
-          data.workflowId,
-          transaction,
-        );
-
-      if (exists) {
-        throw new InvalidOperationError(
-          "DRAFT or VALID version already exists for this workflow.",
-        );
-      }
-
-      const workflowVersion = await workflowVersionRepository.insertNextVersion(
-        {
-          description: data.description ?? null,
-          created_by: data.actor.id,
-          modified_by: data.actor.id,
-          status: status ?? WorkflowVersionStatuses.DRAFT,
-          workflow_id: data.workflowId,
-        },
-        transaction,
-      );
-
-      const nodes = await nodeService.createMany(
-        data.nodes,
-        data.actor,
-        workflowVersion,
-        transaction,
-      );
-
-      await edgeService.createMany(data.edges, nodes, data.actor, transaction);
-
-      return workflowVersion;
-    };
-
-    if (existingTransaction) {
-      return await createInTransaction(existingTransaction);
-    }
-
-    return db.transaction().execute(createInTransaction);
-  },
-
-  validate: async (data: ValidateInput, environmentIds: string[]) => {
-    let workflowVersion = await getVersionOrThrow(
+  validate: async (data: ValidateInput, environments: EnvironmentModel[]) => {
+    const { workflowVersion } = await getVersionOrThrow(
       data.versionId,
-      environmentIds,
+      environments,
     );
 
     if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
@@ -392,98 +261,98 @@ export const workflowVersionService = {
 
     const result = workflowValidatorService.validate(nodes, edges);
 
-    if (result.valid) {
-      workflowVersion = await workflowVersionRepository.updateById(
-        workflowVersion.id,
-        { status: WorkflowVersionStatuses.VALID },
-      );
-    }
-
     return { result, workflowVersion };
   },
 
-  save: async (data: SaveVersionInput, environmentIds: string[]) => {
-    const versionId = data.versionId ?? null;
-    const isUpdate = versionId !== null;
-
-    let savedVersion: WorkflowVersionModel;
-    if (versionId) {
-      savedVersion = await workflowVersionService.update(
-        {
-          versionId,
-          actor: data.actor,
-          description: data.description,
-          nodes: data.nodes,
-          edges: data.edges,
-        },
-        environmentIds,
+  createNew: async (
+    data: CreateVersionInput,
+    actor: ActorModel,
+    environments: EnvironmentModel[],
+    transaction?: DbTransaction,
+  ) => {
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const workflow = await workflowRepository.findById(
+        data.workflowId,
+        transaction,
       );
-    } else {
-      savedVersion = await workflowVersionService.createNew(
-        {
-          workflowId: data.workflowId,
-          description: data.description,
-          nodes: data.nodes,
-          edges: data.edges,
-          actor: data.actor,
-        },
-        WorkflowVersionStatuses.DRAFT,
-        undefined,
-        environmentIds,
+      if (
+        !workflow ||
+        !environments.find((env) => env.id === workflow.environment_id)
+      ) {
+        throw new NotFoundError("workflow");
+      }
+
+      const exists = await workflowVersionRepository.draftOrValidVersionExists(
+        data.workflowId,
+        transaction,
       );
-    }
 
-    const { result, workflowVersion } = await workflowVersionService.validate(
-      {
-        versionId: savedVersion.id,
-        actor: data.actor,
-      },
-      environmentIds,
-    );
+      if (exists) {
+        throw new InvalidOperationError(
+          "DRAFT version already exists for this workflow.",
+        );
+      }
 
-    return {
-      save: {
-        operation: isUpdate ? "updated" : "created",
-        successful: true,
-        workflowId: savedVersion.workflow_id,
-        versionId: savedVersion.id,
-        version: savedVersion.version,
-        status: workflowVersion.status,
-        savedAt: workflowVersion.modified_on,
-      },
-      validation: {
-        successful: true,
-        valid: result.valid,
-        status: workflowVersion.status,
-        errors: result.errors,
-        warnings: [],
-      },
+      let workflowVersion = await workflowVersionRepository.insert(
+        {
+          version: null,
+          description: data.description ?? null,
+          created_by: actor.id,
+          modified_by: actor.id,
+          status: WorkflowVersionStatuses.DRAFT,
+          workflow_id: data.workflowId,
+        },
+        transaction,
+      );
+
+      const result = await createNodesEdgesAndValid({
+        nodes: data.nodes,
+        edges: data.edges,
+        actor,
+        workflowVersion,
+        transaction,
+      });
+      if (result.valid) {
+        workflowVersion = await workflowVersionRepository.updateById(
+          workflowVersion.id,
+          {
+            status: WorkflowVersionStatuses.VALID,
+          },
+          transaction,
+        );
+      }
+
+      return { result, workflowVersion };
     };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
   },
 
   changeStatus: async (
     data: StatusPartialUpdateInput,
-    environmentIds: string[],
+    actor: ActorModel,
+    environments: EnvironmentModel[],
   ) => {
-    let workflowVersion = await getVersionOrThrow(
+    const { workflowVersion } = await getVersionOrThrow(
       data.versionId,
-      environmentIds,
+      environments,
     );
 
     const currentStatus = workflowVersion.status;
     const newStatus = data.status;
 
     if (currentStatus === WorkflowVersionStatuses.DRAFT) {
-      throw new StateTransitionError(
-        "Invalid workflow version state transition from DRAFT",
-      );
+      throw new StateTransitionError("Workflow definition is not valid");
     }
 
     if (currentStatus === newStatus) {
-      return workflowVersion;
+      throw new StateTransitionError(`Workflow is in ${currentStatus} state`);
     }
 
     return db.transaction().execute(async (transaction) => {
+      // demote active version before activating
       if (newStatus === WorkflowVersionStatuses.ACTIVE) {
         await workflowVersionRepository.demoteActiveVersionToPublished(
           workflowVersion.workflow_id,
@@ -493,6 +362,8 @@ export const workflowVersionService = {
 
       const updatePayload: Partial<typeof workflowVersion> = {
         status: newStatus,
+        modified_on: new Date(),
+        modified_by: actor.id,
       };
 
       if (
@@ -501,22 +372,36 @@ export const workflowVersionService = {
           newStatus === WorkflowVersionStatuses.ACTIVE)
       ) {
         updatePayload.published_on = new Date();
+        const previousWorkflowVersion =
+          await workflowVersionRepository.findLatestNonNullVersionByWorkflowId(
+            workflowVersion.workflow_id,
+            transaction,
+          );
+        const previousVersion = coerce(previousWorkflowVersion?.version ?? "0");
+        if (!previousVersion) {
+          throw new DataIntegrityError(
+            `Invalid semver version=${previousVersion}`,
+          );
+        }
+        updatePayload.version = previousVersion.inc(data.incrementType).version;
       }
 
-      workflowVersion = await workflowVersionRepository.updateById(
+      return await workflowVersionRepository.updateById(
         workflowVersion.id,
         updatePayload,
         transaction,
       );
-
-      return workflowVersion;
     });
   },
 
-  clone: async (data: DetailInput, environmentIds: string[]) => {
-    const workflowVersion = await getVersionOrThrow(
+  clone: async (
+    data: DetailInput,
+    actor: ActorModel,
+    environments: EnvironmentModel[],
+  ) => {
+    const { workflowVersion } = await getVersionOrThrow(
       data.versionId,
-      environmentIds,
+      environments,
     );
 
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
@@ -528,97 +413,55 @@ export const workflowVersionService = {
         description: `Clone of version ${workflowVersion.version} - ${workflowVersion.description}`,
         nodes: nodes.map((node) => nodeSchemaService.getNodeSchema(node)),
         edges: edges.map((edge) => edgeService.toEdgeSchema(edge, nodes)),
-        actor: data.actor,
       },
-      WorkflowVersionStatuses.VALID,
-      undefined,
-      environmentIds,
+      actor,
+      environments,
     );
   },
 
-  promoteWorkflowVersion: async (
-    sourceVersionId: string,
-    targetEnvironmentId: string,
-    actorId: string,
+  promote: async (
+    data: PromoteVersionInput,
+    actor: ActorModel,
+    environments: EnvironmentModel[],
   ): Promise<PromoteVersionOutput> => {
+    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+      throw new AuthError(
+        "Only organization account actors are allowed to promote workflow versions",
+      );
+    }
+
+    const models = await getVersionOrThrow(data.versionId, environments);
+
+    const sourceWorkflow = models.workflow;
+    const sourceWorkflowVersion = models.workflowVersion;
+
+    const sourceEnvironment = environments.find(
+      (env) => env.id === sourceWorkflow.environment_id,
+    );
+    if (!sourceEnvironment) {
+      throw new NotFoundError("workflow version");
+    }
+
+    const targetEnvironmentType =
+      nextPromotionTargetByEnvironment[sourceEnvironment.type];
+    if (!targetEnvironmentType) {
+      throw new InvalidOperationError("Cannot promote this workflow version");
+    }
+
+    const targetEnvironment = environments.find(
+      (env) => env.type === targetEnvironmentType,
+    );
+    if (!targetEnvironment) {
+      throw new NotFoundError("Target environment not found");
+    }
+
+    const baseWorkflowId = sourceWorkflow.base_workflow_id ?? sourceWorkflow.id;
+
     return await db.transaction().execute(async (transaction) => {
-      const sourceVersion = await workflowVersionRepository.findById(
-        sourceVersionId,
-        transaction,
-      );
-
-      if (!sourceVersion) {
-        throw new NotFoundError("Workflow version");
-      }
-
-      const sourceWorkflow = await workflowRepository.findById(
-        sourceVersion.workflow_id,
-        transaction,
-      );
-
-      if (!sourceWorkflow) {
-        throw new NotFoundError("Workflow");
-      }
-
-      const sourceEnvironment = await environmentRepository.findById(
-        sourceWorkflow.environment_id,
-        transaction,
-      );
-      const targetEnvironment = await environmentRepository.findById(
-        targetEnvironmentId,
-        transaction,
-      );
-
-      if (!sourceEnvironment || !targetEnvironment) {
-        throw new ValidationError("Invalid promotion target", [
-          {
-            field: "environment",
-            message:
-              "Source or target environment could not be resolved for this organization",
-          },
-        ]);
-      }
-
-      if (sourceEnvironment.id === targetEnvironment.id) {
-        throw new ValidationError("Invalid promotion target", [
-          {
-            field: "environment",
-            message: "Source and target environments must be different",
-          },
-        ]);
-      }
-
-      const requiredTargetEnvironmentType =
-        getNextPromotionTargetEnvironmentType(sourceEnvironment.type);
-
-      if (!requiredTargetEnvironmentType) {
-        throw new ValidationError("Invalid promotion path", [
-          {
-            field: "environment",
-            message:
-              `Promotion from '${sourceEnvironment.type}' is not allowed. Allowed paths: development -> staging, staging -> production`,
-          },
-        ]);
-      }
-
-      if (targetEnvironment.type !== requiredTargetEnvironmentType) {
-        throw new ValidationError("Invalid promotion path", [
-          {
-            field: "environment",
-            message:
-              `Promotion from '${sourceEnvironment.type}' must target '${requiredTargetEnvironmentType}', but received '${targetEnvironment.type}'`,
-          },
-        ]);
-      }
-
-      const baseWorkflowId =
-        sourceWorkflow.base_workflow_id ?? sourceWorkflow.id;
-
       let targetWorkflow =
         await workflowRepository.findByBaseWorkflowIdAndEnvironmentId(
           baseWorkflowId,
-          targetEnvironmentId,
-          transaction,
+          targetEnvironment.id,
         );
 
       if (!targetWorkflow) {
@@ -626,17 +469,17 @@ export const workflowVersionService = {
           {
             name: sourceWorkflow.name,
             description: sourceWorkflow.description,
-            environment_id: targetEnvironmentId,
+            environment_id: targetEnvironment.id,
             base_workflow_id: baseWorkflowId,
-            created_by: actorId,
-            modified_by: actorId,
+            created_by: actor.id,
+            modified_by: actor.id,
           },
           transaction,
         );
       }
 
       const sourceNodes = await nodeService.getByWorkflowVersion(
-        sourceVersion,
+        sourceWorkflowVersion,
         transaction,
       );
       const sourceEdges = await edgeService.getByNodesWithTransaction(
@@ -644,51 +487,28 @@ export const workflowVersionService = {
         transaction,
       );
 
-      const promotedVersion = await workflowVersionService.createNew(
+      const result = await workflowVersionService.createNew(
         {
           workflowId: targetWorkflow.id,
-          description: sourceVersion.description,
+          description: sourceWorkflowVersion.description,
           nodes: sourceNodes.map((node) =>
             nodeSchemaService.getNodeSchema(node),
           ),
           edges: sourceEdges.map((edge) =>
             edgeService.toEdgeSchema(edge, sourceNodes),
           ),
-          actor: {
-            id: actorId,
-            type: ActorTypes.ORGANIZATION_ACCOUNT,
-          },
         },
-        WorkflowVersionStatuses.DRAFT,
+        actor,
+        environments,
         transaction,
-        [targetEnvironmentId],
       );
 
-      return WorkflowVersionPromoteResponseSchema.parse({
+      return converterUtils.parseOrThrow(WorkflowVersionPromoteResponseSchema, {
         workflowId: targetWorkflow.id,
-        versionId: promotedVersion.id,
+        versionId: result.workflowVersion.id,
         sourceEnvironment: sourceEnvironment.type,
         targetEnvironment: targetEnvironment.type,
       });
     });
-  },
-
-  promote: async (data: PromoteVersionInput, actorEnvironmentIds: string[]) => {
-    if (data.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
-      throw new AuthError(
-        "Only organization account actors are allowed to promote workflow versions",
-      );
-    }
-
-    const targetEnvironmentId = await resolvePromotionTargetEnvironmentId(
-      data.versionId,
-      actorEnvironmentIds,
-    );
-
-    return await workflowVersionService.promoteWorkflowVersion(
-      data.versionId,
-      targetEnvironmentId,
-      data.actor.id,
-    );
   },
 };

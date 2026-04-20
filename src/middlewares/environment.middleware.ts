@@ -110,11 +110,8 @@ export const resolveEnvironmentContext = async (
       String(rawEnvironment).trim(),
     );
 
-    console.log(rawEnvironment);
     environments = environments.filter((e) => e.type === environmentType);
   }
-
-  console.log(environments);
 
   assignEnvironmentContext(req, environments);
   return next();

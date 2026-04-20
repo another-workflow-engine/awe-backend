@@ -232,7 +232,7 @@ export interface WorkflowVersion {
   modified_on: Generated<Timestamp>;
   published_on: Timestamp | null;
   status: WorkflowVersionStatus;
-  version: number;
+  version: string | null;
   workflow_id: string;
 }
 

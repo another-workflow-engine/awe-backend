@@ -12,21 +12,23 @@ export const workflowRouter = Router();
 workflowRouter.use(authenticateRequest);
 
 // WORKFLOWS
-workflowRouter.get("/", resolveEnvironmentContext, workflowGroupController.list);
+workflowRouter.get(
+  "/",
+  resolveEnvironmentContext,
+  workflowGroupController.list,
+);
 
-workflowRouter.post("/", resolveEnvironmentContext, workflowGroupController.create);
+workflowRouter.post(
+  "/",
+  resolveEnvironmentContext,
+  workflowGroupController.create,
+);
 
 // CREATE VERSION
 workflowRouter.post(
   "/:workflowId/versions",
   resolveEnvironmentContextFromActor,
   workflowVersionController.create,
-);
-
-workflowRouter.post(
-  "/save",
-  resolveEnvironmentContextFromActor,
-  workflowVersionController.save,
 );
 
 workflowRouter.post(
@@ -42,10 +44,10 @@ workflowRouter.patch(
 );
 
 // VERSION BASED ROUTES
-workflowRouter.post(
-  "/versions/:versionId/validate",
+workflowRouter.patch(
+  "/versions/:versionId",
   resolveEnvironmentContextFromActor,
-  workflowVersionController.validate,
+  workflowVersionController.update,
 );
 
 workflowRouter.post(
@@ -64,12 +66,6 @@ workflowRouter.post(
   "/versions/:versionId/deactivate",
   resolveEnvironmentContextFromActor,
   workflowVersionController.publish,
-);
-
-workflowRouter.patch(
-  "/versions/:versionId",
-  resolveEnvironmentContextFromActor,
-  workflowVersionController.update,
 );
 
 // GET version detail

@@ -8,7 +8,6 @@ export type PendingUserTaskList = {
 
 export type WorkflowDetailsForUserTask = {
   instanceId: string;
-  id: string;
+  versionId: string;
   name: string;
-  version: number;
 };

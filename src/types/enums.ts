@@ -108,3 +108,9 @@ export const SecretProviderTypes = {
   DEFAULT: "default",
   INFISICAL: "infisical",
 } as const satisfies Record<string, SecretProviderType>;
+
+export enum VersionIncrementType {
+  MAJOR = "major",
+  MINOR = "minor",
+  PATCH = "patch",
+}

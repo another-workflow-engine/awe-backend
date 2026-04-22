@@ -9,7 +9,7 @@ const apiKeyIdParam = z.object({
 });
 
 export const CreateApiKeySchema = z.object({
-  label: z.string(),
+  label: z.string().min(1),
   environment: z.enum(EnvironmentTypes),
 });
 

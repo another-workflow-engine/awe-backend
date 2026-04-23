@@ -6,5 +6,5 @@ export const TaskParamsSchema = z.object({
 
 export const TaskRetrySchema = z.object({
   taskId: z.uuid(),
-  context: z.record(z.string(), z.unknown()).optional().default({}),
+  context: z.record(z.string(), z.unknown()).default({}),
 });

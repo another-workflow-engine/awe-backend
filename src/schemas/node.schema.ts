@@ -30,7 +30,7 @@ export const StartNodeDataMapSchema = z
     dataType: FeelDataTypeSchema,
     contextVariableName: z.string(),
     fetchableId: z.string().optional(),
-    required: z.boolean().optional().default(true),
+    required: z.boolean().default(true),
     defaultValue: z.unknown().optional(),
   })
   .superRefine((value, ctx) => {
@@ -60,12 +60,14 @@ export const StartNodeConfigurationSchema = z.object({
 
 export const EndNodeConfigurationSchema = z.object({
   success: z.boolean().default(true),
-  resultMap: z.array(
-    z.object({
-      variableName: z.string(),
-      valueExpression: z.string(),
-    }),
-  ).default([]),
+  resultMap: z
+    .array(
+      z.object({
+        variableName: z.string(),
+        valueExpression: z.string(),
+      }),
+    )
+    .default([]),
   message: z.string().optional(),
 });
 
@@ -73,7 +75,7 @@ export const UserNodeConfigurationSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   assignee: z.string().optional(),
-  maxAttempts: z.number().optional().default(1),
+  maxAttempts: z.number().default(1),
 
   requestMap: z.array(
     z.object({
@@ -89,7 +91,7 @@ export const UserNodeConfigurationSchema = z.object({
         label: z.string(),
         contextVariableName: z.string(),
         type: FeelDataTypeSchema,
-        required: z.boolean().optional().default(true),
+        required: z.boolean().default(true),
         defaultValue: z.unknown().optional(),
 
         uiType: z
@@ -138,7 +140,6 @@ export const OnErrorOutputMapSchema = z.discriminatedUnion("fromType", [
   }),
 ]);
 
-
 const ServiceBodySchema = z.object({
   jsonPath: z.string(),
   valueExpression: z.string(),
@@ -152,13 +153,13 @@ const ServiceResponseSchema = z.object({
 
 export const BackoffSchema = z.object({
   type: z.enum(BackoffType),
-  delay: z.number().positive().optional().default(1000),
-  unit: z.enum(TimeUnit).optional().default(TimeUnit.MILLISECOND),
+  delay: z.number().positive().default(1000),
+  unit: z.enum(TimeUnit).default(TimeUnit.MILLISECOND),
 });
 
 export const TimeoutSchema = z.object({
   delay: z.number().positive(),
-  unit: z.enum(TimeUnit).optional().default(TimeUnit.MILLISECOND),
+  unit: z.enum(TimeUnit).default(TimeUnit.MILLISECOND),
 });
 
 function normalizeLegacyTimeout(config: unknown): unknown {
@@ -193,7 +194,7 @@ const ServiceNodeConfigurationBaseSchema = z.object({
   method: HttpMethodSchema,
   urlExpression: z.string(),
 
-  maxAttempts: z.number().optional().default(1),
+  maxAttempts: z.number().default(1),
   timeout: TimeoutSchema.optional(),
   backoff: BackoffSchema,
   body: z.array(ServiceBodySchema).optional(),
@@ -211,13 +212,15 @@ export const JdoodleCredentialsSchema = z
     clientId: z.string(),
     clientSecret: z.string(),
   })
-  .nullable().optional();
+  .nullable()
+  .optional();
 
 export const GeminiCredentialsSchema = z
   .object({
     apiKey: z.string(),
   })
-  .nullable().optional();
+  .nullable()
+  .optional();
 
 const ScriptNodeConfigurationBaseSchema = z
   .discriminatedUnion("serviceType", [
@@ -232,8 +235,8 @@ const ScriptNodeConfigurationBaseSchema = z
   ])
   .and(
     z.object({
-      runtime: z.enum(Runtime).optional().default(Runtime.PYTHON_3),
-      maxAttempts: z.number().optional().default(1),
+      runtime: z.enum(Runtime).default(Runtime.PYTHON_3),
+      maxAttempts: z.number().default(1),
       timeout: TimeoutSchema.optional(),
       backoff: BackoffSchema,
       sourceCode: z.string(),
@@ -270,14 +273,14 @@ export const EmailNodeConfigurationSchema = z.object({
   authUserExpression: z.string(),
   authPassExpression: z.string(),
   to: z.array(EmailRecipientSchema),
-  cc: z.array(EmailRecipientSchema).optional().default([]),
-  bcc: z.array(EmailRecipientSchema).optional().default([]),
+  cc: z.array(EmailRecipientSchema).default([]),
+  bcc: z.array(EmailRecipientSchema).default([]),
   subjectExpression: z.string(),
   bodyExpression: z.string(),
-  maxAttempts: z.number().optional().default(1),
+  maxAttempts: z.number().default(1),
   backoff: BackoffSchema,
-  failurePolicy: z.enum(["fail", "continue"]).optional().default("fail"),
-  responseMap: z.array(ServiceResponseSchema).optional().default([]),
+  failurePolicy: z.enum(["fail", "continue"]).default("fail"),
+  responseMap: z.array(ServiceResponseSchema).default([]),
 });
 
 export const RuleSchema = z.object({

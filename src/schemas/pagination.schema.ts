@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const PaginationParamsSchema = z.object({
-  page: z.coerce.number().int().min(1).optional().default(1),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export const PaginationMetadataSchema = z.object({

@@ -16,7 +16,7 @@ import { environmentUtils } from "../utils/environment.utils.js";
 
 const WorkflowListQuerySchema = z.object({
   search: z.string().trim().optional(),
-  createdSort: z.enum(["asc", "desc"]).optional().default("desc"),
+  createdSort: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const workflowGroupController = {

@@ -59,8 +59,10 @@ function normalizeSecretValue(value: unknown, secretId: string): string {
 }
 
 export const secretService = {
-  createNew: async (data: CreateNewSecretSchemaType, requestContext: RequestContext) => {
-    
+  createNew: async (
+    data: CreateNewSecretSchemaType,
+    requestContext: RequestContext,
+  ) => {
     const environment = requestContext.environments.find((env) => {
       if (env.type === data.environment) {
         return env;
@@ -129,9 +131,11 @@ export const secretService = {
   },
 
   list: async (
-    environmentTypes: EnvironmentType[],
+    environments: EnvironmentModel[],
     requestContext: RequestContext,
   ) => {
+    const environmentTypes = environments.map((env) => env.type);
+
     return await secretReferenceRepository.findByOrganizationIdAndEnvironmentIds(
       requestContext.organization.id,
       requestContext.environments.reduce<string[]>((acc, env) => {
@@ -181,11 +185,7 @@ export const secretService = {
     environment: EnvironmentType,
     actor: z.infer<typeof ActorSchema>,
   ) => {
-
-    
-    const providerModel = await secretProviderRepository.findById(
-      providerId,
-    );
+    const providerModel = await secretProviderRepository.findById(providerId);
     if (!providerModel) {
       throw new NotFoundError("Secret provider");
     }
@@ -195,9 +195,7 @@ export const secretService = {
     const result = await providerInstance.listAllSecrets();
 
     if (!result) {
-      throw new InvalidOperationError(
-        "Failed to fetch secrets from provider",
-      );
+      throw new InvalidOperationError("Failed to fetch secrets from provider");
     }
 
     return result;

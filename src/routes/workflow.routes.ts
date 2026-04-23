@@ -2,106 +2,57 @@ import { Router } from "express";
 import { workflowGroupController } from "../controllers/workflowGroup.controller.js";
 import { authenticateRequest } from "../middlewares/auth.middleware.js";
 import { workflowVersionController } from "../controllers/workflowVersion.controller.js";
-import {
-  resolveEnvironmentContext,
-  resolveEnvironmentContextFromActor,
-} from "../middlewares/environment.middleware.js";
 
 export const workflowRouter = Router();
 
 workflowRouter.use(authenticateRequest);
 
 // WORKFLOWS
-workflowRouter.get(
-  "/",
-  resolveEnvironmentContext,
-  workflowGroupController.list,
-);
+workflowRouter.get("/", workflowGroupController.list);
 
-workflowRouter.post(
-  "/",
-  resolveEnvironmentContext,
-  workflowGroupController.create,
-);
+workflowRouter.post("/", workflowGroupController.create);
 
-workflowRouter.post(
-  "/:workflowId/versions",
-  resolveEnvironmentContextFromActor,
-  workflowVersionController.create,
-);
+workflowRouter.post("/:workflowId/versions", workflowVersionController.create);
 
-workflowRouter.post(
-  "/validate",
-  resolveEnvironmentContextFromActor,
-  workflowGroupController.validate,
-);
+workflowRouter.post("/validate", workflowGroupController.validate);
 
-workflowRouter.patch(
-  "/:workflowId",
-  resolveEnvironmentContextFromActor,
-  workflowGroupController.update,
-);
+workflowRouter.patch("/:workflowId", workflowGroupController.update);
 
 // VERSION BASED ROUTES
-workflowRouter.patch(
-  "/versions/:versionId",
-  resolveEnvironmentContextFromActor,
-  workflowVersionController.update,
-);
+workflowRouter.patch("/versions/:versionId", workflowVersionController.update);
 
 workflowRouter.post(
   "/versions/:versionId/publish",
-  resolveEnvironmentContextFromActor,
   workflowVersionController.publish,
 );
 
 workflowRouter.post(
   "/versions/:versionId/activate",
-  resolveEnvironmentContextFromActor,
   workflowVersionController.activate,
 );
 
 workflowRouter.post(
   "/versions/:versionId/deactivate",
-  resolveEnvironmentContextFromActor,
   workflowVersionController.publish,
 );
 
 // GET version detail
-workflowRouter.get(
-  "/versions/:versionId",
-  resolveEnvironmentContextFromActor,
-  workflowVersionController.get,
-);
+workflowRouter.get("/versions/:versionId", workflowVersionController.get);
 
 // LIST versions for a workflow
-workflowRouter.get(
-  "/:workflowId/versions",
-  resolveEnvironmentContextFromActor,
-  workflowVersionController.list,
-);
+workflowRouter.get("/:workflowId/versions", workflowVersionController.list);
 
 // GET single workflow
-workflowRouter.get(
-  "/:workflowId",
-  resolveEnvironmentContextFromActor,
-  workflowGroupController.get,
-);
+workflowRouter.get("/:workflowId", workflowGroupController.get);
 
-workflowRouter.delete(
-  "/:workflowId",
-  resolveEnvironmentContextFromActor,
-  workflowGroupController.delete,
-);
+workflowRouter.delete("/:workflowId", workflowGroupController.delete);
 
 workflowRouter.post(
   "/versions/:versionId/clone",
-  resolveEnvironmentContextFromActor,
   workflowVersionController.clone,
 );
 
 workflowRouter.post(
   "/versions/:versionId/promote",
-  resolveEnvironmentContextFromActor,
   workflowVersionController.promote,
 );

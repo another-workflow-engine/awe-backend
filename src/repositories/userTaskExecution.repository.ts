@@ -234,12 +234,11 @@ export const userTaskExecutionRepository = {
         .where("task_execution.status", "=", status)
         .where("workflow.environment_id", "in", environmentIds);
 
-
       if (assignee) {
         baseQuery = baseQuery.where(
           "user_task_execution.assignee",
           "like",
-          `%${assignee}%` ,
+          `%${assignee}%`,
         );
       }
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { EdgeSchema, NodeSchema } from "./node.schema.js";
+import { EnvironmentTypeSchema } from "./environment.schema.js";
 
 export const WorkflowDefinitionValidateSchema = z.object({
   nodes: z.array(NodeSchema),
@@ -12,6 +13,7 @@ export const WorkflowGroupCreateSchema = z.object({
     .string()
     .optional()
     .transform((val) => val ?? null),
+  environment: EnvironmentTypeSchema,
 });
 
 export const WorkflowGroupUpdateSchema = z.object({

@@ -11,7 +11,7 @@ export const auditController = {
     const { instanceId } = instanceIdParamSchema.parse(req.params);
     const audit = await eventLogService.getInstanceAudit(
       instanceId,
-      req.environmentIds,
+      req.context.environments,
     );
     if (!audit) {
       res.status(404).json({ error: "Instance not found" });

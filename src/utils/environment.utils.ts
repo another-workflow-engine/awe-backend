@@ -1,33 +1,37 @@
-import { z } from "zod";
-import { EnvironmentTypes } from "../types/enums.js";
 import type { EnvironmentType } from "../types/database.js";
+import type { EnvironmentModel } from "../types/models.js";
+import { EnvironmentTypeSchema } from "../schemas/environment.schema.js";
 
-const EnvironmentTypeSchema = z.enum([
-  EnvironmentTypes.DEVELOPMENT,
-  EnvironmentTypes.STAGING,
-  EnvironmentTypes.PRODUCTION,
-]);
+export const environmentUtils = {
+  parseEnvironmentsFromQueryString(rawValue: unknown): EnvironmentType[] {
+    if (rawValue === undefined || rawValue === null || rawValue === "") {
+      return [];
+    }
 
-export function parseEnvironmentsFromQuery(rawValue: unknown): EnvironmentType[] {
-  if (rawValue === undefined || rawValue === null || rawValue === "") {
-    return [];
-  }
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+    const parsedValues = values
+      .flatMap((value) => String(value).split(","))
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+      .map((value) => EnvironmentTypeSchema.parse(value));
 
-  const values = Array.isArray(rawValue) ? rawValue : [rawValue];
-  const parsedValues = values
-    .flatMap((value) => String(value).split(","))
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .map((value) => EnvironmentTypeSchema.parse(value));
+    return [...new Set(parsedValues)];
+  },
 
-  return [...new Set(parsedValues)];
-}
+  getFilteredEnvironments(
+    allowedEnvironments: EnvironmentModel[],
+    selectedEnvironmentTypes: EnvironmentType[],
+  ): EnvironmentModel[] {
+    if (selectedEnvironmentTypes.length === 0) {
+      return allowedEnvironments;
+    }
 
-export function getEnvironmentById(
-  environmentIds: string[],
-  environments: EnvironmentType[],
-  environmentId: string,
-): EnvironmentType | undefined {
-  const index = environmentIds.indexOf(environmentId);
-  return index >= 0 ? environments[index] : undefined;
-}
+    return allowedEnvironments.filter((env) =>
+      selectedEnvironmentTypes.includes(env.type),
+    );
+  },
+
+  getEnvironmentIds(environments: EnvironmentModel[]): string[] {
+    return environments.map((env) => env.id);
+  },
+};

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { ActorSchema } from "../schemas/actor.schema.js";
 import { secretService } from "../services/secrets/secret.service.js";
 import { EnvironmentTypes } from "../types/enums.js";
-import { parseEnvironmentsFromQuery } from "../utils/environment.utils.js";
 import type { EnvironmentType } from "../types/database.js";
 
 export const CreateNewSecretSchema = z.object({
@@ -59,8 +58,10 @@ export const secretController = {
   },
 
   list: async (req: Request, res: Response) => {
-    const environments = parseEnvironmentsFromQuery(req.query.environment);
-    const result = await secretService.list(environments, req.context);
+    const result = await secretService.list(
+      req.context.environments,
+      req.context,
+    );
     return res.status(200).json({
       secrets: result.map(mapSecret),
     });

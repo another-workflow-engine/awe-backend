@@ -266,17 +266,20 @@ export const instanceLogRepository = {
       }
 
       let totalExecutionsCount = 0;
-      for(const log of taskExecutionLogRows) {
-        if (log?.event_type === LogEventTypes.STARTED || log?.event_type === LogEventTypes.RETRIED) {
+      for (const log of taskExecutionLogRows) {
+        if (
+          log?.event_type === LogEventTypes.STARTED ||
+          log?.event_type === LogEventTypes.RETRIED
+        ) {
           totalExecutionsCount++;
         }
-      };
+      }
 
       let durationMs: number | null = null;
-      if (instanceRow.started_on && instanceRow.ended_on) {
+      if (instanceRow.created_on && instanceRow.ended_on) {
         durationMs =
           new Date(instanceRow.ended_on).getTime() -
-          new Date(instanceRow.started_on).getTime();
+          new Date(instanceRow.created_on).getTime();
       }
 
       return {
@@ -287,7 +290,6 @@ export const instanceLogRepository = {
           versionNumber: (instanceRow as any).version_number,
           workflowVersionId: instanceRow.workflow_version_id,
           currentStatus: instanceRow.status,
-          startedAt: instanceRow.started_on,
           completedAt,
           failedAt,
           terminatedAt,

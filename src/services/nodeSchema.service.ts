@@ -106,7 +106,10 @@ function getScriptSchema(config: ScriptNodeConfiguration): SchemaResult {
     if ("clientId" in config.credentials && config.credentials.clientId) {
       expressions.push(config.credentials.clientId);
     }
-    if ("clientSecret" in config.credentials && config.credentials.clientSecret) {
+    if (
+      "clientSecret" in config.credentials &&
+      config.credentials.clientSecret
+    ) {
       expressions.push(config.credentials.clientSecret);
     }
     if ("apiKey" in config.credentials && config.credentials.apiKey) {

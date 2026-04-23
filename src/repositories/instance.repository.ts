@@ -1,72 +1,37 @@
-import { type Insertable, type Transaction, type Updateable } from "kysely";
+import type { Insertable, Updateable } from "kysely";
 import type {
-  DB,
+  ActorType,
   EnvironmentType,
   Instance,
+  InstanceControlSignal,
   InstanceStatus,
 } from "../types/database.js";
 import type {
+  DbTransaction,
   InstanceModel,
   TaskExecutionModel,
   TaskModel,
+  WorkflowModel,
+  WorkflowVersionModel,
 } from "../types/models.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { TaskStatuses } from "../types/enums.js";
-
-export type NewInstance = Insertable<Instance>;
-export type UpdateInstance = Updateable<Instance>;
-
-export type InstanceListItem = InstanceModel & {
-  version_number: number | null;
-  workflow_name: string;
-  environment: EnvironmentType;
-};
-
-export type LockedInProgressOrPausedRelations = {
-  instance: InstanceModel | undefined;
-  task: TaskModel | undefined;
-  taskExecution: TaskExecutionModel | undefined;
-};
+import { columnMapper } from "./utils/columnMapper.util.js";
+import {
+  instanceColumns,
+  workflowColumns,
+  workflowVersionColumns,
+} from "../types/columnNames.js";
+import type {
+  InstanceListItem,
+  LockedInProgressOrPausedRelations,
+  NewInstance,
+  UpdateInstance,
+} from "../types/instance.js";
 
 export const instanceRepository = {
-  findAll: async (
-    actorId: string,
-    environmentIds: string[],
-  ): Promise<InstanceListItem[]> => {
-    if (environmentIds.length === 0) {
-      return [];
-    }
-
-    try {
-      return (await db
-        .selectFrom("instance")
-        .innerJoin(
-          "workflow_version",
-          "workflow_version.id",
-          "instance.workflow_version_id",
-        )
-        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .innerJoin("environment", "environment.id", "workflow.environment_id")
-        .selectAll("instance")
-        .select((eb) => [
-          eb.ref("workflow_version.version").as("version_number"),
-          eb.ref("workflow.name").as("workflow_name"),
-          eb.ref("environment.type").as("environment"),
-        ])
-        .where("workflow.created_by", "=", actorId)
-        .where("workflow.environment_id", "in", environmentIds)
-        .where("instance.is_deleted", "=", false)
-        .where("environment.is_deleted", "=", false)
-        .orderBy("instance.created_on", "desc")
-        .execute()) as unknown as InstanceListItem[];
-    } catch (err) {
-      throw new RepositoryError("Find all instances failed", err);
-    }
-  },
-
   findWithPagination: async (
-    actorId: string,
     environmentIds: string[],
     limit: number,
     offset: number,
@@ -82,7 +47,7 @@ export const instanceRepository = {
     }
 
     try {
-      const items = (await db
+      const results = await db
         .selectFrom("instance")
         .innerJoin(
           "workflow_version",
@@ -91,84 +56,66 @@ export const instanceRepository = {
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
         .innerJoin("environment", "environment.id", "workflow.environment_id")
-        .selectAll("instance")
+        .innerJoin("actor", "actor.id", "instance.created_by")
         .select((eb) => [
-          eb.ref("workflow_version.version").as("version_number"),
+          eb.ref("instance.id").as("instance_id"),
+          eb.ref("instance.status").as("instance_status"),
+          eb.ref("instance.control_signal").as("instance_control_signal"),
+          eb.ref("instance.auto_advance").as("instance_auto_advance"),
+          eb.ref("instance.ended_on").as("instance_ended_on"),
+          eb.ref("instance.created_on").as("instance_created_on"),
+
+          eb.ref("actor.type").as("actor_type"),
+
+          eb.ref("environment.type").as("environment_type"),
+
+          eb.ref("workflow.id").as("workflow_id"),
           eb.ref("workflow.name").as("workflow_name"),
-          eb.ref("environment.type").as("environment"),
+
+          eb.ref("workflow_version.id").as("workflow_version_id"),
+          eb.ref("workflow_version.version").as("workflow_version_version"),
+
+          eb.fn.countAll().over().as("total_count"),
         ])
-        .where("workflow.created_by", "=", actorId)
         .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
-        .where("environment.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .limit(limit)
         .offset(offset)
-        .execute()) as unknown as InstanceListItem[];
-
-      const countResult = await db
-        .selectFrom("instance")
-        .innerJoin(
-          "workflow_version",
-          "workflow_version.id",
-          "instance.workflow_version_id",
-        )
-        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .innerJoin("environment", "environment.id", "workflow.environment_id")
-        .select((eb) => eb.fn.count<number>("instance.id").as("count"))
-        .where("workflow.created_by", "=", actorId)
-        .where("workflow.environment_id", "in", environmentIds)
-        .where("instance.is_deleted", "=", false)
-        .where("environment.is_deleted", "=", false)
-        .executeTakeFirstOrThrow();
+        .execute();
 
       return {
-        items,
-        total: Number(countResult.count),
+        items: results.map((result) => {
+          return {
+            id: result.instance_id,
+            status: result.instance_status,
+            controlSignal: result.instance_control_signal,
+            autoAdvance: result.instance_auto_advance,
+            startedAt: result.instance_created_on,
+            endedAt: result.instance_ended_on,
+            createdBy: result.actor_type,
+
+            workflow: {
+              id: result.workflow_id,
+              name: result.workflow_name,
+
+              versionId: result.workflow_version_id,
+              version: result.workflow_version_version,
+            },
+
+            environment: result.environment_type,
+          };
+        }),
+        total: Number(results[0]?.total_count ?? 0),
       };
     } catch (err) {
-      throw new RepositoryError("Find instances with pagination failed", err);
-    }
-  },
-
-  countByActorAndEnvironmentIdsAndStatus: async (
-    actorId: string,
-    environmentIds: string[],
-    status: InstanceStatus,
-    transaction?: Transaction<DB>,
-  ): Promise<number> => {
-    if (environmentIds.length === 0) {
-      return 0;
-    }
-
-    try {
-      const result = await (transaction ?? db)
-        .selectFrom("instance")
-        .innerJoin(
-          "workflow_version",
-          "workflow_version.id",
-          "instance.workflow_version_id",
-        )
-        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .select((eb) => eb.fn.count<number>("instance.id").as("count"))
-        .where("workflow.created_by", "=", actorId)
-        .where("workflow.environment_id", "in", environmentIds)
-        .where("instance.is_deleted", "=", false)
-        .where("instance.status", "=", status)
-        .executeTakeFirstOrThrow();
-
-      return Number(result.count);
-    } catch (err) {
-      throw new RepositoryError(
-        "Count instances by actor, environment and status failed",
-        err,
-      );
+      throw new RepositoryError("Instance pagination failed", err);
     }
   },
 
   countByEnvironmentIds: async (
     environmentIds: string[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<number> => {
     if (environmentIds.length === 0) {
       return 0;
@@ -192,17 +139,14 @@ export const instanceRepository = {
 
       return Number(result.count);
     } catch (err) {
-      throw new RepositoryError(
-        "Count instances by environment failed",
-        err,
-      );
+      throw new RepositoryError("Count instances by environment failed", err);
     }
   },
 
   countByEnvironmentIdsAndStatus: async (
     environmentIds: string[],
     status: InstanceStatus,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<number> => {
     if (environmentIds.length === 0) {
       return 0;
@@ -237,7 +181,7 @@ export const instanceRepository = {
   findRecentByEnvironmentIds: async (
     environmentIds: string[],
     limit: number,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<InstanceListItem[]> => {
     if (environmentIds.length === 0) {
       return [];
@@ -277,7 +221,7 @@ export const instanceRepository = {
 
   findById: async (
     id: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<InstanceModel | undefined> => {
     return await (transaction ?? db)
       .selectFrom("instance")
@@ -289,7 +233,7 @@ export const instanceRepository = {
 
   getLockedInProgressOrPausedRelationsById: async (
     instanceId: string,
-    transaction: Transaction<DB>,
+    transaction: DbTransaction,
   ): Promise<LockedInProgressOrPausedRelations> => {
     const returnObject: LockedInProgressOrPausedRelations = {
       instance: undefined,
@@ -331,16 +275,22 @@ export const instanceRepository = {
     return returnObject;
   },
 
-  findByIdAndEnvironmentIds: async (
+  findByIdAndEnvironmentIdsWithRelations: async (
     id: string,
     environmentIds: string[],
-    transaction?: Transaction<DB>,
-  ): Promise<InstanceModel | undefined> => {
+  ): Promise<
+    | {
+        instance: InstanceModel;
+        workflowVersion: WorkflowVersionModel;
+        workflow: WorkflowModel;
+      }
+    | undefined
+  > => {
     if (environmentIds.length === 0) {
       return undefined;
     }
 
-    return await (transaction ?? db)
+    const result = await db
       .selectFrom("instance")
       .innerJoin(
         "workflow_version",
@@ -348,16 +298,44 @@ export const instanceRepository = {
         "instance.workflow_version_id",
       )
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .selectAll("instance")
+      .select((eb) => [
+        ...columnMapper.prefixedColumns<InstanceModel>(
+          eb,
+          "instance",
+          instanceColumns,
+        ),
+        ...columnMapper.prefixedColumns<WorkflowVersionModel>(
+          eb,
+          "workflow_version",
+          workflowVersionColumns,
+        ),
+        ...columnMapper.prefixedColumns<WorkflowModel>(
+          eb,
+          "workflow",
+          workflowColumns,
+        ),
+      ])
       .where("instance.id", "=", id)
       .where("workflow.environment_id", "in", environmentIds)
       .where("instance.is_deleted", "=", false)
-      .where("workflow_version.is_deleted", "=", false)
-      .where("workflow.is_deleted", "=", false)
+      .limit(1)
       .executeTakeFirst();
+
+    if (!result) {
+      return result;
+    }
+
+    return {
+      instance: columnMapper.extractPrefixed<InstanceModel>(result, "instance"),
+      workflow: columnMapper.extractPrefixed<WorkflowModel>(result, "workflow"),
+      workflowVersion: columnMapper.extractPrefixed<WorkflowVersionModel>(
+        result,
+        "workflow_version",
+      ),
+    };
   },
 
-  insert: async (data: NewInstance, transaction?: Transaction<DB>) => {
+  insert: async (data: NewInstance, transaction?: DbTransaction) => {
     try {
       return await (transaction ?? db)
         .insertInto("instance")
@@ -372,7 +350,7 @@ export const instanceRepository = {
   updateById: async (
     id: string,
     data: UpdateInstance,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<InstanceModel> => {
     try {
       return await (transaction ?? db)

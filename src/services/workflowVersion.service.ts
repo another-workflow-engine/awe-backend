@@ -1,4 +1,3 @@
-import { db } from "../database.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
 import {
@@ -32,8 +31,7 @@ import {
   workflowValidatorService,
   type ValidationResult,
 } from "./workflowValidator.service.js";
-import { Transaction } from "kysely";
-import type { DB, EnvironmentType } from "../types/database.js";
+import type { EnvironmentType } from "../types/database.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
@@ -42,6 +40,7 @@ import type { Edge, Node } from "../types/workflow.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { coerce } from "semver";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import { openTransaction } from "../utils/database.utils.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 export type StatusPartialUpdateInput = z.infer<
@@ -134,15 +133,9 @@ export const workflowVersionService = {
     };
   },
 
-  getActiveVersionByWorkflowId: async (
-    workflowId: string,
-    environmentIds?: string[],
-    transaction?: Transaction<DB>,
-  ): Promise<WorkflowVersionModel | undefined> => {
-    return await workflowVersionRepository.findActiveVersionByWorkflowId(
+  getActiveVersionByWorkflowIdWithRelations: async (workflowId: string) => {
+    return await workflowVersionRepository.findActiveVersionByWorkflowIdWithRelations(
       workflowId,
-      environmentIds,
-      transaction,
     );
   },
 
@@ -209,7 +202,7 @@ export const workflowVersionService = {
       );
     }
 
-    return db.transaction().execute(async (transaction) => {
+    return openTransaction(async (transaction) => {
       const existingNodes = await nodeService.getByWorkflowVersion(
         workflowVersion,
         transaction,
@@ -270,7 +263,7 @@ export const workflowVersionService = {
     environments: EnvironmentModel[],
     transaction?: DbTransaction,
   ) => {
-    const executeCallback = async (transaction: Transaction<DB>) => {
+    const executeCallback = async (transaction: DbTransaction) => {
       const workflow = await workflowRepository.findById(
         data.workflowId,
         transaction,
@@ -327,7 +320,7 @@ export const workflowVersionService = {
 
     return transaction
       ? await executeCallback(transaction)
-      : await db.transaction().execute(executeCallback);
+      : await openTransaction(executeCallback);
   },
 
   changeStatus: async (
@@ -351,7 +344,7 @@ export const workflowVersionService = {
       throw new StateTransitionError(`Workflow is in ${currentStatus} state`);
     }
 
-    return db.transaction().execute(async (transaction) => {
+    return openTransaction(async (transaction) => {
       // demote active version before activating
       if (newStatus === WorkflowVersionStatuses.ACTIVE) {
         await workflowVersionRepository.demoteActiveVersionToPublished(
@@ -460,7 +453,7 @@ export const workflowVersionService = {
 
     const baseWorkflowId = sourceWorkflow.base_workflow_id ?? sourceWorkflow.id;
 
-    return await db.transaction().execute(async (transaction) => {
+    return await openTransaction(async (transaction) => {
       let targetWorkflow =
         await workflowRepository.findByBaseWorkflowIdAndEnvironmentId(
           baseWorkflowId,

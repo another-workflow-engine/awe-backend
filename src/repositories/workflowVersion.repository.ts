@@ -13,12 +13,14 @@ import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
   DbTransaction,
+  NodeModel,
   WorkflowModel,
   WorkflowVersionModel,
 } from "../types/models.js";
-import { WorkflowVersionStatuses } from "../types/enums.js";
+import { NodeTypes, WorkflowVersionStatuses } from "../types/enums.js";
 import { columnMapper } from "./utils/columnMapper.util.js";
 import {
+  nodeColumns,
   workflowColumns,
   workflowVersionColumns,
 } from "../types/columnNames.js";
@@ -171,28 +173,52 @@ export const workflowVersionRepository = {
     }
   },
 
-  findActiveVersionByWorkflowId: async (
+  findActiveVersionByWorkflowIdWithRelations: async (
     workflowId: string,
-    environmentIds?: string[],
-    transaction?: Transaction<DB>,
-  ): Promise<WorkflowVersionModel | undefined> => {
-    const dbConn = transaction ?? db;
-
-    const query = dbConn
+  ): Promise<
+    | {
+        workflow: WorkflowModel;
+        workflowVersion: WorkflowVersionModel;
+        startNode: NodeModel;
+      }
+    | undefined
+  > => {
+    const result = await db
       .selectFrom("workflow_version")
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .selectAll("workflow_version")
+      .innerJoin("node", "node.workflow_version_id", "workflow_version.id")
+      .select((eb) => [
+        ...columnMapper.prefixedColumns<WorkflowModel>(
+          eb,
+          "workflow",
+          workflowColumns,
+        ),
+        ...columnMapper.prefixedColumns<WorkflowVersionModel>(
+          eb,
+          "workflow_version",
+          workflowVersionColumns,
+        ),
+        ...columnMapper.prefixedColumns<NodeModel>(eb, "node", nodeColumns),
+      ])
       .where("workflow_version.workflow_id", "=", workflowId)
       .where("workflow_version.status", "=", WorkflowVersionStatuses.ACTIVE)
       .where("workflow_version.is_deleted", "=", false)
-      .where("workflow.is_deleted", "=", false);
+      .where("node.type", "=", NodeTypes.START)
+      .limit(1)
+      .executeTakeFirst();
 
-    const filteredQuery =
-      environmentIds && environmentIds.length > 0
-        ? query.where("workflow.environment_id", "in", environmentIds)
-        : query;
+    if (!result) {
+      return result;
+    }
 
-    return await filteredQuery.executeTakeFirst();
+    return {
+      workflow: columnMapper.extractPrefixed<WorkflowModel>(result, "workflow"),
+      workflowVersion: columnMapper.extractPrefixed<WorkflowVersionModel>(
+        result,
+        "workflow_version",
+      ),
+      startNode: columnMapper.extractPrefixed<NodeModel>(result, "node"),
+    };
   },
 
   insert: async (

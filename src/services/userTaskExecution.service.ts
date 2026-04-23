@@ -15,6 +15,8 @@ import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 import type {
   ActorModel,
+  DbTransaction,
+  EnvironmentModel,
   TaskExecutionModel,
   UserTaskExecutionModel,
 } from "../types/models.js";
@@ -24,19 +26,18 @@ import type { PendingUserTaskList } from "../types/userTask.js";
 import { taskService } from "./task.service.js";
 import { taskExecutionService } from "./taskExecution.service.js";
 import { engineUtils } from "../utils/engine.utils.js";
-import { Transaction } from "kysely";
-import type { DB } from "../types/database.js";
 import { ContextSchema } from "../schemas/context.schema.js";
 import type { UserNodeConfiguration } from "../types/workflow.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import { environmentUtils } from "../utils/environment.utils.js";
 
 export const userTaskService = {
   create: async (params: {
     jobData: QueueJobData;
     nodeConfiguration: UserNodeConfiguration;
     taskContext: Context;
-    transaction: Transaction<DB>;
-  }): Promise<UserTaskExecutionModel> => {
+    transaction: DbTransaction;
+  }) => {
     const { jobData, nodeConfiguration, taskContext, transaction } = params;
     const { instanceId, taskId } = jobData;
 
@@ -56,7 +57,7 @@ export const userTaskService = {
       : null;
     const title = nodeConfiguration.title ?? null;
 
-    return await userTaskExecutionRepository.insert(
+    const userTaskExecution = await userTaskExecutionRepository.insert(
       {
         task_execution_id: taskExecution.id,
         assignee,
@@ -64,18 +65,22 @@ export const userTaskService = {
       },
       transaction,
     );
+
+    return { taskExecution, userTaskExecution };
   },
 
   getPendingPaginated: async (
     actor: ActorModel,
-    asignee : string | undefined,
-    environmentIds: string[],
+    asignee: string | undefined,
+    environments: EnvironmentModel[],
     limit: number,
     offset: number,
   ): Promise<{
     items: PendingUserTaskList[];
     total: number;
   }> => {
+    const environmentIds = environmentUtils.getEnvironmentIds(environments);
+
     const filteredEnvironmentIds =
       environmentIds.length > 0
         ? environmentIds
@@ -90,7 +95,13 @@ export const userTaskService = {
     );
   },
 
-  get: async (id: string, actor: ActorModel, environmentIds: string[]) => {
+  get: async (
+    id: string,
+    actor: ActorModel,
+    environments: EnvironmentModel[],
+  ) => {
+    const environmentIds = environmentUtils.getEnvironmentIds(environments);
+
     const filteredEnvironmentIds =
       environmentIds.length > 0
         ? environmentIds
@@ -156,11 +167,13 @@ export const userTaskService = {
     id: string,
     userInput: Record<string, unknown>,
     actor: ActorModel,
-    environmentIds: string[],
+    environments: EnvironmentModel[],
   ): Promise<{
     userTaskExecution: UserTaskExecutionModel;
     taskExecution: TaskExecutionModel;
   }> => {
+    const environmentIds = environmentUtils.getEnvironmentIds(environments);
+
     const filteredEnvironmentIds =
       environmentIds.length > 0
         ? environmentIds

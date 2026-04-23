@@ -4,6 +4,8 @@ import type { Transaction } from "kysely";
 import { instanceLogRepository } from "../repositories/instanceLog.repository.js";
 import { InstanceEntityTypes } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
+import type { EnvironmentModel } from "../types/models.js";
+import { environmentUtils } from "../utils/environment.utils.js";
 
 export type CreateInstanceLogParams = {
   instanceId: string;
@@ -88,10 +90,13 @@ export const eventLogService = {
     );
   },
 
-  getInstanceAudit: async (instanceId: string, environmentIds: string[]) => {
+  getInstanceAudit: async (
+    instanceId: string,
+    environments: EnvironmentModel[],
+  ) => {
     return await instanceLogRepository.getInstanceAudit(
       instanceId,
-      environmentIds,
+      environmentUtils.getEnvironmentIds(environments),
     );
   },
 };

@@ -1,40 +1,27 @@
 import { db } from "../database.js";
-import type { DB, TaskExecution } from "../types/database.js";
-import type { Insertable, Updateable, Transaction } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { TaskExecutionModel } from "../types/models.js";
+import {
+  taskExecutionColumns,
+  userTaskExecutionColumns,
+} from "../types/columnNames.js";
+import type {
+  DbTransaction,
+  TaskExecutionModel,
+  UserTaskExecutionModel,
+} from "../types/models.js";
 import type {
   ExecutionGraphConnection,
   ExecutionGraphNode,
   ExecutionSequenceData,
   ExecutionSequenceExecution,
-} from "../types/taskExecution.js";
-
-type NewTaskExecution = Insertable<TaskExecution>;
-type UpdateTaskExecution = Updateable<TaskExecution>;
-
-export type TaskExecutionWithNode = TaskExecutionModel & {
-  node_id: string;
-  node_client_id: string;
-  node_type: string;
-  node_name: string | null;
-  node_configuration: unknown;
-  user_task_execution_id: string | null;
-};
-
-export type TaskDetailExecutionData = {
-  task_id: string;
-  task_status: DB["task"]["status"];
-  task_created_on: Date;
-  node_id: string;
-  input_variables: unknown;
-  output_variables: unknown;
-};
+} from "../types/nodePath.js";
+import type { NewTaskExecution, UpdateTaskExecution } from "../types/task.js";
+import { columnMapper } from "./utils/columnMapper.util.js";
 
 export const taskExecutionRepository = {
   findByTaskId: async (
     taskId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<TaskExecutionModel[]> => {
     return await (transaction ?? db)
       .selectFrom("task_execution")
@@ -43,9 +30,51 @@ export const taskExecutionRepository = {
       .execute();
   },
 
+  findByTaskIdWithUserTask: async (
+    taskId: string,
+    transaction?: DbTransaction,
+  ) => {
+    const results = await (transaction ?? db)
+      .selectFrom("task_execution")
+      .leftJoin(
+        "user_task_execution",
+        "user_task_execution.task_execution_id",
+        "task_execution.id",
+      )
+      .select((eb) => [
+        ...columnMapper.prefixedColumns(
+          eb,
+          "task_execution",
+          taskExecutionColumns,
+        ),
+        ...columnMapper.prefixedColumns(
+          eb,
+          "user_task_execution",
+          userTaskExecutionColumns,
+        ),
+      ])
+      .where("task_id", "=", taskId)
+      .execute();
+
+    return results.map((res) => {
+      return {
+        taskExecution: columnMapper.extractPrefixed<TaskExecutionModel>(
+          res,
+          "task_execution",
+        ),
+        userTaskExecution: res["user_task_execution__id"]
+          ? columnMapper.extractPrefixed<UserTaskExecutionModel>(
+              res,
+              "user_task_execution",
+            )
+          : undefined,
+      };
+    });
+  },
+
   insert: async (
     data: NewTaskExecution,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<TaskExecutionModel> => {
     try {
       return await (transaction ?? db)
@@ -61,7 +90,7 @@ export const taskExecutionRepository = {
   updateById: async (
     id: string,
     data: UpdateTaskExecution,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<TaskExecutionModel> => {
     try {
       return await (transaction ?? db)
@@ -75,37 +104,9 @@ export const taskExecutionRepository = {
     }
   },
 
-  findByInstanceId: async (
-    instanceId: string,
-    transaction?: Transaction<DB>,
-  ): Promise<TaskExecutionWithNode[]> => {
-    try {
-      return (await (transaction ?? db)
-        .selectFrom("task_execution")
-        .innerJoin("task", "task.id", "task_execution.task_id")
-        .innerJoin("node", "node.id", "task.node_id")
-        .selectAll("task_execution")
-        .select((eb) => [
-          eb.ref("node.id").as("node_id"),
-          eb.ref("node.client_id").as("node_client_id"),
-          eb.ref("node.type").as("node_type"),
-          eb.ref("node.name").as("node_name"),
-          eb.ref("node.configuration").as("node_configuration"),
-        ])
-        .where("task.instance_id", "=", instanceId)
-        .orderBy("task_execution.created_on", "asc")
-        .execute()) as unknown as TaskExecutionWithNode[];
-    } catch (err) {
-      throw new RepositoryError(
-        `Find task executions by instance_id=${instanceId} failed`,
-        err,
-      );
-    }
-  },
-
   findExecutionSequenceDataByInstanceId: async (
     instanceId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<ExecutionSequenceData> => {
     try {
       const conn = transaction ?? db;
@@ -199,54 +200,9 @@ export const taskExecutionRepository = {
     }
   },
 
-  findLatestTaskDetailByInstanceIdAndTaskId: async (
-    instanceId: string,
-    taskId: string,
-    transaction?: Transaction<DB>,
-  ): Promise<TaskDetailExecutionData | null> => {
-    try {
-      const result = await (transaction ?? db)
-        .selectFrom("task_execution")
-        .innerJoin("task", "task.id", "task_execution.task_id")
-        .select((eb) => [
-          eb.ref("task.id").as("task_id"),
-          eb.ref("task.status").as("task_status"),
-          eb.ref("task.created_on").as("task_created_on"),
-          eb.ref("task.node_id").as("node_id"),
-          eb.ref("task_execution.input_variables").as("input_variables"),
-          eb.ref("task_execution.output_variables").as("output_variables"),
-        ])
-        .where("task.instance_id", "=", instanceId)
-        .where("task.id", "=", taskId)
-        .orderBy("task_execution.created_on", "desc")
-        .executeTakeFirst();
-
-      return (result as TaskDetailExecutionData | undefined) ?? null;
-    } catch (err) {
-      throw new RepositoryError(
-        `Find latest task detail by instance_id=${instanceId} task_id=${taskId} failed`,
-        err,
-      );
-    }
-  },
-
-  findLatestByTaskId: async (
-    taskId: string,
-    transaction?: Transaction<DB>,
-  ): Promise<TaskExecutionModel | null> => {
-    return (
-      (await (transaction ?? db)
-        .selectFrom("task_execution")
-        .selectAll()
-        .where("task_id", "=", taskId)
-        .orderBy("created_on", "desc")
-        .executeTakeFirst()) ?? null
-    );
-  },
-
   findLatestUserTaskExecutionByTaskExecutionId: async (
     taskExecutionId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<TaskExecutionModel | null> => {
     try {
       const result = await (transaction ?? db)

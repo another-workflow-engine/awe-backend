@@ -1,13 +1,5 @@
 import type { TaskExecutionModel } from "./models.js";
 
-export type ExecutionNodeStatus =
-  | "completed"
-  | "failed"
-  | "in_progress"
-  | "terminated"
-  | "pending"
-  | "discarded";
-
 export type ExecutionGraphNode = {
   node_id: string;
   node_client_id: string;
@@ -21,14 +13,6 @@ export type ExecutionGraphConnection = {
   destination_node_id: string | null;
   destination_node_client_id: string | null;
   condition_expression: string | null;
-};
-
-export type ExecutionGraphExecution = TaskExecutionModel & {
-  node_id: string;
-  node_client_id: string;
-  node_type: string;
-  node_name: string | null;
-  user_task_execution_id: string | null;
 };
 
 export type ExecutionSequenceExecution = {
@@ -56,6 +40,14 @@ export type ExecutionSequenceOutgoingConnection = {
   conditionExpression: string | null;
 };
 
+export type ExecutionNodeStatus =
+  | "completed"
+  | "failed"
+  | "in_progress"
+  | "terminated"
+  | "pending"
+  | "discarded";
+
 export type ExecutionSequenceItem = {
   taskId: string | null;
   taskExecutionId: string | null;
@@ -72,22 +64,4 @@ export type ExecutionSequenceItem = {
 
 export type ExecutionSequenceResponse = {
   executionSequence: ExecutionSequenceItem[];
-};
-
-export type TaskExecutionDetailItem = {
-  inputVariables: unknown;
-  outputVariables: unknown;
-};
-
-export type TaskDetailItem = {
-  id: string;
-  status: string;
-  createdAt: Date;
-  nodeId: string;
-};
-
-export type TaskExecutionDetailResponse = {
-  task: TaskDetailItem;
-  taskExecution: TaskExecutionDetailItem;
-  nodeConfiguration: unknown;
 };

@@ -15,7 +15,7 @@ import {
   parsePaginationFromRequest,
 } from "../utils/pagination.utils.js";
 import { WorkflowVersionStatuses } from "../types/enums.js";
-import { getEnvironmentById } from "../utils/environment.utils.js";
+import { environmentUtils } from "../utils/environment.utils.js";
 
 export const workflowVersionController = {
   list: async (req: Request, res: Response) => {
@@ -30,14 +30,10 @@ export const workflowVersionController = {
         data,
         limit,
         offset,
-        req.environmentIds,
+        environmentUtils.getEnvironmentIds(req.context.environments),
       );
 
-    const environment = getEnvironmentById(
-      req.environmentIds,
-      req.environments,
-      workflow.environment_id,
-    );
+    const environment = "production";
 
     const versions = items.map((version) => ({
       id: version.id,
@@ -105,11 +101,7 @@ export const workflowVersionController = {
     const { workflow, workflowVersion, nodes, edges, startVariables } =
       await workflowVersionService.getDetail(data, req.context.environments);
 
-    const environment = getEnvironmentById(
-      req.environmentIds,
-      req.environments,
-      workflow.environment_id,
-    );
+    const environment = "production";
 
     return res.status(200).json({
       id: workflowVersion.id,

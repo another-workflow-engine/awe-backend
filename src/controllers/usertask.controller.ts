@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { userTaskService } from "../services/userTaskExecution.service.js";
-import { UserTaskParamsSchema } from "../schemas/task.schema.js";
+import { TaskParamsSchema } from "../schemas/task.schema.js";
 import {
   buildPaginatedResponse,
   parsePaginationFromRequest,
@@ -13,7 +13,7 @@ export const userTaskController = {
     const { items, total } = await userTaskService.getPendingPaginated(
       req.context.actor,
       assignee,
-      req.environmentIds,
+      req.context.environments,
       limit,
       offset,
     );
@@ -22,24 +22,24 @@ export const userTaskController = {
   },
 
   getTask: async (req: Request, res: Response) => {
-    const { taskId } = UserTaskParamsSchema.parse(req.params);
+    const { taskId } = TaskParamsSchema.parse(req.params);
     const task = await userTaskService.get(
       taskId,
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
     return res.json({ ...task });
   },
 
   completeUserTask: async (req: Request, res: Response) => {
-    const { taskId } = UserTaskParamsSchema.parse(req.params);
+    const { taskId } = TaskParamsSchema.parse(req.params);
     const userInput = req.body ?? {};
     delete userInput.environment;
     const { taskExecution } = await userTaskService.completeUserTask(
       taskId,
       userInput,
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
     return res.json({
       status: taskExecution.status,

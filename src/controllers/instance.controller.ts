@@ -85,6 +85,6 @@ export const instanceController = {
       instanceId,
       req.context.environments,
     );
-    return res.status(200).json({ sequence });
+    return res.status(200).json({ ...sequence });
   },
 };

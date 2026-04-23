@@ -145,7 +145,7 @@ export function getFormattedDetailOutput(params: {
     inputVariables: converterUtils.jsonValueToObject(instance.input_variables),
     currentVariables: converterUtils.parseOrThrow(
       ContextSchema,
-      instance.current_variables,
+      instance.current_variables !== null ? instance.current_variables : {},
     ),
     outputVariables: converterUtils.jsonValueToObject(
       instance.output_variables,

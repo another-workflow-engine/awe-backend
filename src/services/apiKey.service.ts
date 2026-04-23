@@ -5,7 +5,6 @@ import { apiKeyRepository } from "../repositories/apiKey.repository.js";
 import { ActorTypes } from "../types/enums.js";
 import crypto from "node:crypto";
 import argon2 from "argon2";
-import { db } from "../database.js";
 import { actorRepository } from "../repositories/actor.repository.js";
 import type {
   ActorModel,
@@ -16,6 +15,7 @@ import type { RequestContext } from "../types/auth.js";
 import type z from "zod";
 import type { CreateApiKeySchema } from "../controllers/apiKey.controller.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
+import { openTransaction } from "../utils/database.utils.js";
 
 type CreateApiKey = z.infer<typeof CreateApiKeySchema>;
 
@@ -73,7 +73,7 @@ export const apiKeyService = {
     const rawKey = `${prefix}.${secret}`;
     const secretHash = await argon2.hash(secret);
 
-    return await db.transaction().execute(async (transaction) => {
+    return await openTransaction(async (transaction) => {
       const apiKeyActor = await actorRepository.insert(
         {
           type: ActorTypes.API_KEY_CLIENT,

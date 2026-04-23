@@ -1,10 +1,10 @@
-import { db } from "../database.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 import type { Context } from "../types/engine.js";
 import { LogEventTypes, TaskStatuses } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import type { DbTransaction, TaskExecutionModel } from "../types/models.js";
 import { converterUtils } from "../utils/converter.utils.js";
+import { openTransaction } from "../utils/database.utils.js";
 import { eventLogService } from "./eventLog.service.js";
 
 export const taskExecutionService = {
@@ -57,7 +57,7 @@ export const taskExecutionService = {
 
     return transaction
       ? await executeCallback(transaction)
-      : await db.transaction().execute(executeCallback);
+      : await openTransaction(executeCallback);
   },
 
   complete: async (

@@ -1,13 +1,13 @@
-import type { Insertable, Transaction } from "kysely";
-import type { DB, Edge } from "../types/database.js";
+import type { Insertable } from "kysely";
+import type { Edge } from "../types/database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { db } from "../database.js";
-import type { EdgeModel } from "../types/models.js";
+import type { DbTransaction, EdgeModel } from "../types/models.js";
 
 export type NewEdge = Insertable<Edge>;
 
 export const edgeRepository = {
-  findBySourceNodeId: async (id: string, transaction?: Transaction<DB>) => {
+  findBySourceNodeId: async (id: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .selectFrom("edge")
       .selectAll()
@@ -18,7 +18,7 @@ export const edgeRepository = {
 
   findByNodeIds: async (
     ids: string[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EdgeModel[]> => {
     try {
       return await (transaction ?? db)
@@ -39,7 +39,7 @@ export const edgeRepository = {
 
   insertMany: async (
     data: NewEdge[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EdgeModel[]> => {
     if (data.length === 0) return [];
     try {
@@ -55,7 +55,7 @@ export const edgeRepository = {
 
   deleteByNodeIds: async (
     nodeIds: string[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<void> => {
     if (nodeIds.length === 0) return;
     try {

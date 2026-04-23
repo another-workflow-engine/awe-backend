@@ -1,11 +1,9 @@
-import type { Transaction } from "kysely";
 import { db } from "../database.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
-import type { DB } from "../types/database.js";
 import type { Context } from "../types/engine.js";
 import { LogEventTypes, TaskStatuses } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
-import type { TaskExecutionModel } from "../types/models.js";
+import type { DbTransaction, TaskExecutionModel } from "../types/models.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { eventLogService } from "./eventLog.service.js";
 
@@ -20,7 +18,7 @@ export const taskExecutionService = {
 
   getLatestUserTaskExecutionByTaskId: async (
     taskExecutionId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<TaskExecutionModel | null> => {
     return await taskExecutionRepository.findLatestUserTaskExecutionByTaskExecutionId(
       taskExecutionId,
@@ -32,9 +30,9 @@ export const taskExecutionService = {
     instanceId: string,
     taskId: string,
     inputVariables: Context,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<TaskExecutionModel> => {
-    const executeCallback = async (trx: Transaction<DB>) => {
+    const executeCallback = async (trx: DbTransaction) => {
       const taskExecution = await taskExecutionRepository.insert(
         {
           task_id: taskId,
@@ -66,7 +64,7 @@ export const taskExecutionService = {
     instanceId: string,
     taskExecutionId: string,
     outputVariables: object,
-    transaction: Transaction<DB>,
+    transaction: DbTransaction,
   ): Promise<TaskExecutionModel> => {
     const [taskExecution] = await Promise.all([
       taskExecutionRepository.updateById(
@@ -95,7 +93,7 @@ export const taskExecutionService = {
     instanceId: string,
     taskExecutionId: string,
     details: LogDetailSchema,
-    transaction: Transaction<DB>,
+    transaction: DbTransaction,
   ): Promise<TaskExecutionModel> => {
     const [taskExecution] = await Promise.all([
       taskExecutionRepository.updateById(
@@ -123,7 +121,7 @@ export const taskExecutionService = {
     instanceId: string,
     taskExecutionId: string,
     details: LogDetailSchema,
-    transaction: Transaction<DB>,
+    transaction: DbTransaction,
   ): Promise<TaskExecutionModel> => {
     const [taskExecution] = await Promise.all([
       taskExecutionRepository.updateById(

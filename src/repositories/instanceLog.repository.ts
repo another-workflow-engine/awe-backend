@@ -1,17 +1,18 @@
-import type { Insertable, Transaction } from "kysely";
-import type { DB, InstanceLog } from "../types/database.js";
+import type { Insertable } from "kysely";
+import type { InstanceLog } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
   InstanceEntityType,
   InstanceEventType,
 } from "../types/database.js";
-import { LogEventTypes, TaskStatuses } from "../types/enums.js";
+import { LogEventTypes } from "../types/enums.js";
+import type { DbTransaction } from "../types/models.js";
 
 export type NewInstanceLog = Insertable<InstanceLog>;
 
 export const instanceLogRepository = {
-  insert: async (data: NewInstanceLog, transaction?: Transaction<DB>) => {
+  insert: async (data: NewInstanceLog, transaction?: DbTransaction) => {
     try {
       return await (transaction ?? db)
         .insertInto("instance_log")

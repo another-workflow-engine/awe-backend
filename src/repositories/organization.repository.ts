@@ -1,10 +1,11 @@
 import { db, DbErrorCode, isDbError } from "../database.js";
 import { DuplicateError } from "../errors/DuplicateError.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { DB, Organization } from "../types/database.js";
-import type { Insertable, Transaction, Updateable } from "kysely";
+import type { Organization } from "../types/database.js";
+import type { Insertable, Updateable } from "kysely";
 import type {
   ActorModel,
+  DbTransaction,
   EnvironmentModel,
   OrganizationModel,
 } from "../types/models.js";
@@ -19,7 +20,7 @@ type NewOrganization = Insertable<Organization>;
 type UpdateOrganization = Updateable<Organization>;
 
 export const organizationRepository = {
-  findById: async (id: string, transaction?: Transaction<DB>) => {
+  findById: async (id: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .selectFrom("organization")
       .selectAll()
@@ -28,7 +29,7 @@ export const organizationRepository = {
       .executeTakeFirst();
   },
 
-  findByEmail: async (email: string, transaction?: Transaction<DB>) => {
+  findByEmail: async (email: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .selectFrom("organization")
       .selectAll()
@@ -37,7 +38,7 @@ export const organizationRepository = {
       .executeTakeFirst();
   },
 
-  findByActorId: async (actorId: string, transaction?: Transaction<DB>) => {
+  findByActorId: async (actorId: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .selectFrom("organization")
       .selectAll()
@@ -132,7 +133,7 @@ export const organizationRepository = {
 
   insert: async (
     data: NewOrganization,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<OrganizationModel> => {
     try {
       return await (transaction ?? db)
@@ -156,7 +157,7 @@ export const organizationRepository = {
   updateById: async (
     id: string,
     data: UpdateOrganization,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     if (!Object.keys(data).length) {
       return null;
@@ -171,7 +172,7 @@ export const organizationRepository = {
       .executeTakeFirst();
   },
 
-  deleteById: async (id: string, transaction?: Transaction<DB>) => {
+  deleteById: async (id: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .updateTable("organization")
       .set({ is_deleted: true, deleted_on: new Date() })

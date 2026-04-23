@@ -1,10 +1,9 @@
 import { converterUtils } from "../utils/converter.utils.js";
-import type { DB, InstanceEventType } from "../types/database.js";
-import type { Transaction } from "kysely";
+import type { InstanceEventType } from "../types/database.js";
 import { instanceLogRepository } from "../repositories/instanceLog.repository.js";
 import { InstanceEntityTypes } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
-import type { EnvironmentModel } from "../types/models.js";
+import type { DbTransaction, EnvironmentModel } from "../types/models.js";
 import { environmentUtils } from "../utils/environment.utils.js";
 
 export type CreateInstanceLogParams = {
@@ -12,7 +11,7 @@ export type CreateInstanceLogParams = {
   eventType: InstanceEventType;
   details?: LogDetailSchema | undefined;
   actorId?: string | undefined;
-  transaction?: Transaction<DB> | undefined;
+  transaction?: DbTransaction | undefined;
 };
 
 export const eventLogService = {
@@ -38,7 +37,7 @@ export const eventLogService = {
     type: InstanceEventType,
     details?: LogDetailSchema,
     actorId?: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<void> => {
     await instanceLogRepository.insert(
       {
@@ -59,7 +58,7 @@ export const eventLogService = {
     type: InstanceEventType,
     details?: LogDetailSchema,
     actorId?: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<void> => {
     await instanceLogRepository.insert(
       {

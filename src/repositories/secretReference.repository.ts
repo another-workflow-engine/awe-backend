@@ -1,12 +1,9 @@
-import type { Insertable, Transaction } from "kysely";
-import type {
-  DB,
-  EnvironmentType,
-  SecretReference,
-} from "../types/database.js";
+import type { Insertable } from "kysely";
+import type { SecretReference } from "../types/database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { db } from "../database.js";
 import type {
+  DbTransaction,
   SecretProviderModel,
   SecretReferenceModel,
 } from "../types/models.js";
@@ -21,7 +18,7 @@ export type NewReference = Insertable<SecretReference>;
 export const secretReferenceRepository = {
   findById: async (
     id: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<SecretReferenceModel | undefined> => {
     return await (transaction ?? db)
       .selectFrom("secret_reference")
@@ -86,7 +83,7 @@ export const secretReferenceRepository = {
 
   insert: async (
     data: NewReference,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<SecretReferenceModel> => {
     try {
       return await (transaction ?? db)
@@ -148,7 +145,7 @@ export const secretReferenceRepository = {
 
   deleteById: async (
     id: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<boolean> => {
     try {
       const result = await (transaction ?? db)

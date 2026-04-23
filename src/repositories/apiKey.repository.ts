@@ -1,9 +1,10 @@
 import { db } from "../database.js";
-import type { ApiKey, DB } from "../types/database.js";
-import type { Insertable, Transaction, Updateable } from "kysely";
+import type { ApiKey } from "../types/database.js";
+import type { Insertable, Updateable } from "kysely";
 import {
   type ActorModel,
   type ApiKeyModel,
+  type DbTransaction,
   type EnvironmentModel,
   type OrganizationModel,
 } from "../types/models.js";
@@ -46,7 +47,7 @@ export const apiKeyRepository = {
 
   insert: async (
     data: NewApiKey,
-    transaction?: Transaction<DB>,
+    transaction: DbTransaction,
   ): Promise<ApiKeyModel> => {
     try {
       return await (transaction ?? db)
@@ -100,7 +101,11 @@ export const apiKeyRepository = {
     const row = await db
       .selectFrom("api_key")
       .innerJoin("environment", "environment.id", "api_key.environment_id")
-      .innerJoin("organization", "organization.id", "environment.organization_id")
+      .innerJoin(
+        "organization",
+        "organization.id",
+        "environment.organization_id",
+      )
       .innerJoin("actor", "actor.id", "api_key.actor_id")
       .select((eb) => [
         ...columnMapper.prefixedColumns<ApiKeyModel>(
@@ -124,10 +129,10 @@ export const apiKeyRepository = {
       .where("api_key.is_deleted", "=", false)
       .executeTakeFirst();
 
-      if (!row) {
+    if (!row) {
       return row;
     }
-    
+
     return {
       actor: columnMapper.extractPrefixed<ActorModel>(row, "actor"),
       organization: columnMapper.extractPrefixed<OrganizationModel>(

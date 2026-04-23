@@ -1,15 +1,15 @@
 import { db } from "../database.js";
-import type { DB, Workflow } from "../types/database.js";
-import type { Insertable, Transaction, Updateable } from "kysely";
+import type { Workflow } from "../types/database.js";
+import type { Insertable, Updateable } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { WorkflowModel } from "../types/models.js";
+import type { DbTransaction, WorkflowModel } from "../types/models.js";
 import type { WorkflowVersionStatus } from "../types/database.js";
 
 type NewWorkflow = Insertable<Workflow>;
 type UpdateWorkflow = Updateable<Workflow>;
 
 export const workflowRepository = {
-  findById: async (id: string, transaction?: Transaction<DB>) => {
+  findById: async (id: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .selectFrom("workflow")
       .selectAll()
@@ -21,7 +21,7 @@ export const workflowRepository = {
   findByIdAndEnvironmentIds: async (
     id: string,
     environmentIds: string[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     return await (transaction ?? db)
       .selectFrom("workflow")
@@ -35,7 +35,7 @@ export const workflowRepository = {
   findByBaseWorkflowIdAndEnvironmentId: async (
     baseWorkflowId: string,
     environmentId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     return await (transaction ?? db)
       .selectFrom("workflow")
@@ -48,7 +48,7 @@ export const workflowRepository = {
 
   insert: async (
     data: NewWorkflow,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<WorkflowModel> => {
     try {
       return await (transaction ?? db)
@@ -64,7 +64,7 @@ export const workflowRepository = {
   updateById: async (
     id: string,
     data: UpdateWorkflow,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     try {
       return await (transaction ?? db)
@@ -81,7 +81,7 @@ export const workflowRepository = {
 
   findByEnvironmentIdsWithLatestVersion: async (
     environmentIds: string[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<
     {
       workflow: WorkflowModel;
@@ -141,7 +141,7 @@ export const workflowRepository = {
 
   countByEnvironmentIds: async (
     environmentIds: string[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<number> => {
     if (environmentIds.length === 0) {
       return 0;
@@ -163,7 +163,7 @@ export const workflowRepository = {
     offset: number,
     search?: string,
     createdSort: "asc" | "desc" = "desc",
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<{
     items: Array<{
       workflow: WorkflowModel;

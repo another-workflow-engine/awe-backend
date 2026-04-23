@@ -1,11 +1,5 @@
-import {
-  sql,
-  type Insertable,
-  type Transaction,
-  type Updateable,
-} from "kysely";
+import { sql, type Insertable, type Updateable } from "kysely";
 import type {
-  DB,
   WorkflowVersion,
   WorkflowVersionStatus,
 } from "../types/database.js";
@@ -29,7 +23,7 @@ export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 export type UpdateWorkflowVersion = Updateable<WorkflowVersion>;
 
 export const workflowVersionRepository = {
-  findById: async (id: string, transaction?: Transaction<DB>) => {
+  findById: async (id: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .selectFrom("workflow_version")
       .selectAll()
@@ -97,7 +91,7 @@ export const workflowVersionRepository = {
 
   findByWorkflowId: async (
     id: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<WorkflowVersionModel[]> => {
     try {
       return await (transaction ?? db)
@@ -118,7 +112,7 @@ export const workflowVersionRepository = {
     workflowId: string,
     limit: number,
     offset: number,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<{ items: WorkflowVersionModel[]; total: number }> => {
     try {
       const dbConn = transaction ?? db;
@@ -155,7 +149,7 @@ export const workflowVersionRepository = {
   findByWorkflowIdAndVersion: async (
     workflowId: string,
     version: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<WorkflowVersionModel> => {
     try {
       return await (transaction ?? db)
@@ -230,7 +224,7 @@ export const workflowVersionRepository = {
       status: WorkflowVersionStatus;
       workflow_id: string;
     },
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     try {
       return await (transaction ?? db)
@@ -251,7 +245,7 @@ export const workflowVersionRepository = {
       status: WorkflowVersionStatus;
       workflow_id: string;
     },
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     try {
       return await (transaction ?? db)
@@ -279,7 +273,7 @@ export const workflowVersionRepository = {
   updateById: async (
     id: string,
     data: UpdateWorkflowVersion,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<WorkflowVersionModel> => {
     try {
       return await (transaction ?? db)
@@ -296,7 +290,7 @@ export const workflowVersionRepository = {
 
   demoteActiveVersionToPublished: async (
     workflowId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     return await (transaction ?? db)
       .updateTable("workflow_version")
@@ -309,7 +303,7 @@ export const workflowVersionRepository = {
 
   draftOrValidVersionExists: async (
     workflowId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<boolean> => {
     const result = await (transaction ?? db)
       .selectFrom("workflow_version")

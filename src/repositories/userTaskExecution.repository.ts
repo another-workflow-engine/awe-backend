@@ -1,8 +1,9 @@
 import { db } from "../database.js";
-import type { DB, TaskStatus, UserTaskExecution } from "../types/database.js";
-import type { Insertable, Transaction } from "kysely";
+import type { TaskStatus, UserTaskExecution } from "../types/database.js";
+import type { Insertable } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
+  DbTransaction,
   InstanceModel,
   NodeModel,
   TaskExecutionModel,
@@ -27,7 +28,7 @@ type NewUserTaskExecution = Insertable<UserTaskExecution>;
 export const userTaskExecutionRepository = {
   insert: async (
     data: NewUserTaskExecution,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<UserTaskExecutionModel> => {
     try {
       return await (transaction ?? db)
@@ -43,7 +44,7 @@ export const userTaskExecutionRepository = {
   findByEnvironmentIdsAndStatus: async (
     environmentIds: string[],
     status: TaskStatus,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<PendingUserTaskList[]> => {
     if (environmentIds.length === 0) {
       return [];
@@ -103,7 +104,7 @@ export const userTaskExecutionRepository = {
   findByIdAndEnvironmentIdsWithRelations: async (
     id: string,
     environmentIds: string[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<
     | {
         userTaskExecution: UserTaskExecutionModel;
@@ -201,7 +202,7 @@ export const userTaskExecutionRepository = {
     assignee: string | undefined,
     limit: number,
     offset: number,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<{
     items: PendingUserTaskList[];
     total: number;

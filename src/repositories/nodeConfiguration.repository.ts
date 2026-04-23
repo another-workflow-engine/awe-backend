@@ -1,12 +1,11 @@
-import type { Transaction } from "kysely";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { DB } from "../types/database.js";
+import type { DbTransaction } from "../types/models.js";
 
 export const nodeConfigurationRepository = {
   findByNodeId: async (
     nodeId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<unknown | null> => {
     try {
       const result = await (transaction ?? db)

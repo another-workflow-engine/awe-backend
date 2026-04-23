@@ -1,11 +1,10 @@
-import type { Transaction } from "kysely";
 import type {
   ActorModel,
+  DbTransaction,
   NodeModel,
   WorkflowVersionModel,
 } from "../types/models.js";
 import type { Node, NodeInputSchema } from "../types/workflow.js";
-import type { DB } from "../types/database.js";
 import {
   nodeRepository,
   type NewNode,
@@ -20,7 +19,7 @@ export const nodeService = {
     data: Node[],
     actor: ActorModel,
     workflowVersion: WorkflowVersionModel,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<NodeModel[]> => {
     if (data.length === 0) {
       return [];
@@ -69,7 +68,7 @@ export const nodeService = {
 
   getByWorkflowVersion: async (
     workflowVersion: WorkflowVersionModel,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<NodeModel[]> => {
     return await nodeRepository.findByWorkflowVersionId(
       workflowVersion.id,
@@ -79,7 +78,7 @@ export const nodeService = {
 
   deleteByWorkflowVersion: async (
     workflowVersion: WorkflowVersionModel,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<void> => {
     await nodeRepository.deleteByWorkflowVersionId(
       workflowVersion.id,
@@ -89,7 +88,7 @@ export const nodeService = {
 
   getByStartNodeByWorkflowVersionId: async (
     workflowVersionId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     const nodes = await nodeRepository.findByWorkflowVersionIdAndNodeType(
       workflowVersionId,
@@ -100,7 +99,7 @@ export const nodeService = {
     return nodes[0];
   },
 
-  getById: async (id: string, transaction?: Transaction<DB>) => {
+  getById: async (id: string, transaction?: DbTransaction) => {
     return await nodeRepository.findById(id, transaction);
   },
 

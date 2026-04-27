@@ -72,6 +72,7 @@ export const secretController = {
     const result = await secretService.listByProvider(
       providerId,
       req.context.actor,
+      req.context.environments,
     );
     return res.status(200).json({
       secrets: result.map(mapSecret),

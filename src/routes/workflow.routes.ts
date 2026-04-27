@@ -3,12 +3,24 @@ import { workflowGroupController } from "../controllers/workflowGroup.controller
 import { authenticateRequest } from "../middlewares/auth.middleware.js";
 import { workflowVersionController } from "../controllers/workflowVersion.controller.js";
 
+import { environmentUtils } from "../utils/environment.utils.js";
+
 export const workflowRouter = Router();
 
 workflowRouter.use(authenticateRequest);
 
-// WORKFLOWS
-workflowRouter.get("/", workflowGroupController.list);
+
+workflowRouter.get("/", async (req, res) => {
+  const selectedTypes = environmentUtils.parseEnvironmentsFromQueryString(
+    req.query.environment,
+  );
+  if (selectedTypes.length > 0) {
+    req.context.environments = req.context.environments.filter((env) =>
+      selectedTypes.includes(env.type),
+    );
+  }
+  return workflowGroupController.list(req, res);
+});
 
 workflowRouter.post("/", workflowGroupController.create);
 

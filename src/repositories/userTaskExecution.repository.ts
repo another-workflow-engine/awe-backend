@@ -283,7 +283,7 @@ export const userTaskExecutionRepository = {
               .count<number>("user_task_execution.id")
               .as("count"),
           )
-          .executeTakeFirstOrThrow(),
+          .executeTakeFirst(),
       ]);
 
       const formattedItems = items.map((row) => ({
@@ -301,7 +301,7 @@ export const userTaskExecutionRepository = {
 
       return {
         items: formattedItems,
-        total: Number(countResult.count),
+        total: countResult ? Number(countResult.count) : 0,
       };
     } catch (err) {
       throw new RepositoryError(

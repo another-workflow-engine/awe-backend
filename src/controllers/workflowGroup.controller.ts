@@ -56,6 +56,9 @@ export const workflowGroupController = {
 
     const formattedWorkflows = items.map(
       ({ workflow, status, latestVersionId, latestVersionNumber }) => {
+        const environment = req.context.environments.find(
+          (env) => env.id === workflow.environment_id,
+        );
         return {
           id: workflow.id,
           name: workflow.name,
@@ -65,7 +68,7 @@ export const workflowGroupController = {
             status: status,
             latestVersionNumber: latestVersionNumber,
           },
-          environment: "production",
+          environment: environment?.type ?? "unknown",
           createdAt: workflow.created_on,
           updatedAt: workflow.modified_on,
         };
@@ -100,7 +103,10 @@ export const workflowGroupController = {
       id: updatedWorkflow.id,
       name: updatedWorkflow.name,
       description: updatedWorkflow.description,
-      environment: "production",
+      environment:
+        req.context.environments.find(
+          (env) => env.id === updatedWorkflow.environment_id,
+        )?.type ?? "unknown",
       updatedAt: updatedWorkflow.modified_on,
     });
   },
@@ -115,7 +121,9 @@ export const workflowGroupController = {
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      environment: "production",
+      environment:
+        req.context.environments.find((env) => env.id === workflow.environment_id)
+          ?.type ?? "unknown",
       createdAt: workflow.created_on,
       updatedAt: workflow.modified_on,
 

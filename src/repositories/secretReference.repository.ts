@@ -123,7 +123,15 @@ export const secretReferenceRepository = {
       .execute();
   },
 
-  findByProviderAndActor: async (providerId: string, actorId: string) => {
+  findByProviderAndActor: async (
+    providerId: string,
+    actorId: string,
+    environmentIds: string[],
+  ) => {
+    if (environmentIds.length === 0) {
+      return [];
+    }
+
     return await db
       .selectFrom("secret_reference")
       .innerJoin(
@@ -140,6 +148,7 @@ export const secretReferenceRepository = {
       .select("environment.type as environment")
       .where("secret_reference.provider_id", "=", providerId)
       .where("organization.actor_id", "=", actorId)
+      .where("environment.id", "in", environmentIds)
       .execute();
   },
 

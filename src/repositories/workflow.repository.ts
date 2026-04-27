@@ -152,9 +152,9 @@ export const workflowRepository = {
       .select((eb) => eb.fn.count<number>("id").as("count"))
       .where("environment_id", "in", environmentIds)
       .where("is_deleted", "=", false)
-      .executeTakeFirstOrThrow();
+      .executeTakeFirst();
 
-    return Number(result.count);
+    return result ? Number(result.count) : 0;
   },
 
   findByEnvironmentIdsWithLatestVersionPaginated: async (
@@ -218,14 +218,14 @@ export const workflowRepository = {
       );
     }
 
-    const countResult = await countQuery.executeTakeFirstOrThrow();
+    const countResult = await countQuery.executeTakeFirst();
 
     const workflowIds = workflows.map((w) => w.id);
 
     if (workflowIds.length === 0) {
       return {
         items: [],
-        total: Number(countResult.count),
+        total: countResult ? Number(countResult.count) : 0,
       };
     }
 
@@ -263,7 +263,7 @@ export const workflowRepository = {
 
     return {
       items,
-      total: Number(countResult.count),
+      total: countResult ? Number(countResult.count) : 0,
     };
   },
 };

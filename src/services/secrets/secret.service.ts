@@ -150,10 +150,12 @@ export const secretService = {
   listByProvider: async (
     providerId: string,
     actor: z.infer<typeof ActorSchema>,
+    environments: EnvironmentModel[],
   ) => {
     return await secretReferenceRepository.findByProviderAndActor(
       providerId,
       actor.id,
+      environments.map((env) => env.id),
     );
   },
 

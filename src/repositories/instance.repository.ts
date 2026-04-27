@@ -135,9 +135,9 @@ export const instanceRepository = {
         .where("instance.is_deleted", "=", false)
         .where("workflow_version.is_deleted", "=", false)
         .where("workflow.is_deleted", "=", false)
-        .executeTakeFirstOrThrow();
+        .executeTakeFirst();
 
-      return Number(result.count);
+      return result ? Number(result.count) : 0;
     } catch (err) {
       throw new RepositoryError("Count instances by environment failed", err);
     }
@@ -167,9 +167,9 @@ export const instanceRepository = {
         .where("workflow_version.is_deleted", "=", false)
         .where("workflow.is_deleted", "=", false)
         .where("instance.status", "=", status)
-        .executeTakeFirstOrThrow();
+        .executeTakeFirst();
 
-      return Number(result.count);
+      return result ? Number(result.count) : 0;
     } catch (err) {
       throw new RepositoryError(
         "Count instances by environment and status failed",

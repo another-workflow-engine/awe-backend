@@ -176,7 +176,7 @@ export const nodeSchemaService = {
       label: node.name,
       description: node.description,
       position:
-        node.x_coordinate && node.y_coordinate
+        node.x_coordinate !== null && node.y_coordinate !== null
           ? { x: node.x_coordinate, y: node.y_coordinate }
           : null,
       type: node.type,

@@ -33,8 +33,6 @@ export const workflowVersionController = {
         environmentUtils.getEnvironmentIds(req.context.environments),
       );
 
-    const environment = "production";
-
     const versions = items.map((version) => ({
       id: version.id,
       workflowId: version.workflow_id,
@@ -42,7 +40,9 @@ export const workflowVersionController = {
       status: version.status,
       description: version.description,
       publishedAt: version.published_on,
-      environment,
+      environment: req.context.environments.find(
+        (env) => env.id === workflow.environment_id,
+      )?.type,
       createdAt: version.created_on,
       updatedAt: version.modified_on,
     }));
@@ -101,8 +101,6 @@ export const workflowVersionController = {
     const { workflow, workflowVersion, nodes, edges, startVariables } =
       await workflowVersionService.getDetail(data, req.context.environments);
 
-    const environment = "production";
-
     return res.status(200).json({
       id: workflowVersion.id,
       workflowId: workflowVersion.workflow_id,
@@ -110,8 +108,10 @@ export const workflowVersionController = {
       status: workflowVersion.status,
       publishedAt: workflowVersion.published_on,
       createdAt: workflowVersion.created_on,
-      modifiedAt: workflowVersion.modified_on,
-      environment,
+      updatedAt: workflowVersion.modified_on,
+      environment: req.context.environments.find(
+        (env) => env.id === workflow.environment_id,
+      )?.type,
       nodes,
       edges,
       startVariables,

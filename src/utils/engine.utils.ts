@@ -1,9 +1,7 @@
-import { Transaction } from "kysely";
-import { db } from "../database.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { instanceService } from "../services/instance.service.js";
 import { taskService } from "../services/task.service.js";
-import type { DB, InstanceStatus } from "../types/database.js";
+import type { InstanceStatus } from "../types/database.js";
 import type { ExecutorResult, QueueJobData } from "../types/engine.js";
 import { InstanceControlSignals, TaskStatuses } from "../types/enums.js";
 import type {
@@ -18,6 +16,7 @@ import { nodeService } from "../services/node.services.js";
 import { getLogger } from "../logger.js";
 import { statusUtils } from "./status.utils.js";
 import { taskCompletionHandler } from "./taskCompletion.handler.js";
+import { openTransaction } from "./database.utils.js";
 
 async function dispatchNextNode(params: {
   instance: InstanceModel;
@@ -35,11 +34,13 @@ async function dispatchNextNode(params: {
     throw new DataIntegrityError(`Node not found node id = ${nextNodeId}`);
   }
 
-  return await taskService.create({
-    instance,
-    node: nextNode,
-    transaction,
-  });
+  return (
+    await taskService.create({
+      instance,
+      node: nextNode,
+      transaction,
+    })
+  ).task;
 }
 
 export const engineUtils = {
@@ -76,7 +77,7 @@ export const engineUtils = {
   processControlSignal: async (params: {
     instance: InstanceModel;
     task: TaskModel;
-    transaction: Transaction<DB>;
+    transaction: DbTransaction;
   }): Promise<{ instance: InstanceModel; task: TaskModel }> => {
     const controlHandlers = {
       [InstanceControlSignals.PAUSE]: {
@@ -136,7 +137,7 @@ export const engineUtils = {
   }) => {
     const { instanceId, taskId, message, error } = params;
 
-    await db.transaction().execute(async (transaction) => {
+    await openTransaction(async (transaction) => {
       await taskService.fail(
         instanceId,
         taskId,
@@ -163,13 +164,13 @@ export const engineUtils = {
       instance: InstanceModel,
       task: TaskModel,
       node: NodeModel,
-      transaction: Transaction<DB>,
+      transaction: DbTransaction,
     ) => Promise<T>,
   ): Promise<T> => {
     const { instanceId, nodeId } = jobData;
     getLogger().info({ job: jobData }, "Locking job models");
 
-    return db.transaction().execute(async (transaction) => {
+    return openTransaction(async (transaction) => {
       const [{ instance, task, taskExecution }, node] = await Promise.all([
         instanceService.getLockedInProgressOrPausedRelations(
           instanceId,
@@ -199,62 +200,59 @@ export const engineUtils = {
     executionResult: ExecutorResult;
   }): Promise<void> => {
     const { jobData, executionResult } = params;
-    await db
-      .transaction()
-      .execute(async (transaction) => {
-        let [{ instance, task, taskExecution }, node] = await Promise.all([
-          instanceService.getLockedInProgressOrPausedRelations(
-            jobData.instanceId,
-            transaction,
-          ),
-          nodeService.getByIdOrThrow(jobData.nodeId),
-        ]);
-
-        if (
-          !instance ||
-          !task ||
-          !taskExecution ||
-          taskExecution.id !== executionResult.executionId
-        ) {
-          throw new DataIntegrityError(
-            `Unable to lock data for job data=${jobData}`,
-          );
-        }
-
-        ({ instance, task } = await taskCompletionHandler.complete({
-          instance,
-          task,
-          taskExecution,
-          node,
-          executionResult,
+    await openTransaction(async (transaction) => {
+      let [{ instance, task, taskExecution }, node] = await Promise.all([
+        instanceService.getLockedInProgressOrPausedRelations(
+          jobData.instanceId,
           transaction,
-        }));
+        ),
+        nodeService.getByIdOrThrow(jobData.nodeId),
+      ]);
 
-        ({ instance, task } = await engineUtils.processControlSignal({
-          instance,
-          task,
+      if (
+        !instance ||
+        !task ||
+        !taskExecution ||
+        taskExecution.id !== executionResult.executionId
+      ) {
+        throw new DataIntegrityError(
+          `Unable to lock data for job data=${jobData}`,
+        );
+      }
+
+      ({ instance, task } = await taskCompletionHandler.complete({
+        instance,
+        task,
+        taskExecution,
+        node,
+        executionResult,
+        transaction,
+      }));
+
+      ({ instance, task } = await engineUtils.processControlSignal({
+        instance,
+        task,
+        transaction,
+      }));
+
+      if (!statusUtils.instanceCanExecute(instance)) {
+        return;
+      }
+
+      await dispatchNextNode({ instance, transaction }).catch(async () => {
+        await instanceService.fail(
+          instance.id,
+          { message: "Task creation failed" },
           transaction,
-        }));
-
-        if (!statusUtils.instanceCanExecute(instance)) {
-          return;
-        }
-
-        await dispatchNextNode({ instance, transaction }).catch(async () => {
-          await instanceService.fail(
-            instance.id,
-            { message: "Task creation failed" },
-            transaction,
-          );
-        });
-      })
-      .catch(async (error) => {
-        await engineUtils.onTaskFailure({
-          instanceId: jobData.instanceId,
-          taskId: jobData.taskId,
-          message: "Failed to update instance",
-          error,
-        });
+        );
       });
+    }).catch(async (error) => {
+      await engineUtils.onTaskFailure({
+        instanceId: jobData.instanceId,
+        taskId: jobData.taskId,
+        message: "Failed to update instance",
+        error,
+      });
+    });
   },
 };

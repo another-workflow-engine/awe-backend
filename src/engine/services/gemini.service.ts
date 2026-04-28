@@ -8,7 +8,7 @@ import {
 import { converterUtils } from "../../utils/converter.utils.js";
 
 export class GeminiService implements ScriptExecutionService {
-  private googleGenAI = new GoogleGenAI({ apiKey: Config.GEMINI_API_KEY });
+  private googleGenAI!: GoogleGenAI;
 
   private buildGeminiPrompt(
     sourceCode: string,
@@ -42,15 +42,27 @@ RULES:
   }
 
   async executeScript(
+    credentials: Record<string, string>,
     sourceCode: string,
     entryFunctionName: string,
     parameters: unknown[],
+    _signal?: AbortSignal,
   ): Promise<ScriptExecutionResult> {
     const prompt = this.buildGeminiPrompt(
       sourceCode,
       entryFunctionName,
       parameters,
     );
+
+    let apiKey = credentials.apiKey;
+
+    if (!apiKey) {
+      apiKey = Config.GEMINI_API_KEY;
+    }    
+
+    this.googleGenAI = new GoogleGenAI({
+      apiKey,
+    });
 
     const response = await this.googleGenAI.models.generateContent({
       model: "gemini-3-flash-preview",

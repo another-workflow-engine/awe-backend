@@ -1,10 +1,10 @@
 import argon2 from "argon2";
-import { db } from "../database.js";
 import { ActorTypes } from "../types/enums.js";
 import { actorRepository } from "../repositories/actor.repository.js";
 import { organizationRepository } from "../repositories/organization.repository.js";
 import type { EnvironmentModel, OrganizationModel } from "../types/models.js";
 import { environmentService } from "./environment.services.js";
+import { openTransaction } from "../utils/database.utils.js";
 
 export const organizationService = {
   register: async (data: {
@@ -15,7 +15,7 @@ export const organizationService = {
     organization: OrganizationModel;
     environments: EnvironmentModel[];
   }> => {
-    return await db.transaction().execute(async (transaction) => {
+    return await openTransaction(async (transaction) => {
       const actor = await actorRepository.insert(
         { type: ActorTypes.ORGANIZATION_ACCOUNT },
         transaction,

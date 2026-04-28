@@ -1,6 +1,6 @@
 import { Executor } from "./Executor.js";
 import { contextUtils } from "../../utils/context.utils.js";
-import { NodeTypes } from "../../types/enums.js";
+import { FeelDataType, NodeTypes } from "../../types/enums.js";
 import type {
   ExecutorResult,
   EvaluatedContext,
@@ -17,7 +17,10 @@ const executionServiceRegistry: Record<string, ScriptExecutionService> = {
 };
 
 export class ScriptNodeExecutor extends Executor<typeof NodeTypes.SCRIPT> {
-  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
+  async execute(
+    evaluatedContext: EvaluatedContext,
+    signal?: AbortSignal,
+  ): Promise<ExecutorResult> {
     const parameters = (this.configuration.parameterMap ?? []).map((dataMap) =>
       contextUtils.getFeelEvaluatedValue(
         dataMap.valueExpression,
@@ -25,7 +28,7 @@ export class ScriptNodeExecutor extends Executor<typeof NodeTypes.SCRIPT> {
       ),
     );
 
-    const executionServiceType = this.configuration.executionService;
+    const executionServiceType = this.configuration.serviceType;
 
     const service = executionServiceRegistry[executionServiceType];
     if (service === undefined) {
@@ -34,10 +37,28 @@ export class ScriptNodeExecutor extends Executor<typeof NodeTypes.SCRIPT> {
       );
     }
 
+    const credentials: Record<string, string> = {};
+    if (this.configuration.credentials) {
+      for (const [key, valueExpression] of Object.entries(
+        this.configuration.credentials,
+      )) {
+        if (typeof valueExpression === "string" && valueExpression.trim()) {
+          const value = contextUtils.getFeelEvaluatedValue(
+            valueExpression,
+            evaluatedContext,
+            FeelDataType.STRING,
+          );
+          credentials[key] = value;
+        }
+      }
+    }
+
     const result = await service.executeScript(
+      credentials,
       this.configuration.sourceCode,
       this.configuration.entryFunctionName,
       parameters,
+      signal,
     );
 
     if (!result.success) {

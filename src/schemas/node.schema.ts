@@ -4,6 +4,8 @@ import {
   FeelDataType,
   NodeTypes,
   TimeUnit,
+  Runtime,
+  ScriptExecutionService,
 } from "../types/enums.js";
 import { HttpMethodSchema } from "../types/http.js";
 
@@ -22,26 +24,28 @@ export const FetchableSchema = z.object({
   urlExpression: z.string(),
 });
 
-export const StartNodeDataMapSchema = z.object({
-  jsonPath: z.string(),
-  dataType: FeelDataTypeSchema,
-  contextVariableName: z.string(),
-  fetchableId: z.string().optional(),
-  required: z.boolean().optional().default(true),
-  defaultValue: z.unknown().optional(),
-}).superRefine((value, ctx) => {
-  if (value.fetchableId) {
-    return;
-  }
+export const StartNodeDataMapSchema = z
+  .object({
+    jsonPath: z.string(),
+    dataType: FeelDataTypeSchema,
+    contextVariableName: z.string(),
+    fetchableId: z.string().optional(),
+    required: z.boolean().default(true),
+    defaultValue: z.unknown().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.fetchableId) {
+      return;
+    }
 
-  if (value.required === false && value.defaultValue === undefined) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["defaultValue"],
-      message: "Optional start input must define defaultValue",
-    });
-  }
-});
+    if (value.required === false && value.defaultValue === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["defaultValue"],
+        message: "Optional start input must define defaultValue",
+      });
+    }
+  });
 
 export const SecretDataMapSchema = z.object({
   secretId: z.string(),
@@ -49,19 +53,21 @@ export const SecretDataMapSchema = z.object({
 });
 
 export const StartNodeConfigurationSchema = z.object({
-  inputDataMap: z.array(StartNodeDataMapSchema),
-  fetchables: z.array(FetchableSchema),
+  inputDataMap: z.array(StartNodeDataMapSchema).default([]),
+  fetchables: z.array(FetchableSchema).default([]),
   secretDataMap: z.array(SecretDataMapSchema).default([]),
 });
 
 export const EndNodeConfigurationSchema = z.object({
-  success: z.boolean(),
-  resultMap: z.array(
-    z.object({
-      variableName: z.string(),
-      valueExpression: z.string(),
-    }),
-  ),
+  success: z.boolean().default(true),
+  resultMap: z
+    .array(
+      z.object({
+        variableName: z.string(),
+        valueExpression: z.string(),
+      }),
+    )
+    .default([]),
   message: z.string().optional(),
 });
 
@@ -69,7 +75,7 @@ export const UserNodeConfigurationSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   assignee: z.string().optional(),
-  maxAttempts: z.number().optional().default(1),
+  maxAttempts: z.number().default(1),
 
   requestMap: z.array(
     z.object({
@@ -79,42 +85,44 @@ export const UserNodeConfigurationSchema = z.object({
   ),
 
   responseMap: z.array(
-    z.object({
-      fieldId: z.string(),
-      label: z.string(),
-      contextVariableName: z.string(),
-      type: FeelDataTypeSchema,
-      required: z.boolean().optional().default(true),
-      defaultValue: z.unknown().optional(),
+    z
+      .object({
+        fieldId: z.string(),
+        label: z.string(),
+        contextVariableName: z.string(),
+        type: FeelDataTypeSchema,
+        required: z.boolean().default(true),
+        defaultValue: z.unknown().optional(),
 
-      uiType: z
-        .enum([
-          "text",
-          "textarea",
-          "number",
-          "dropdown",
-          "checkbox",
-          "date-picker",
-        ])
-        .optional(),
+        uiType: z
+          .enum([
+            "text",
+            "textarea",
+            "number",
+            "dropdown",
+            "checkbox",
+            "date-picker",
+          ])
+          .optional(),
 
-      options: z
-        .array(
-          z.object({
-            label: z.string().optional(),
-            valueExpression: z.string(),
-          }),
-        )
-        .optional(),
-    }).superRefine((value, ctx) => {
-      if (value.required === false && value.defaultValue === undefined) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["defaultValue"],
-          message: "Optional user input field must define defaultValue",
-        });
-      }
-    }),
+        options: z
+          .array(
+            z.object({
+              label: z.string().optional(),
+              valueExpression: z.string(),
+            }),
+          )
+          .optional(),
+      })
+      .superRefine((value, ctx) => {
+        if (value.required === false && value.defaultValue === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["defaultValue"],
+            message: "Optional user input field must define defaultValue",
+          });
+        }
+      }),
   ),
 });
 
@@ -132,29 +140,6 @@ export const OnErrorOutputMapSchema = z.discriminatedUnion("fromType", [
   }),
 ]);
 
-export const OnErrorConfigurationSchema = z
-  .object({
-    mode: z.enum(["terminate", "continue"]).optional().default("terminate"),
-    outputMap: z.array(OnErrorOutputMapSchema).optional().default([]),
-  })
-  .superRefine((value, ctx) => {
-    if (value.mode === "continue" && value.outputMap.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["outputMap"],
-        message: "onError outputMap must be configured when mode is continue",
-      });
-    }
-
-    if (value.mode === "terminate" && value.outputMap.length > 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["outputMap"],
-        message: "onError outputMap is only allowed when mode is continue",
-      });
-    }
-  });
-
 const ServiceBodySchema = z.object({
   jsonPath: z.string(),
   valueExpression: z.string(),
@@ -168,56 +153,115 @@ const ServiceResponseSchema = z.object({
 
 export const BackoffSchema = z.object({
   type: z.enum(BackoffType),
-  delay: z.number().positive().optional().default(1000),
-  unit: z.enum(TimeUnit).optional().default(TimeUnit.MILLISECOND),
+  delay: z.number().positive().default(1000),
+  unit: z.enum(TimeUnit).default(TimeUnit.MILLISECOND),
 });
 
-export const ServiceNodeConfigurationSchema = z.object({
+export const TimeoutSchema = z.object({
+  delay: z.number().positive(),
+  unit: z.enum(TimeUnit).default(TimeUnit.MILLISECOND),
+});
+
+function normalizeLegacyTimeout(config: unknown): unknown {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return config;
+  }
+
+  const normalizedConfig = {
+    ...(config as Record<string, unknown>),
+  };
+
+  if (
+    normalizedConfig.timeout === undefined &&
+    typeof normalizedConfig.timeoutMs === "number" &&
+    Number.isFinite(normalizedConfig.timeoutMs) &&
+    normalizedConfig.timeoutMs > 0
+  ) {
+    normalizedConfig.timeout = {
+      delay: normalizedConfig.timeoutMs,
+      unit: TimeUnit.MILLISECOND,
+    };
+  }
+
+  return normalizedConfig;
+}
+
+function withLegacyTimeoutCompatibility<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess(normalizeLegacyTimeout, schema);
+}
+
+const ServiceNodeConfigurationBaseSchema = z.object({
   method: HttpMethodSchema,
   urlExpression: z.string(),
 
-  maxAttempts: z.number().optional().default(1),
-  timeoutMs: z.number().int().positive().optional(),
+  maxAttempts: z.number().default(1),
+  timeout: TimeoutSchema.optional(),
   backoff: BackoffSchema,
-  onError: OnErrorConfigurationSchema.optional().default({
-    mode: "terminate",
-    outputMap: [],
-  }),
-
   body: z.array(ServiceBodySchema).optional(),
   headers: z.array(HttpHeaderSchema).optional(),
 
   responseMap: z.array(ServiceResponseSchema),
 });
 
-export const ScriptNodeConfigurationSchema = z.object({
-  runtime: z.literal("python3"),
-  maxAttempts: z.number().optional().default(1),
-  timeoutMs: z.number().int().positive().optional(),
-  backoff: BackoffSchema,
-  onError: OnErrorConfigurationSchema.optional().default({
-    mode: "terminate",
-    outputMap: [],
-  }),
-  sourceCode: z.string(),
-  entryFunctionName: z.string(),
-  executionService: z.enum(["jdoodle", "gemini"]).optional().default("jdoodle"),
+export const ServiceNodeConfigurationSchema = withLegacyTimeoutCompatibility(
+  ServiceNodeConfigurationBaseSchema,
+);
 
-  parameterMap: z.array(
-    z.object({
-      name: z.string(),
-      valueExpression: z.string(),
-    }),
-  ),
+export const JdoodleCredentialsSchema = z
+  .object({
+    clientId: z.string(),
+    clientSecret: z.string(),
+  })
+  .nullable()
+  .optional();
 
-  responseMap: z.array(
+export const GeminiCredentialsSchema = z
+  .object({
+    apiKey: z.string(),
+  })
+  .nullable()
+  .optional();
+
+const ScriptNodeConfigurationBaseSchema = z
+  .discriminatedUnion("serviceType", [
     z.object({
-      jsonPath: z.string(),
-      type: FeelDataTypeSchema,
-      contextVariableName: z.string(),
+      serviceType: z.literal(ScriptExecutionService.JDOODLE),
+      credentials: JdoodleCredentialsSchema,
     }),
-  ),
-});
+    z.object({
+      serviceType: z.literal(ScriptExecutionService.GEMINI),
+      credentials: GeminiCredentialsSchema,
+    }),
+  ])
+  .and(
+    z.object({
+      runtime: z.enum(Runtime).default(Runtime.PYTHON_3),
+      maxAttempts: z.number().default(1),
+      timeout: TimeoutSchema.optional(),
+      backoff: BackoffSchema,
+      sourceCode: z.string(),
+      entryFunctionName: z.string(),
+
+      parameterMap: z.array(
+        z.object({
+          name: z.string(),
+          valueExpression: z.string(),
+        }),
+      ),
+
+      responseMap: z.array(
+        z.object({
+          jsonPath: z.string(),
+          type: FeelDataTypeSchema,
+          contextVariableName: z.string(),
+        }),
+      ),
+    }),
+  );
+
+export const ScriptNodeConfigurationSchema = withLegacyTimeoutCompatibility(
+  ScriptNodeConfigurationBaseSchema,
+);
 
 const EmailRecipientSchema = z.object({
   valueExpression: z.string(),
@@ -229,14 +273,14 @@ export const EmailNodeConfigurationSchema = z.object({
   authUserExpression: z.string(),
   authPassExpression: z.string(),
   to: z.array(EmailRecipientSchema),
-  cc: z.array(EmailRecipientSchema).optional().default([]),
-  bcc: z.array(EmailRecipientSchema).optional().default([]),
+  cc: z.array(EmailRecipientSchema).default([]),
+  bcc: z.array(EmailRecipientSchema).default([]),
   subjectExpression: z.string(),
   bodyExpression: z.string(),
-  maxAttempts: z.number().optional().default(1),
+  maxAttempts: z.number().default(1),
   backoff: BackoffSchema,
-  failurePolicy: z.enum(["fail", "continue"]).optional().default("fail"),
-  responseMap: z.array(ServiceResponseSchema).optional().default([]),
+  failurePolicy: z.enum(["fail", "continue"]).default("fail"),
+  responseMap: z.array(ServiceResponseSchema).default([]),
 });
 
 export const RuleSchema = z.object({

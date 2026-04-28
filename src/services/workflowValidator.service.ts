@@ -335,20 +335,25 @@ function validateDefaultValue(
   }
 }
 
-function validateTimeoutMs(
-  timeoutMs: number | undefined,
+function validateTimeout(
+  timeout:
+    | {
+        delay: number;
+        unit?: string;
+      }
+    | undefined,
   nodeId: string,
   nodeLabel: string,
   errors: ValidationError[],
 ): void {
-  if (timeoutMs === undefined) {
+  if (!timeout) {
     return;
   }
 
-  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+  if (!Number.isFinite(timeout.delay) || timeout.delay <= 0) {
     errors.push({
       code: ValidationErrorCode.INVALID_TIMEOUT_CONFIGURATION,
-      message: `${nodeLabel} timeoutMs must be a positive integer`,
+      message: `${nodeLabel} timeout.delay must be a positive number`,
       nodeId,
     });
   }
@@ -683,7 +688,7 @@ function validateServiceNode(
     node.configuration,
   );
 
-  validateTimeoutMs(config.timeoutMs, node.client_id, "Service task", errors);
+  validateTimeout(config.timeout, node.client_id, "Service task", errors);
 
   const hasUrl = validateRequired(
     config.urlExpression,
@@ -746,63 +751,6 @@ function validateServiceNode(
 
     if (hasContextName) {
       assignedOutputs.add(entry.contextVariableName.trim());
-    }
-  });
-
-  if (config.onError.mode === "continue" && config.onError.outputMap.length === 0) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_ON_ERROR_CONFIGURATION,
-      message: "Service task onError outputMap is required when mode is continue",
-      nodeId: node.client_id,
-    });
-  }
-
-  if (config.onError.mode === "terminate" && config.onError.outputMap.length > 0) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_ON_ERROR_CONFIGURATION,
-      message: "Service task onError outputMap is only supported when mode is continue",
-      nodeId: node.client_id,
-    });
-  }
-
-  config.onError.outputMap.forEach((entry, index) => {
-    const hasContextName = validateRequired(
-      entry.contextVariableName,
-      node.client_id,
-      `Service task onError map ${index + 1}: context variable name must not be empty`,
-      errors,
-    );
-
-    if (hasContextName) {
-      assignedOutputs.add(entry.contextVariableName.trim());
-    }
-
-    if (entry.fromType === "jsonPath") {
-      validateJsonPath(
-        entry.jsonPath,
-        node.client_id,
-        `Service task onError map ${index + 1}: jsonPath is invalid`,
-        errors,
-      );
-      return;
-    }
-
-    const hasValue = validateRequired(
-      entry.valueExpression,
-      node.client_id,
-      `Service task onError map ${index + 1}: value expression must not be empty`,
-      errors,
-    );
-
-    if (hasValue) {
-      validateExpression(
-        entry.valueExpression,
-        node.client_id,
-        `Service task onError map ${index + 1}: invalid value expression`,
-        errors,
-        validateFeelExpression,
-        inputVariables,
-      );
     }
   });
 
@@ -1015,7 +963,7 @@ function validateScriptNode(
     node.configuration,
   );
 
-  validateTimeoutMs(config.timeoutMs, node.client_id, "Script task", errors);
+  validateTimeout(config.timeout, node.client_id, "Script task", errors);
 
   const hasSourceCode = validateRequired(
     config.sourceCode,
@@ -1136,63 +1084,6 @@ function validateScriptNode(
 
     if (hasContextName) {
       assignedOutputs.add(entry.contextVariableName.trim());
-    }
-  });
-
-  if (config.onError.mode === "continue" && config.onError.outputMap.length === 0) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_ON_ERROR_CONFIGURATION,
-      message: "Script task onError outputMap is required when mode is continue",
-      nodeId: node.client_id,
-    });
-  }
-
-  if (config.onError.mode === "terminate" && config.onError.outputMap.length > 0) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_ON_ERROR_CONFIGURATION,
-      message: "Script task onError outputMap is only supported when mode is continue",
-      nodeId: node.client_id,
-    });
-  }
-
-  config.onError.outputMap.forEach((entry, index) => {
-    const hasContextName = validateRequired(
-      entry.contextVariableName,
-      node.client_id,
-      `Script task onError map ${index + 1}: context variable name must not be empty`,
-      errors,
-    );
-
-    if (hasContextName) {
-      assignedOutputs.add(entry.contextVariableName.trim());
-    }
-
-    if (entry.fromType === "jsonPath") {
-      validateJsonPath(
-        entry.jsonPath,
-        node.client_id,
-        `Script task onError map ${index + 1}: jsonPath is invalid`,
-        errors,
-      );
-      return;
-    }
-
-    const hasValue = validateRequired(
-      entry.valueExpression,
-      node.client_id,
-      `Script task onError map ${index + 1}: value expression must not be empty`,
-      errors,
-    );
-
-    if (hasValue) {
-      validateExpression(
-        entry.valueExpression,
-        node.client_id,
-        `Script task onError map ${index + 1}: invalid value expression`,
-        errors,
-        validateFeelExpression,
-        inputVariables,
-      );
     }
   });
 

@@ -87,11 +87,6 @@ function getUserSchema(config: UserNodeConfiguration): SchemaResult {
 }
 
 function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
-  const onErrorOutputVariables =
-    config.onError.mode === "continue"
-      ? config.onError.outputMap.map((m) => m.contextVariableName)
-      : [];
-
   return buildSchema({
     expressions: [
       config.urlExpression,
@@ -99,26 +94,32 @@ function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
 
       ...(config.headers?.map((h) => h.valueExpression) ?? []),
     ],
-    outputVariables: [
-      ...config.responseMap.map((r) => r.contextVariableName),
-      ...onErrorOutputVariables,
-    ],
+    outputVariables: config.responseMap.map((r) => r.contextVariableName),
     includeSecrets: true,
   });
 }
 
 function getScriptSchema(config: ScriptNodeConfiguration): SchemaResult {
-  const onErrorOutputVariables =
-    config.onError.mode === "continue"
-      ? config.onError.outputMap.map((m) => m.contextVariableName)
-      : [];
+  const expressions = [...config.parameterMap.map((p) => p.valueExpression)];
+
+  if (config.credentials) {
+    if ("clientId" in config.credentials && config.credentials.clientId) {
+      expressions.push(config.credentials.clientId);
+    }
+    if (
+      "clientSecret" in config.credentials &&
+      config.credentials.clientSecret
+    ) {
+      expressions.push(config.credentials.clientSecret);
+    }
+    if ("apiKey" in config.credentials && config.credentials.apiKey) {
+      expressions.push(config.credentials.apiKey);
+    }
+  }
 
   return buildSchema({
-    expressions: config.parameterMap.map((p) => p.valueExpression),
-    outputVariables: [
-      ...config.responseMap.map((r) => r.contextVariableName),
-      ...onErrorOutputVariables,
-    ],
+    expressions,
+    outputVariables: config.responseMap.map((r) => r.contextVariableName),
     includeSecrets: true,
   });
 }
@@ -175,7 +176,7 @@ export const nodeSchemaService = {
       label: node.name,
       description: node.description,
       position:
-        node.x_coordinate && node.y_coordinate
+        node.x_coordinate !== null && node.y_coordinate !== null
           ? { x: node.x_coordinate, y: node.y_coordinate }
           : null,
       type: node.type,

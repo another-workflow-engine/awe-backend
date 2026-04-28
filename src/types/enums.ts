@@ -108,3 +108,18 @@ export const SecretProviderTypes = {
   DEFAULT: "default",
   INFISICAL: "infisical",
 } as const satisfies Record<string, SecretProviderType>;
+
+export enum VersionIncrementType {
+  MAJOR = "major",
+  MINOR = "minor",
+  PATCH = "patch",
+}
+
+export enum Runtime {
+  PYTHON_3 = "python3",
+}
+
+export enum ScriptExecutionService {
+  JDOODLE = "jdoodle",
+  GEMINI = "gemini",
+}

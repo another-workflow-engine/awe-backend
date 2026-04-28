@@ -1,20 +1,17 @@
 import { NotFoundError } from "../errors/NotFoundError.js";
-import { RepositoryError } from "../errors/RepositoryError.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
-import type { ActorModel } from "../types/models.js";
+import type { ActorModel, EnvironmentModel } from "../types/models.js";
 import { randomUUID } from "crypto";
+import type z from "zod";
+import type {
+  WorkflowGroupCreateSchema,
+  WorkflowGroupUpdateSchema,
+} from "../schemas/workflow.schema.js";
 
-export type CreateWorkflowInput = {
-  name: string;
-  description: string | null;
-};
+type CreateWorkflowInput = z.infer<typeof WorkflowGroupCreateSchema>;
 
-export type UpdateWorkflowInput = {
-  workflowId: string;
-  name?: string | undefined;
-  description?: string | null | undefined;
-};
+type UpdateWorkflowInput = z.infer<typeof WorkflowGroupUpdateSchema>;
 
 export type WorkflowListQuery = {
   search?: string;
@@ -22,12 +19,6 @@ export type WorkflowListQuery = {
 };
 
 export const workflowService = {
-  getAll: async (environmentIds: string[]) => {
-    return await workflowRepository.findByEnvironmentIdsWithLatestVersion(
-      environmentIds,
-    );
-  },
-
   getAllPaginated: async (
     environmentIds: string[],
     limit: number,
@@ -48,7 +39,6 @@ export const workflowService = {
       workflowRepository.findByIdAndEnvironmentIds(workflowId, environmentIds),
       workflowVersionRepository.findByWorkflowId(workflowId),
     ]);
-
     if (!workflow) {
       throw new NotFoundError("Workflow");
     }
@@ -59,8 +49,15 @@ export const workflowService = {
   create: async (
     data: CreateWorkflowInput,
     actor: ActorModel,
-    environmentId: string,
+    environments: EnvironmentModel[],
   ) => {
+    const selectedEnvironment = environments.find(
+      (env) => env.type === data.environment,
+    );
+    if (!selectedEnvironment) {
+      throw new NotFoundError("Environment");
+    }
+
     const workflowId = randomUUID();
 
     return await workflowRepository.insert({
@@ -68,7 +65,7 @@ export const workflowService = {
       name: data.name,
       description: data.description,
       created_by: actor.id,
-      environment_id: environmentId,
+      environment_id: selectedEnvironment.id,
       base_workflow_id: workflowId,
       modified_by: actor.id,
     });
@@ -119,13 +116,5 @@ export const workflowService = {
       deleted_on: new Date(),
       deleted_by: actor.id,
     });
-  },
-
-  getWorkflowName: async (workflowId: string): Promise<string> => {
-    const workflow = await workflowRepository.findById(workflowId);
-    if (!workflow) {
-      throw new RepositoryError("Workflow not found");
-    }
-    return workflow.name;
   },
 };

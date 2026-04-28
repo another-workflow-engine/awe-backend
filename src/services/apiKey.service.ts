@@ -1,91 +1,79 @@
 import Config from "../config.js";
 import { AuthError } from "../errors/AuthError.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { AppError } from "../errors/AppError.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { apiKeyRepository } from "../repositories/apiKey.repository.js";
-import { environmentRepository } from "../repositories/environment.repository.js";
-import { ActorTypes, EnvironmentTypes } from "../types/enums.js";
-import type { ActorModel, OrganizationModel } from "../types/models.js";
+import { ActorTypes } from "../types/enums.js";
 import crypto from "node:crypto";
 import argon2 from "argon2";
-import { db } from "../database.js";
 import { actorRepository } from "../repositories/actor.repository.js";
-import { baseLogger } from "../logger.js";
-import type { ApiKeyModel } from "../types/models.js";
-import type { EnvironmentType } from "../types/database.js";
+import type {
+  ActorModel,
+  ApiKeyModel,
+  EnvironmentModel,
+} from "../types/models.js";
 import type { RequestContext } from "../types/auth.js";
+import type z from "zod";
+import type { CreateApiKeySchema } from "../controllers/apiKey.controller.js";
+import { InvalidOperationError } from "../errors/InvalidOperationError.js";
+import { openTransaction } from "../utils/database.utils.js";
+
+type CreateApiKey = z.infer<typeof CreateApiKeySchema>;
 
 export const apiKeyService = {
   getAll: async (
-    requestContext: RequestContext,
-    environments?: EnvironmentType[],
-  ): Promise<Array<ApiKeyModel & { environment: EnvironmentType }>> => {
-    if (requestContext.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+    actor: ActorModel,
+    environments: EnvironmentModel[],
+  ): Promise<ApiKeyModel[]> => {
+    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
 
-    const apiKeys = await apiKeyRepository.findByOrganizationId(
-      requestContext.organization.id,
-    );
-
-    if (!environments || environments.length === 0) {
-      return apiKeys;
+    if (environments.length === 0) {
+      return [];
     }
 
-    const selected = new Set(environments);
-    return apiKeys.filter((apiKey) => selected.has(apiKey.environment));
+    return await apiKeyRepository.findByEnvironmentIds(
+      environments.map((env) => env.id),
+    );
   },
 
   createNew: async (
-    label: string | undefined,
-    environment: EnvironmentType,
-    requestContext: RequestContext,
+    data: CreateApiKey,
+    actor: ActorModel,
+    environments: EnvironmentModel[],
   ): Promise<{
     rawKey: string;
     apiKey: ApiKeyModel;
-    environment: EnvironmentType;
+    environment: EnvironmentModel;
   }> => {
-    if (requestContext.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
 
-    const validTypes = Object.values(EnvironmentTypes);
-    if (!validTypes.includes(environment as (typeof validTypes)[number])) {
-      throw new AppError(
-        `Invalid environment type. Must be one of: ${validTypes.join(", ")}`,
-        400,
-      );
-    }
-
-    const selectedEnvironment = requestContext.environments.find(
-      (e) => e.type === environment,
+    const selectedEnvironment = environments.find(
+      (env) => env.type === data.environment,
     );
 
     if (!selectedEnvironment) {
-      throw new NotFoundError(
-        `Environment '${environment}' not found for this organization`,
-      );
+      throw new NotFoundError(`Environment '${data.environment}'`);
     }
 
-    const existingKeyCount = await apiKeyRepository.countActiveByEnvironmentId(
-      selectedEnvironment.id,
-    );
-    if (existingKeyCount > 0) {
-      throw new AppError(
-        `API key already exists for environment '${environment}'. Revoke the existing key before creating a new one.`,
-        409,
+    if (
+      await apiKeyRepository.doesUnrevokedExistByEnvironmentId(
+        selectedEnvironment.id,
+      )
+    ) {
+      throw new InvalidOperationError(
+        `API key already exists for environment '${data.environment}'. Revoke the existing key before creating a new one.`,
       );
     }
-
-    const resolvedLabel = label?.trim() || `API Key (${environment})`;
 
     const prefix = `${Config.API_KEY_PREFIX}_${crypto.randomBytes(4).toString("hex")}`;
     const secret = crypto.randomBytes(32).toString("hex");
     const rawKey = `${prefix}.${secret}`;
     const secretHash = await argon2.hash(secret);
 
-    return await db.transaction().execute(async (transaction) => {
+    return await openTransaction(async (transaction) => {
       const apiKeyActor = await actorRepository.insert(
         {
           type: ActorTypes.API_KEY_CLIENT,
@@ -97,63 +85,43 @@ export const apiKeyService = {
         {
           actor_id: apiKeyActor.id,
           environment_id: selectedEnvironment.id,
-          label: resolvedLabel,
+          label: data.label,
           key_prefix: prefix,
           key_hash: secretHash,
         },
         transaction,
       );
 
-      return { rawKey, apiKey, environment: selectedEnvironment.type };
+      return { rawKey, apiKey, environment: selectedEnvironment };
     });
   },
 
-  revoke: async (id: string, requestContext: RequestContext) => {
-    if (requestContext.actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
+  revoke: async (
+    id: string,
+    actor: ActorModel,
+    environments: EnvironmentModel[],
+  ): Promise<ApiKeyModel> => {
+    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
       throw new AuthError();
     }
 
-    const apiKey = await apiKeyRepository.findById(
-      id,
-      requestContext.environments.map((env) => env.id),
-    );
+    const apiKey = await apiKeyRepository.findById(id);
 
-    if (!apiKey) {
-      baseLogger.warn(
-        { apiKeyId: id, actorId: requestContext.actor.id },
-        "API key revoke failed: Key not found",
-      );
-      throw new NotFoundError("API key not found");
+    if (
+      !apiKey ||
+      !environments.find((env) => env.id === apiKey.environment_id)
+    ) {
+      throw new NotFoundError("API Key");
     }
 
     if (apiKey.is_revoked) {
-      baseLogger.warn(
-        { apiKeyId: id, environmentId: apiKey.environment_id },
-        "API key revoke failed: Key already revoked",
-      );
-      throw new AppError("API key is already revoked", 400);
+      throw new InvalidOperationError("API key is already revoked");
     }
 
-    const revokedKey = await apiKeyRepository.revokeById(id);
-
-    if (!revokedKey) {
-      baseLogger.error(
-        { apiKeyId: id, environmentId: apiKey.environment_id },
-        "API key revoke failed: Database update returned null",
-      );
-      throw new AppError("Failed to revoke API key", 500);
-    }
-
-    baseLogger.info(
-      {
-        apiKeyId: id,
-        environmentId: apiKey.environment_id,
-        revokedAt: revokedKey.revoked_on,
-      },
-      "API key revoked successfully",
-    );
-
-    return revokedKey;
+    return await apiKeyRepository.updateById(apiKey.id, {
+      is_revoked: true,
+      revoked_on: new Date(),
+    });
   },
 
   getRequestContextOrThrow: async (

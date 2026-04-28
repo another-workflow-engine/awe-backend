@@ -1,19 +1,29 @@
 import type { Request } from "express";
 import {
   PaginationParamsSchema,
-  calculateOffset,
-  calculatePagination,
+  type PaginationMetadata,
 } from "../schemas/pagination.schema.js";
-
-export type PaginatedResult<T> = {
-  items: T[];
-  total: number;
-};
 
 export type ParsedPagination = {
   page: number;
   limit: number;
   offset: number;
+};
+
+export const calculatePagination = (
+  total: number,
+  page: number,
+  limit: number,
+): PaginationMetadata => {
+  const normalizedTotal = Number(total);
+  const safeTotal = Number.isFinite(normalizedTotal) ? normalizedTotal : 0;
+
+  return {
+    total: safeTotal,
+    page,
+    limit,
+    totalPages: Math.ceil(safeTotal / limit),
+  };
 };
 
 export const parsePaginationFromRequest = (req: Request): ParsedPagination => {
@@ -22,7 +32,7 @@ export const parsePaginationFromRequest = (req: Request): ParsedPagination => {
   return {
     page,
     limit,
-    offset: calculateOffset(page, limit),
+    offset: (page - 1) * limit,
   };
 };
 
@@ -38,4 +48,3 @@ export const buildPaginatedResponse = <T>(
     pagination: calculatePagination(total, page, limit),
   };
 };
-

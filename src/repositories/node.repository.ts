@@ -1,15 +1,15 @@
-import type { Insertable, Transaction } from "kysely";
-import type { DB, Node, NodeType } from "../types/database.js";
+import type { Insertable } from "kysely";
+import type { Node, NodeType } from "../types/database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { db } from "../database.js";
-import type { NodeModel } from "../types/models.js";
+import type { DbTransaction, NodeModel } from "../types/models.js";
 
 export type NewNode = Insertable<Node>;
 
 export const nodeRepository = {
   findById: async (
     id: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<NodeModel | undefined> => {
     return await (transaction ?? db)
       .selectFrom("node")
@@ -21,7 +21,7 @@ export const nodeRepository = {
 
   findByIds: async (
     ids: string[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<NodeModel[]> => {
     if (ids.length === 0) return [];
 
@@ -35,7 +35,7 @@ export const nodeRepository = {
 
   findByWorkflowVersionId: async (
     id: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<NodeModel[]> => {
     try {
       return await (transaction ?? db)
@@ -55,7 +55,7 @@ export const nodeRepository = {
   findByWorkflowVersionIdAndNodeType: async (
     id: string,
     nodeType: NodeType,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<NodeModel[]> => {
     return await (transaction ?? db)
       .selectFrom("node")
@@ -68,7 +68,7 @@ export const nodeRepository = {
 
   insert: async (
     data: NewNode,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<NodeModel> => {
     try {
       return await (transaction ?? db)
@@ -83,7 +83,7 @@ export const nodeRepository = {
 
   insertMany: async (
     data: NewNode[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<NodeModel[]> => {
     try {
       return await (transaction ?? db)
@@ -98,7 +98,7 @@ export const nodeRepository = {
 
   deleteByWorkflowVersionId: async (
     workflowVersionId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<void> => {
     try {
       await (transaction ?? db)

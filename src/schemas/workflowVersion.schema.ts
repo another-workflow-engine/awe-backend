@@ -1,14 +1,17 @@
 import { z } from "zod";
 import { ActorSchema } from "./actor.schema.js";
 import { NodeSchema, EdgeSchema } from "./node.schema.js";
-import { EnvironmentTypes, WorkflowVersionStatuses } from "../types/enums.js";
+import {
+  EnvironmentTypes,
+  VersionIncrementType,
+  WorkflowVersionStatuses,
+} from "../types/enums.js";
 
 export const WorkflowVersionCreateSchema = z.object({
   workflowId: z.uuidv4(),
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
-  actor: ActorSchema,
 });
 
 export const WorkflowVersionListSchema = z.object({
@@ -18,35 +21,25 @@ export const WorkflowVersionListSchema = z.object({
 
 export const WorkflowVersionDetailSchema = z.object({
   versionId: z.uuidv4(),
-  actor: ActorSchema,
 });
 
 export const WorkflowVersionUpdateStatusSchema = z.object({
   versionId: z.uuidv4(),
-  actor: ActorSchema,
   status: z.enum([
     WorkflowVersionStatuses.PUBLISHED,
     WorkflowVersionStatuses.ACTIVE,
   ]),
+  incrementType: z
+    .enum(VersionIncrementType)
+    .default(VersionIncrementType.MAJOR),
 });
 
 export const WorkflowVersionValidateSchema = z.object({
   versionId: z.uuidv4(),
-  actor: ActorSchema,
-});
-
-export const WorkflowVersionSaveSchema = z.object({
-  workflowId: z.uuidv4(),
-  versionId: z.uuidv4().nullable().optional(),
-  actor: ActorSchema,
-  description: z.string().nullable().optional(),
-  nodes: z.array(NodeSchema),
-  edges: z.array(EdgeSchema),
 });
 
 export const WorkflowVersionUpdateSchema = z.object({
   versionId: z.uuidv4(),
-  actor: ActorSchema,
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
@@ -54,7 +47,6 @@ export const WorkflowVersionUpdateSchema = z.object({
 
 export const WorkflowVersionPromoteSchema = z.object({
   versionId: z.uuidv4(),
-  actor: ActorSchema,
 });
 
 export const WorkflowVersionPromoteResponseSchema = z.object({

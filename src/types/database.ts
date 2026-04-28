@@ -101,7 +101,6 @@ export interface Instance {
   input_variables: Json | null;
   is_deleted: Generated<boolean>;
   output_variables: Json | null;
-  started_on: Timestamp | null;
   status: InstanceStatus;
   workflow_version_id: string;
 }
@@ -232,7 +231,7 @@ export interface WorkflowVersion {
   modified_on: Generated<Timestamp>;
   published_on: Timestamp | null;
   status: WorkflowVersionStatus;
-  version: number;
+  version: string | null;
   workflow_id: string;
 }
 

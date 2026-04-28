@@ -44,7 +44,10 @@ export class ServiceNodeExecutor extends Executor<typeof NodeTypes.SERVICE> {
     current[lastKey] = value;
   }
 
-  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
+  async execute(
+    evaluatedContext: EvaluatedContext,
+    signal?: AbortSignal,
+  ): Promise<ExecutorResult> {
     const url = contextUtils.getFeelEvaluatedValue(
       this.configuration.urlExpression,
       evaluatedContext,
@@ -72,6 +75,7 @@ export class ServiceNodeExecutor extends Executor<typeof NodeTypes.SERVICE> {
     const response = await httpService.request(this.configuration.method, url, {
       headers,
       ...(this.configuration.body !== undefined ? { body: requestBody } : {}),
+      ...(signal ? { signal } : {}),
     });
 
     for (const dataMap of this.configuration.responseMap ?? []) {

@@ -70,4 +70,17 @@ export class InfisicalSecretProvider extends BaseSecretProvider<
       secrets.map((secret) => [secret.secretKey, secret.secretValue]),
     );
   }
+
+  async listAllSecrets(): Promise<string[]> {
+    const client = await this.login();
+
+    const response = await client.secrets().listSecrets({
+      environment: this.configuration.environment,
+      projectId: this.configuration.projectId,
+      secretPath: "",
+    });
+
+    const allkeys = response.secrets.map((secret) => secret.secretKey);
+    return allkeys;
+  }
 }

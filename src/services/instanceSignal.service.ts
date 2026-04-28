@@ -1,4 +1,3 @@
-import { db } from "../database.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
@@ -14,10 +13,19 @@ import {
   NodeTypes,
   TaskStatuses,
 } from "../types/enums.js";
-import type { ActorModel, InstanceModel } from "../types/models.js";
+import type {
+  ActorModel,
+  EnvironmentModel,
+  InstanceModel,
+} from "../types/models.js";
+import { openTransaction } from "../utils/database.utils.js";
 import { engineUtils } from "../utils/engine.utils.js";
+import { environmentUtils } from "../utils/environment.utils.js";
 import { eventLogService } from "./eventLog.service.js";
-import { instanceService } from "./instance.service.js";
+import {
+  getFormattedDetailOutput,
+  instanceService,
+} from "./instance.service.js";
 import { nodeService } from "./node.services.js";
 import { taskExecutionService } from "./taskExecution.service.js";
 
@@ -65,23 +73,24 @@ async function updateInstanceControlSignal(
   controlSignal: InstanceControlSignal,
   actorId: string,
   environmentIds: string[],
-): Promise<InstanceModel> {
-  return await db.transaction().execute(async (transaction) => {
-    let { instance, task, taskExecution } =
-      await instanceService.getLockedInProgressOrPausedRelations(
-        instanceId,
-        environmentIds,
-        transaction,
-      );
-    if (!instance) {
+) {
+  return await openTransaction(async (transaction) => {
+    const [{ instance, task, taskExecution }, instanceModels] =
+      await Promise.all([
+        instanceService.getLockedInProgressOrPausedRelations(
+          instanceId,
+          transaction,
+        ),
+        instanceRepository.findByIdAndEnvironmentIdsWithRelations(
+          instanceId,
+          environmentIds,
+        ),
+      ]);
+    if (!instance || !instanceModels) {
       throw new NotFoundError(`Instance`);
     }
 
     validateInstanceCanBeSignaledOrThrow(instance, controlSignal);
-
-    if (instance.control_signal === controlSignal) {
-      return instance;
-    }
 
     if (!task) {
       throw new DataIntegrityError(
@@ -91,7 +100,7 @@ async function updateInstanceControlSignal(
 
     const node = await nodeService.getByIdOrThrow(instance.current_node_id);
 
-    [instance] = await Promise.all([
+    let [updatedInstance] = await Promise.all([
       instanceRepository.updateById(
         instance.id,
         { control_signal: controlSignal },
@@ -106,11 +115,21 @@ async function updateInstanceControlSignal(
       }),
     ]);
 
-    const canHandleImmediately =
-      task.status === TaskStatuses.PAUSED || node.type === NodeTypes.USER;
+    const workflowData = {
+      workflow: instanceModels.workflow,
+      workflowVersion: instanceModels.workflowVersion,
+      node,
+    };
 
-    if (!canHandleImmediately) {
-      return instance;
+    if (
+      !(task.status === TaskStatuses.PAUSED || node.type === NodeTypes.USER)
+    ) {
+      return getFormattedDetailOutput({
+        ...workflowData,
+        instance: updatedInstance,
+        task,
+        taskExecution,
+      });
     }
 
     if (taskExecution) {
@@ -124,13 +143,17 @@ async function updateInstanceControlSignal(
       );
     }
 
-    ({ instance } = await engineUtils.processControlSignal({
+    const updatedModels = await engineUtils.processControlSignal({
       instance,
       task,
       transaction,
-    }));
+    });
 
-    return instance;
+    return getFormattedDetailOutput({
+      ...workflowData,
+      instance: updatedModels.instance,
+      task: updatedModels.task,
+    });
   });
 }
 
@@ -138,26 +161,26 @@ export const instanceSignalService = {
   signalPause: async (
     instanceId: string,
     actor: ActorModel,
-    environmentIds: string[],
-  ): Promise<InstanceModel> => {
+    environments: EnvironmentModel[],
+  ) => {
     return await updateInstanceControlSignal(
       instanceId,
       InstanceControlSignals.PAUSE,
       actor.id,
-      environmentIds,
+      environmentUtils.getEnvironmentIds(environments),
     );
   },
 
   signalTerminate: async (
     instanceId: string,
     actor: ActorModel,
-    environmentIds: string[],
-  ): Promise<InstanceModel> => {
+    environments: EnvironmentModel[],
+  ) => {
     return await updateInstanceControlSignal(
       instanceId,
       InstanceControlSignals.TERMINATE,
       actor.id,
-      environmentIds,
+      environmentUtils.getEnvironmentIds(environments),
     );
   },
 };

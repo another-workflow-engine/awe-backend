@@ -43,8 +43,10 @@ export type ScriptExecutionResult = z.infer<typeof ScriptExecutionResultSchema>;
 
 export interface ScriptExecutionService {
   executeScript(
+    credentials: Record<string, string>,
     sourceCode: string,
     entryFunctionName: string,
     parameters: unknown[],
+    signal?: AbortSignal,
   ): Promise<ScriptExecutionResult>;
 }

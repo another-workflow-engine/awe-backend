@@ -4,174 +4,87 @@ import {
   InstanceCreateSchema,
   InstanceParamsSchema,
 } from "../schemas/instance.schema.js";
-import { taskExecutionService } from "../services/taskExecution.service.js";
 import {
   buildPaginatedResponse,
   parsePaginationFromRequest,
 } from "../utils/pagination.utils.js";
 import { instanceSignalService } from "../services/instanceSignal.service.js";
-import { z } from "zod";
-
-const RetryInstanceBodySchema = z.object({
-  constants: z.record(z.string(), z.unknown()).default({}),
-});
+import { environmentUtils } from "../utils/environment.utils.js";
 
 export const instanceController = {
   list: async (req: Request, res: Response) => {
     const { page, limit, offset } = parsePaginationFromRequest(req);
 
-    const { items, total } = await instanceService.listPaginated(
-      req.context.actor.id,
-      req.environmentIds,
-      limit,
-      offset,
+    const selectedEnvironments =
+      environmentUtils.parseEnvironmentsFromQueryString(req.query.environment);
+
+    const { items, total } = await instanceService.getPaginated(
+      { limit, offset, selectedEnvironments },
+      req.context.environments,
     );
 
-    return res.json(
-      buildPaginatedResponse("instances", items, total, page, limit),
-    );
+    return res
+      .status(200)
+      .json(buildPaginatedResponse("instances", items, total, page, limit));
   },
 
   create: async (req: Request, res: Response) => {
     const data = InstanceCreateSchema.parse({ ...req.body });
-    const { instance, workflowVersion } = await instanceService.createNew(
+    const instanceDetail = await instanceService.createNew(
       data,
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
-    return res.status(201).json({
-      id: instance.id,
-      inputVariables: instance.input_variables,
-      status: instance.status,
-      startedAt: instance.started_on,
-      autoAdvance: instance.auto_advance,
-      environment: req.environment,
-      workflow: {
-        id: workflowVersion.workflow_id,
-        version: workflowVersion.version,
-      },
-    });
+
+    return res.status(201).json(instanceDetail);
   },
 
   get: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const {
-      instance,
-      workflow_name,
-      workflowVersion,
-      node,
-      task,
-      latestTaskExecution,
-      latestUserTaskExecution,
-    } = await instanceService.get(instanceId, req.environmentIds);
+    const instanceDetail = await instanceService.get(
+      instanceId,
+      req.context.environments,
+    );
 
-    return res.json({
-      id: instance.id,
-      inputVariables: instance.input_variables,
-      currentVariables: instance.current_variables,
-      outputVariables: instance.output_variables,
-      status: instance.status,
-      startedAt: instance.started_on,
-      endedAt: instance.ended_on,
-      autoAdvance: instance.auto_advance,
-      workflow: {
-        name: workflow_name,
-        id: workflowVersion.workflow_id,
-        version: workflowVersion.version,
-      },
-      currentTask:
-        !task || !node
-          ? null
-          : {
-              id: task.id,
-              nodeId: node.client_id,
-              latestTaskExecution: latestTaskExecution?.id ?? null,
-              latestUserTaskExecution: latestUserTaskExecution?.id ?? null,
-              type: node.type,
-              name: node.name,
-              status: task.status,
-              startedAt: task.created_on,
-            },
-    });
+    return res.status(200).json(instanceDetail);
   },
 
   resume: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.resume(
+    const instanceDetail = await instanceService.resume(
       instanceId,
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
-    return res.json({ instance });
-  },
-
-  getExecutionSequence: async (req: Request, res: Response) => {
-    const { instanceId } = InstanceParamsSchema.parse(req.params);
-    await instanceService.assertAccessible(instanceId, req.environmentIds);
-    const sequence =
-      await taskExecutionService.getExecutionSequence(instanceId);
-    return res.json({ success: true, data: sequence });
-  },
-
-  getTaskDetail: async (req: Request, res: Response) => {
-    const { instanceId, taskId } = req.params as {
-      instanceId: string;
-      taskId: string;
-    };
-
-    await instanceService.assertAccessible(instanceId, req.environmentIds);
-    const detail = await taskExecutionService.getTaskDetail(instanceId, taskId);
-    if (!detail) {
-      return res.status(404).json({
-        success: false,
-        message: "Task not found",
-        code: "TASK_NOT_FOUND",
-      });
-    }
-    return res.json({ success: true, data: detail });
+    return res.status(200).json(instanceDetail);
   },
 
   pause: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceSignalService.signalPause(
+    const instanceDetail = await instanceSignalService.signalPause(
       instanceId,
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
-    return res.json({ instance });
+    return res.status(200).json(instanceDetail);
   },
 
   terminate: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceSignalService.signalTerminate(
+    const instanceDetail = await instanceSignalService.signalTerminate(
       instanceId,
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
-    return res.json({ instance });
+    return res.status(200).json(instanceDetail);
   },
 
-  retryInstance: async (req: Request, res: Response) => {
+  getExecutionSequence: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const { constants } = RetryInstanceBodySchema.parse(req.body ?? {});
-    const instance = await instanceService.retry(
+    const sequence = await instanceService.getExecutionSequence(
       instanceId,
-      req.context.actor,
-      req.environmentIds,
-      undefined,
-      constants,
+      req.context.environments,
     );
-    return res.json({ instance });
-  },
-
-  getRetryConstants: async (req: Request, res: Response) => {
-    const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const constants = await instanceService.getRetryConstants(
-      instanceId,
-      req.context.actor,
-      req.environmentIds,
-    );
-
-    return res.json({ constants });
+    return res.status(200).json({ ...sequence });
   },
 };

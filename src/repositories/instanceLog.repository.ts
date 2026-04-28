@@ -1,16 +1,18 @@
-import type { Insertable, Transaction } from "kysely";
-import type { DB, InstanceLog } from "../types/database.js";
+import type { Insertable } from "kysely";
+import type { InstanceLog } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
   InstanceEntityType,
   InstanceEventType,
 } from "../types/database.js";
+import { LogEventTypes } from "../types/enums.js";
+import type { DbTransaction } from "../types/models.js";
 
 export type NewInstanceLog = Insertable<InstanceLog>;
 
 export const instanceLogRepository = {
-  insert: async (data: NewInstanceLog, transaction?: Transaction<DB>) => {
+  insert: async (data: NewInstanceLog, transaction?: DbTransaction) => {
     try {
       return await (transaction ?? db)
         .insertInto("instance_log")
@@ -264,13 +266,21 @@ export const instanceLogRepository = {
         }
       }
 
-      const totalExecutionsCount = taskExecutionLogRows.length;
+      let totalExecutionsCount = 0;
+      for (const log of taskExecutionLogRows) {
+        if (
+          log?.event_type === LogEventTypes.STARTED ||
+          log?.event_type === LogEventTypes.RETRIED
+        ) {
+          totalExecutionsCount++;
+        }
+      }
 
       let durationMs: number | null = null;
-      if (instanceRow.started_on && instanceRow.ended_on) {
+      if (instanceRow.created_on && instanceRow.ended_on) {
         durationMs =
           new Date(instanceRow.ended_on).getTime() -
-          new Date(instanceRow.started_on).getTime();
+          new Date(instanceRow.created_on).getTime();
       }
 
       return {
@@ -281,7 +291,6 @@ export const instanceLogRepository = {
           versionNumber: (instanceRow as any).version_number,
           workflowVersionId: instanceRow.workflow_version_id,
           currentStatus: instanceRow.status,
-          startedAt: instanceRow.started_on,
           completedAt,
           failedAt,
           terminatedAt,

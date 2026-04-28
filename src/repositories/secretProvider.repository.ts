@@ -1,15 +1,15 @@
-import type { Insertable, Transaction } from "kysely";
-import type { DB, SecretProvider } from "../types/database.js";
+import type { Insertable } from "kysely";
+import type { SecretProvider } from "../types/database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { db } from "../database.js";
-import type { SecretProviderModel } from "../types/models.js";
+import type { DbTransaction, SecretProviderModel } from "../types/models.js";
 
 export type NewProvider = Insertable<SecretProvider>;
 
 export const secretProviderRepository = {
   findById: async (
     id: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<SecretProviderModel | undefined> => {
     return await (transaction ?? db)
       .selectFrom("secret_provider")
@@ -42,7 +42,7 @@ export const secretProviderRepository = {
 
   insert: async (
     data: NewProvider,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<SecretProviderModel> => {
     try {
       return await (transaction ?? db)

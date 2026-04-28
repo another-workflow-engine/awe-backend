@@ -11,21 +11,22 @@ import {
   buildPaginatedResponse,
   parsePaginationFromRequest,
 } from "../utils/pagination.utils.js";
-import { getEnvironmentById } from "../utils/environment.utils.js";
 import { z } from "zod";
+import { environmentUtils } from "../utils/environment.utils.js";
 
 const WorkflowListQuerySchema = z.object({
   search: z.string().trim().optional(),
-  createdSort: z.enum(["asc", "desc"]).optional().default("desc"),
+  createdSort: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const workflowGroupController = {
   create: async (req: Request, res: Response) => {
-    const { name, description } = WorkflowGroupCreateSchema.parse(req.body);
+    const data = WorkflowGroupCreateSchema.parse(req.body);
+
     const workflow = await workflowService.create(
-      { name, description },
+      data,
       req.context.actor,
-      req.environmentId,
+      req.context.environments,
     );
 
     return res.status(201).json({
@@ -45,8 +46,9 @@ export const workflowGroupController = {
       createdSort,
       ...(search ? { search } : {}),
     };
+
     const { items, total } = await workflowService.getAllPaginated(
-      req.environmentIds,
+      environmentUtils.getEnvironmentIds(req.context.environments),
       limit,
       offset,
       listQuery,
@@ -54,6 +56,9 @@ export const workflowGroupController = {
 
     const formattedWorkflows = items.map(
       ({ workflow, status, latestVersionId, latestVersionNumber }) => {
+        const environment = req.context.environments.find(
+          (env) => env.id === workflow.environment_id,
+        );
         return {
           id: workflow.id,
           name: workflow.name,
@@ -63,11 +68,7 @@ export const workflowGroupController = {
             status: status,
             latestVersionNumber: latestVersionNumber,
           },
-          environment: getEnvironmentById(
-            req.environmentIds,
-            req.environments,
-            workflow.environment_id,
-          ),
+          environment: environment?.type ?? "unknown",
           createdAt: workflow.created_on,
           updatedAt: workflow.modified_on,
         };
@@ -95,18 +96,17 @@ export const workflowGroupController = {
     const updatedWorkflow = await workflowService.update(
       data,
       req.context.actor,
-      req.environmentIds,
+      environmentUtils.getEnvironmentIds(req.context.environments),
     );
 
     res.status(200).json({
       id: updatedWorkflow.id,
       name: updatedWorkflow.name,
       description: updatedWorkflow.description,
-      environment: getEnvironmentById(
-        req.environmentIds,
-        req.environments,
-        updatedWorkflow.environment_id,
-      ),
+      environment:
+        req.context.environments.find(
+          (env) => env.id === updatedWorkflow.environment_id,
+        )?.type ?? "unknown",
       updatedAt: updatedWorkflow.modified_on,
     });
   },
@@ -115,17 +115,15 @@ export const workflowGroupController = {
     const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
     const { workflow, versions } = await workflowService.get(
       workflowId,
-      req.environmentIds,
+      environmentUtils.getEnvironmentIds(req.context.environments),
     );
     return res.status(200).json({
       id: workflow.id,
       name: workflow.name,
       description: workflow.description,
-      environment: getEnvironmentById(
-        req.environmentIds,
-        req.environments,
-        workflow.environment_id,
-      ),
+      environment:
+        req.context.environments.find((env) => env.id === workflow.environment_id)
+          ?.type ?? "unknown",
       createdAt: workflow.created_on,
       updatedAt: workflow.modified_on,
 
@@ -135,6 +133,7 @@ export const workflowGroupController = {
           description: version.description,
           version: version.version,
           status: version.status,
+          publishedAt: version.published_on ?? null,
           createdAt: version.created_on,
           updatedAt: version.modified_on,
         };
@@ -147,7 +146,7 @@ export const workflowGroupController = {
     await workflowService.delete(
       workflowId,
       req.context.actor,
-      req.environmentIds,
+      environmentUtils.getEnvironmentIds(req.context.environments),
     );
     res.status(200).json({});
   },

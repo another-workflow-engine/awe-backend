@@ -1,24 +1,29 @@
-import {
-  sql,
-  type Insertable,
-  type Transaction,
-  type Updateable,
-} from "kysely";
+import { sql, type Insertable, type Updateable } from "kysely";
 import type {
-  DB,
   WorkflowVersion,
   WorkflowVersionStatus,
 } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { WorkflowVersionModel } from "../types/models.js";
-import { WorkflowVersionStatuses } from "../types/enums.js";
+import type {
+  DbTransaction,
+  NodeModel,
+  WorkflowModel,
+  WorkflowVersionModel,
+} from "../types/models.js";
+import { NodeTypes, WorkflowVersionStatuses } from "../types/enums.js";
+import { columnMapper } from "./utils/columnMapper.util.js";
+import {
+  nodeColumns,
+  workflowColumns,
+  workflowVersionColumns,
+} from "../types/columnNames.js";
 
 export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 export type UpdateWorkflowVersion = Updateable<WorkflowVersion>;
 
 export const workflowVersionRepository = {
-  findById: async (id: string, transaction?: Transaction<DB>) => {
+  findById: async (id: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .selectFrom("workflow_version")
       .selectAll()
@@ -27,41 +32,66 @@ export const workflowVersionRepository = {
       .executeTakeFirst();
   },
 
-  findByIdAndEnvironmentId: async (
+  findByIdWithWorkflow: async (
     id: string,
-    environmentId: string,
-    transaction?: Transaction<DB>,
-  ) => {
-    return await (transaction ?? db)
+  ): Promise<
+    | {
+        workflowVersion: WorkflowVersionModel;
+        workflow: WorkflowModel;
+      }
+    | undefined
+  > => {
+    const result = await db
       .selectFrom("workflow_version")
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .selectAll("workflow_version")
+      .select((eb) => [
+        ...columnMapper.prefixedColumns<WorkflowVersionModel>(
+          eb,
+          "workflow_version",
+          workflowVersionColumns,
+        ),
+        ...columnMapper.prefixedColumns<WorkflowModel>(
+          eb,
+          "workflow",
+          workflowColumns,
+        ),
+      ])
       .where("workflow_version.id", "=", id)
-      .where("workflow.environment_id", "=", environmentId)
       .where("workflow_version.is_deleted", "=", false)
       .where("workflow.is_deleted", "=", false)
       .executeTakeFirst();
+
+    if (!result) {
+      return result;
+    }
+
+    return {
+      workflowVersion: columnMapper.extractPrefixed<WorkflowVersionModel>(
+        result,
+        "workflow_version",
+      ),
+      workflow: columnMapper.extractPrefixed<WorkflowModel>(result, "workflow"),
+    };
   },
 
-  findByIdAndEnvironmentIds: async (
-    id: string,
-    environmentIds: string[],
-    transaction?: Transaction<DB>,
+  findLatestNonNullVersionByWorkflowId: async (
+    workflowId: string,
+    transaction: DbTransaction,
   ) => {
     return await (transaction ?? db)
       .selectFrom("workflow_version")
-      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .selectAll("workflow_version")
-      .where("workflow_version.id", "=", id)
-      .where("workflow.environment_id", "in", environmentIds)
-      .where("workflow_version.is_deleted", "=", false)
-      .where("workflow.is_deleted", "=", false)
+      .selectAll()
+      .where("workflow_id", "=", workflowId)
+      .where("is_deleted", "=", false)
+      .where("version", "is not", null)
+      .orderBy("modified_on", "desc")
+      .limit(1)
       .executeTakeFirst();
   },
 
   findByWorkflowId: async (
     id: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<WorkflowVersionModel[]> => {
     try {
       return await (transaction ?? db)
@@ -82,7 +112,7 @@ export const workflowVersionRepository = {
     workflowId: string,
     limit: number,
     offset: number,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<{ items: WorkflowVersionModel[]; total: number }> => {
     try {
       const dbConn = transaction ?? db;
@@ -118,8 +148,8 @@ export const workflowVersionRepository = {
 
   findByWorkflowIdAndVersion: async (
     workflowId: string,
-    version: number,
-    transaction?: Transaction<DB>,
+    version: string,
+    transaction?: DbTransaction,
   ): Promise<WorkflowVersionModel> => {
     try {
       return await (transaction ?? db)
@@ -137,28 +167,74 @@ export const workflowVersionRepository = {
     }
   },
 
-  findActiveVersionByWorkflowId: async (
+  findActiveVersionByWorkflowIdWithRelations: async (
     workflowId: string,
-    environmentIds?: string[],
-    transaction?: Transaction<DB>,
-  ): Promise<WorkflowVersionModel | undefined> => {
-    const dbConn = transaction ?? db;
-
-    const query = dbConn
+  ): Promise<
+    | {
+        workflow: WorkflowModel;
+        workflowVersion: WorkflowVersionModel;
+        startNode: NodeModel;
+      }
+    | undefined
+  > => {
+    const result = await db
       .selectFrom("workflow_version")
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .selectAll("workflow_version")
+      .innerJoin("node", "node.workflow_version_id", "workflow_version.id")
+      .select((eb) => [
+        ...columnMapper.prefixedColumns<WorkflowModel>(
+          eb,
+          "workflow",
+          workflowColumns,
+        ),
+        ...columnMapper.prefixedColumns<WorkflowVersionModel>(
+          eb,
+          "workflow_version",
+          workflowVersionColumns,
+        ),
+        ...columnMapper.prefixedColumns<NodeModel>(eb, "node", nodeColumns),
+      ])
       .where("workflow_version.workflow_id", "=", workflowId)
       .where("workflow_version.status", "=", WorkflowVersionStatuses.ACTIVE)
       .where("workflow_version.is_deleted", "=", false)
-      .where("workflow.is_deleted", "=", false);
+      .where("node.type", "=", NodeTypes.START)
+      .limit(1)
+      .executeTakeFirst();
 
-    const filteredQuery =
-      environmentIds && environmentIds.length > 0
-        ? query.where("workflow.environment_id", "in", environmentIds)
-        : query;
+    if (!result) {
+      return result;
+    }
 
-    return await filteredQuery.executeTakeFirst();
+    return {
+      workflow: columnMapper.extractPrefixed<WorkflowModel>(result, "workflow"),
+      workflowVersion: columnMapper.extractPrefixed<WorkflowVersionModel>(
+        result,
+        "workflow_version",
+      ),
+      startNode: columnMapper.extractPrefixed<NodeModel>(result, "node"),
+    };
+  },
+
+  insert: async (
+    data: {
+      version: string | null;
+      description: string | null;
+      created_by: string;
+      modified_by: string;
+      status: WorkflowVersionStatus;
+      workflow_id: string;
+    },
+    transaction?: DbTransaction,
+  ) => {
+    try {
+      return await (transaction ?? db)
+        .insertInto("workflow_version")
+        .values(data)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    } catch (err) {
+      throw new RepositoryError("Insert workflow version failed", err);
+    }
   },
 
   insertNextVersion: async (
@@ -169,14 +245,14 @@ export const workflowVersionRepository = {
       status: WorkflowVersionStatus;
       workflow_id: string;
     },
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     try {
       return await (transaction ?? db)
         .insertInto("workflow_version")
         .values({
           ...data,
-          version: sql<number>`
+          version: sql<string>`
       coalesce(
         (
           select max(version) + 1
@@ -197,7 +273,7 @@ export const workflowVersionRepository = {
   updateById: async (
     id: string,
     data: UpdateWorkflowVersion,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<WorkflowVersionModel> => {
     try {
       return await (transaction ?? db)
@@ -214,7 +290,7 @@ export const workflowVersionRepository = {
 
   demoteActiveVersionToPublished: async (
     workflowId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ) => {
     return await (transaction ?? db)
       .updateTable("workflow_version")
@@ -225,9 +301,9 @@ export const workflowVersionRepository = {
       .execute();
   },
 
-  doesDraftOrValidVersionExists: async (
+  draftOrValidVersionExists: async (
     workflowId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<boolean> => {
     const result = await (transaction ?? db)
       .selectFrom("workflow_version")
@@ -239,7 +315,7 @@ export const workflowVersionRepository = {
       ])
       .where("is_deleted", "=", false)
       .executeTakeFirst();
-    
+
     return result ? result.count > 0 : false;
   },
 };

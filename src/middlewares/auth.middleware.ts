@@ -21,7 +21,7 @@ export const authenticateRequest = async (
 
   const apiKeyHeader = req.headers["x-api-key"];
 
-  if (apiKeyHeader && typeof apiKeyHeader === "string" && apiKeyHeader) {
+  if (apiKeyHeader && typeof apiKeyHeader === "string") {
     req.context = await apiKeyService.getRequestContextOrThrow(apiKeyHeader);
     return next();
   }

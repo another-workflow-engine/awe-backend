@@ -39,7 +39,7 @@ export const organizationController = {
   dashboard: async (req: Request, res: Response) => {
     const overview = await dashboardService.getOverview(
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
 
     res.status(200).json(overview);

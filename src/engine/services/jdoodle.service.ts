@@ -87,9 +87,11 @@ export class JDoodleService implements ScriptExecutionService {
   }
 
   async executeScript(
+    credentials: Record<string, string>,
     sourceCode: string,
     entryFunctionName: string,
     parameters: unknown[],
+    signal?: AbortSignal,
   ): Promise<ScriptExecutionResult> {
     const stdin = this.buildJDoodleStdin(parameters);
     const wrappedScript = this.wrapScriptForJDoodle(
@@ -97,18 +99,31 @@ export class JDoodleService implements ScriptExecutionService {
       entryFunctionName,
     );
 
+    let clientId = credentials.clientId;
+    let clientSecret = credentials.clientSecret;
+
+    if (!clientId ) {
+      clientId = Config.JDOODLE_CLIENT_ID;
+    }
+
+    if (!clientSecret) {
+      clientSecret = Config.JDOODLE_CLIENT_SECRET;
+    }
+
+
     const response = await httpService.post<JDoodleResponse>(
       "https://api.jdoodle.com/v1/execute",
       {
         body: {
-          clientId: Config.JDOODLE_CLIENT_ID,
-          clientSecret: Config.JDOODLE_CLIENT_SECRET,
+          clientId,
+          clientSecret,
           script: wrappedScript,
           language: "python3",
           versionIndex: "5",
           stdin,
           libs: [],
         },
+        ...(signal ? { signal } : {}),
       },
     );
 

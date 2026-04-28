@@ -45,50 +45,6 @@ export const environmentService = {
     return [];
   },
 
-  getByActorAndEnvironment: async (
-    actor: ActorModel,
-    environment: EnvironmentType,
-  ): Promise<EnvironmentModel> => {
-    const environments = await environmentService.getAllByActor(actor);
-    const selectedEnvironment = environments.find(
-      (env) => env.type === environment,
-    );
-
-    if (!selectedEnvironment) {
-      throw new ValidationError("Invalid environment for this actor", [
-        {
-          field: "environment",
-          message: `Environment ${environment} is not available for this actor`,
-        },
-      ]);
-    }
-
-    return selectedEnvironment;
-  },
-
-  getByActorAndEnvironments: async (
-    actor: ActorModel,
-    environments: EnvironmentType[],
-  ): Promise<EnvironmentModel[]> => {
-    const availableEnvironments = await environmentService.getAllByActor(actor);
-
-    if (environments.length === 0) {
-      return availableEnvironments;
-    }
-
-    const byType = new Map(
-      availableEnvironments.map((availableEnvironment) => [
-        availableEnvironment.type,
-        availableEnvironment,
-      ]),
-    );
-    return environments
-      .map((environment) => byType.get(environment))
-      .filter((environment): environment is EnvironmentModel =>
-        Boolean(environment),
-      );
-  },
-
   getByActor: async (actor: ActorModel) => {
     const environment = (await environmentService.getAllByActor(actor))[0];
 

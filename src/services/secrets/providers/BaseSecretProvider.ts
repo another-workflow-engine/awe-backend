@@ -31,4 +31,5 @@ export abstract class BaseSecretProvider<
   abstract testConnection(): Promise<ProviderTestResult>;
   abstract testSecretExists(secretKey: string): Promise<ProviderTestResult>;
   abstract fetchSecrets(secretKeys: string[]): Promise<Record<string, string>>;
+  abstract listAllSecrets(): Promise<string[]>;
 }

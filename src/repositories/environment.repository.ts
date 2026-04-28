@@ -1,8 +1,8 @@
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { Environment, DB } from "../types/database.js";
-import type { Insertable, Transaction } from "kysely";
-import type { EnvironmentModel } from "../types/models.js";
+import type { Environment } from "../types/database.js";
+import type { Insertable } from "kysely";
+import type { DbTransaction, EnvironmentModel } from "../types/models.js";
 import type { EnvironmentType } from "../types/database.js";
 
 type NewEnvironment = Insertable<Environment>;
@@ -10,7 +10,7 @@ type NewEnvironment = Insertable<Environment>;
 export const environmentRepository = {
   findByType: async (
     type: EnvironmentType,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EnvironmentModel[]> => {
     return await (transaction ?? db)
       .selectFrom("environment")
@@ -20,7 +20,7 @@ export const environmentRepository = {
       .execute();
   },
 
-  findById: async (id: string, transaction?: Transaction<DB>) => {
+  findById: async (id: string, transaction?: DbTransaction) => {
     return await (transaction ?? db)
       .selectFrom("environment")
       .selectAll()
@@ -31,7 +31,7 @@ export const environmentRepository = {
 
   findByOrganizationId: async (
     organizationId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EnvironmentModel[]> => {
     return await (transaction ?? db)
       .selectFrom("environment")
@@ -43,7 +43,7 @@ export const environmentRepository = {
 
   findByApiKeyActorId: async (
     actorId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EnvironmentModel[]> => {
     return await (transaction ?? db)
       .selectFrom("environment")
@@ -58,7 +58,7 @@ export const environmentRepository = {
 
   insertMany: async (
     data: NewEnvironment[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EnvironmentModel[]> => {
     try {
       return await (transaction ?? db)

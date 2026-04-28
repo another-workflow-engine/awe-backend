@@ -1,7 +1,10 @@
-import type { Transaction } from "kysely";
-import type { ActorModel, EdgeModel, NodeModel } from "../types/models.js";
+import type {
+  ActorModel,
+  DbTransaction,
+  EdgeModel,
+  NodeModel,
+} from "../types/models.js";
 import type { Edge } from "../types/workflow.js";
-import type { DB } from "../types/database.js";
 import {
   edgeRepository,
   type NewEdge,
@@ -71,7 +74,7 @@ export const edgeService = {
     edges: Edge[],
     nodes: NodeModel[],
     actor: ActorModel,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EdgeModel[]> => {
     const insertEdges: NewEdge[] = edges.map((edge) => {
       const [sourceNode, destinationNode] = findNodesByEdge(nodes, edge);
@@ -109,7 +112,7 @@ export const edgeService = {
 
   getByNodesWithTransaction: async (
     nodes: NodeModel[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EdgeModel[]> => {
     if (nodes.length === 0) {
       return [];
@@ -121,7 +124,7 @@ export const edgeService = {
 
   deleteByNodes: async (
     nodes: NodeModel[],
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<void> => {
     if (nodes.length === 0) return;
     const ids = nodes.map((node) => node.id);
@@ -130,14 +133,14 @@ export const edgeService = {
 
   getBySourceNodeId: async (
     nodeId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<EdgeModel[]> => {
     return await edgeRepository.findBySourceNodeId(nodeId, transaction);
   },
 
   getDestinationNodeIdsBySourceNodeId: async (
     nodeId: string,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<string[]> => {
     const edges = await edgeRepository.findBySourceNodeId(nodeId, transaction);
 

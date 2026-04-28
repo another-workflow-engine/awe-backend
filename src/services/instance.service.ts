@@ -1,39 +1,44 @@
 import { instanceRepository } from "../repositories/instance.repository.js";
 import type { InstanceCreateSchema } from "../schemas/instance.schema.js";
-import type { ActorModel, InstanceModel, TaskModel } from "../types/models.js";
+import type {
+  ActorModel,
+  DbTransaction,
+  EnvironmentModel,
+  InstanceModel,
+  NodeModel,
+  TaskExecutionModel,
+  TaskModel,
+  WorkflowModel,
+  WorkflowVersionModel,
+} from "../types/models.js";
 import type { z } from "zod";
 import { workflowVersionService } from "./workflowVersion.service.js";
 import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import {
-  LogEventTypes,
-  InstanceStatuses,
-  TaskStatuses,
-  NodeTypes,
-} from "../types/enums.js";
-import { db } from "../database.js";
+import { LogEventTypes, InstanceStatuses } from "../types/enums.js";
 import { converterUtils } from "../utils/converter.utils.js";
-import type { InstanceListItem } from "../repositories/instance.repository.js";
 import type {
-  DB,
+  EnvironmentType,
   InstanceEventType,
   InstanceStatus,
 } from "../types/database.js";
-import type { Transaction } from "kysely";
 import { taskRepository } from "../repositories/task.repository.js";
-import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import { eventLogService } from "./eventLog.service.js";
 import { taskService } from "./task.service.js";
-import { workflowService } from "./workflow.service.js";
 import { getLogger } from "../logger.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { ContextSchema } from "../schemas/context.schema.js";
+import { openTransaction } from "../utils/database.utils.js";
+import { environmentUtils } from "../utils/environment.utils.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import type { InstanceDetail, InstanceListItem } from "../types/instance.js";
+import { buildExecutionSequence } from "../utils/nodePath.utils.js";
+import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
+import type { ExecutionSequenceResponse } from "../types/nodePath.js";
 import type { Context } from "../types/engine.js";
-import { taskExecutionService } from "./taskExecution.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -44,7 +49,7 @@ type UpdateInstanceStatusParams = {
   currentVariables?: Record<string, unknown>;
   details?: LogDetailSchema | undefined;
   actorId?: string | undefined;
-  transaction?: Transaction<DB> | undefined;
+  transaction?: DbTransaction | undefined;
 };
 
 const instanceStatusToEventMap: Record<InstanceStatus, InstanceEventType> = {
@@ -65,7 +70,7 @@ async function updateInstanceStatus(
 ): Promise<InstanceModel> {
   const isTerminalUpdate = !nonTerminalStatus.includes(params.status);
 
-  const executeCallback = async (transaction: Transaction<DB>) => {
+  const executeCallback = async (transaction: DbTransaction) => {
     const [instance] = await Promise.all([
       instanceRepository.updateById(
         params.instanceId,
@@ -103,7 +108,7 @@ async function updateInstanceStatus(
 
   const instance = params.transaction
     ? await executeCallback(params.transaction)
-    : await db.transaction().execute(executeCallback);
+    : await openTransaction(executeCallback);
 
   getLogger().info(
     { instanceId: params.instanceId, details: params.details },
@@ -113,159 +118,108 @@ async function updateInstanceStatus(
   return instance;
 }
 
-export const instanceService = {
-  listAll: async (
-    actorId: string,
-    environmentIds: string[],
-  ): Promise<InstanceListItem[]> => {
-    return instanceRepository.findAll(actorId, environmentIds);
-  },
+export function getFormattedDetailOutput(params: {
+  workflow: WorkflowModel;
+  workflowVersion: WorkflowVersionModel;
+  instance: InstanceModel;
+  task?: TaskModel;
+  node?: NodeModel;
+  taskExecution?: TaskExecutionModel | undefined;
+}): InstanceDetail {
+  const { workflow, workflowVersion, instance, task, node, taskExecution } =
+    params;
+  if (!workflowVersion.version) {
+    throw new DataIntegrityError("Workflow version is null");
+  }
 
-  listPaginated: async (
-    actorId: string,
-    environmentIds: string[],
-    limit: number,
-    offset: number,
+  return {
+    id: instance.id,
+
+    startedAt: instance.created_on,
+    endedAt: instance.ended_on,
+
+    status: instance.status,
+    controlSignal: instance.control_signal,
+    autoAdvance: instance.auto_advance,
+
+    inputVariables: converterUtils.jsonValueToObject(instance.input_variables),
+    currentVariables: converterUtils.parseOrThrow(
+      ContextSchema,
+      instance.current_variables !== null ? instance.current_variables : {},
+    ),
+    outputVariables: converterUtils.jsonValueToObject(
+      instance.output_variables,
+    ),
+
+    workflow: {
+      id: workflow.id,
+      name: workflow.name,
+
+      versionId: workflowVersion.id,
+      version: workflowVersion.version,
+    },
+
+    currentTask:
+      !task || !node
+        ? null
+        : {
+            id: task.id,
+            status: task.status,
+            startedAt: task.created_on,
+
+            executionId: taskExecution?.id ?? null,
+
+            nodeId: node.client_id,
+            type: node.type,
+            name: node.name,
+          },
+  };
+}
+
+export const instanceService = {
+  getPaginated: async (
+    data: {
+      limit: number;
+      offset: number;
+      selectedEnvironments: EnvironmentType[];
+    },
+    environments: EnvironmentModel[],
   ): Promise<{
     items: InstanceListItem[];
     total: number;
   }> => {
+    const filteredEnvironments = environmentUtils.getFilteredEnvironments(
+      environments,
+      data.selectedEnvironments,
+    );
+
     return instanceRepository.findWithPagination(
-      actorId,
-      environmentIds,
-      limit,
-      offset,
+      filteredEnvironments.map((env) => env.id),
+      data.limit,
+      data.offset,
     );
   },
 
-  assertAccessible: async (
-    instanceId: string,
-    environmentIds: string[],
-  ): Promise<InstanceModel> => {
-    const instance = await instanceRepository.findByIdAndEnvironmentIds(
-      instanceId,
-      environmentIds,
-    );
+  get: async (instanceId: string, environments: EnvironmentModel[]) => {
+    const [instanceModels, taskModels] = await Promise.all([
+      instanceRepository.findByIdAndEnvironmentIdsWithRelations(
+        instanceId,
+        environmentUtils.getEnvironmentIds(environments),
+      ),
+      taskRepository.findLatestByInstanceIdWithRelations(instanceId),
+    ]);
 
-    if (!instance) {
+    if (!instanceModels) {
       throw new NotFoundError("Instance");
     }
 
-    return instance;
-  },
-
-  get: async (instanceId: string, environmentIds: string[]) => {
-    const instance = await instanceRepository.findByIdAndEnvironmentIds(
-      instanceId,
-      environmentIds,
-    );
-    if (!instance) {
-      throw new NotFoundError("Instance");
-    }
-
-    const workflowVersion = await workflowVersionRepository.findById(
-      instance.workflow_version_id,
-    );
-    if (!workflowVersion) {
-      throw new DataIntegrityError(
-        `Workflow version does not exist id = ${instance.workflow_version_id}`,
-      );
-    }
-
-    const workflow_name = await workflowService.getWorkflowName(
-      workflowVersion.workflow_id,
-    );
-
-    const task = await taskRepository.findLatestByInstanceId(instance.id);
-    if (!task) {
-      return {
-        instance,
-        workflowVersion,
-        node: null,
-        task: null,
-        latestTaskExecution: null,
-        latestUserTaskExecution: null,
-      };
-    }
-
-    const node = await nodeService.getById(task.node_id);
-    if (!node) {
-      throw new DataIntegrityError(`Node does not exist id = ${task.node_id}`);
-    }
-
-    const latestTaskExecution = await taskExecutionService.getLatestByTaskId(
-      task.id,
-    );
-    if (!latestTaskExecution) {
-      return {
-        instance,
-        workflowVersion,
-        node: null,
-        task: null,
-        latestTaskExecution: null,
-        latestUserTaskExecution: null,
-      };
-    }
-
-    let latestUserTaskExecution;
-    if (node.type === NodeTypes.USER) {
-      latestUserTaskExecution =
-        await taskExecutionService.getLatestUserTaskExecutionByTaskId(
-          latestTaskExecution.id,
-        );
-    }
-
-    return {
-      instance,
-      workflow_name,
-      workflowVersion,
-      node,
-      task,
-      latestTaskExecution,
-      latestUserTaskExecution,
-    };
+    return getFormattedDetailOutput({ ...instanceModels, ...taskModels });
   },
 
   getLockedInProgressOrPausedRelations: async (
     instanceId: string,
-    environmentIdsOrTransaction: string[] | Transaction<DB>,
-    maybeTransaction?: Transaction<DB>,
+    transaction: DbTransaction,
   ) => {
-    const isEnvironmentScoped = Array.isArray(environmentIdsOrTransaction);
-
-    if (isEnvironmentScoped) {
-      const environmentIds = environmentIdsOrTransaction;
-      const transaction = maybeTransaction;
-
-      if (!transaction) {
-        throw new DataIntegrityError(
-          "Transaction is required when environmentIds are provided",
-        );
-      }
-
-      const authorizedInstance =
-        await instanceRepository.findByIdAndEnvironmentIds(
-          instanceId,
-          environmentIds,
-          transaction,
-        );
-
-      if (!authorizedInstance) {
-        return {
-          instance: undefined,
-          task: undefined,
-          taskExecution: undefined,
-        };
-      }
-
-      return await instanceRepository.getLockedInProgressOrPausedRelationsById(
-        authorizedInstance.id,
-        transaction,
-      );
-    }
-
-    const transaction = environmentIdsOrTransaction;
-
     return await instanceRepository.getLockedInProgressOrPausedRelationsById(
       instanceId,
       transaction,
@@ -275,25 +229,19 @@ export const instanceService = {
   createNew: async (
     data: CreateVersionInput,
     actor: ActorModel,
-    environmentIds: string[],
+    environments: EnvironmentModel[],
   ) => {
-    const workflowVersion =
-      await workflowVersionService.getActiveVersionByWorkflowId(
+    const environmentIds = environments.map((env) => env.id);
+
+    const models =
+      await workflowVersionService.getActiveVersionByWorkflowIdWithRelations(
         data.workflowId,
-        environmentIds,
       );
-    if (!workflowVersion) {
-      throw new NotFoundError("No active workflow version found");
+    if (!models || !environmentIds.includes(models.workflow.environment_id)) {
+      throw new NotFoundError("Active workflow version");
     }
 
-    const startNode = await nodeService.getByStartNodeByWorkflowVersionId(
-      workflowVersion.id,
-    );
-    if (!startNode) {
-      throw new DataIntegrityError(
-        `No start node for workflow version id=${workflowVersion.id}`,
-      );
-    }
+    const { workflowVersion, startNode, workflow } = models;
 
     const startContext = converterUtils.jsonValueToNodeInputSchema(
       startNode.input_schema,
@@ -308,50 +256,63 @@ export const instanceService = {
       );
     }
 
-    return await db.transaction().execute(async (transaction) => {
-      let instance = await instanceRepository.insert(
-        {
-          workflow_version_id: workflowVersion.id,
-          status: data.autoAdvance
-            ? InstanceStatuses.IN_PROGRESS
-            : InstanceStatuses.PAUSED,
-          auto_advance: data.autoAdvance,
-          input_variables: converterUtils.objectToJsonValue(data.context),
-          created_by: actor.id,
-          started_on: new Date(),
-          current_node_id: startNode.id,
-        },
-        transaction,
-      );
+    const { instance, task, taskExecution } = await openTransaction(
+      async (transaction) => {
+        const instance = await instanceRepository.insert(
+          {
+            workflow_version_id: workflowVersion.id,
+            status: data.autoAdvance
+              ? InstanceStatuses.IN_PROGRESS
+              : InstanceStatuses.PAUSED,
+            auto_advance: data.autoAdvance,
+            input_variables: converterUtils.objectToJsonValue(data.context),
+            created_by: actor.id,
+            current_node_id: startNode.id,
+          },
+          transaction,
+        );
 
-      await eventLogService.createInstanceLog({
-        instanceId: instance.id,
-        eventType: LogEventTypes.STARTED,
-        actorId: actor.id,
-        transaction: transaction,
-      });
+        await eventLogService.createInstanceLog({
+          instanceId: instance.id,
+          eventType: LogEventTypes.STARTED,
+          actorId: actor.id,
+          transaction: transaction,
+        });
 
-      await taskService.create({
-        instance,
-        node: startNode,
-        transaction,
-      });
-      return { instance, workflowVersion };
+        const { task, taskExecution } = await taskService.create({
+          instance,
+          node: startNode,
+          transaction,
+        });
+        return { instance, task, taskExecution };
+      },
+    );
+
+    return getFormattedDetailOutput({
+      workflow,
+      workflowVersion,
+      instance,
+      task,
+      node: startNode,
+      taskExecution,
     });
   },
 
   resume: async (
     instanceId: string,
     actor: ActorModel,
-    environmentIds: string[],
+    environments: EnvironmentModel[],
   ) => {
-    const instance = await instanceRepository.findByIdAndEnvironmentIds(
-      instanceId,
-      environmentIds,
-    );
-    if (!instance) {
+    const models =
+      await instanceRepository.findByIdAndEnvironmentIdsWithRelations(
+        instanceId,
+        environments.map((env) => env.id),
+      );
+    if (!models) {
       throw new NotFoundError(`Instance`);
     }
+
+    const { instance, workflow, workflowVersion } = models;
 
     engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
 
@@ -373,22 +334,37 @@ export const instanceService = {
       );
     }
 
-    return await db.transaction().execute(async (transaction) => {
-      const updatedInstance = await updateInstanceStatus({
-        instanceId: instance.id,
-        status: InstanceStatuses.IN_PROGRESS,
-        actorId: actor.id,
-        transaction,
-      });
-      await taskService.resume(nextNode, updatedInstance, transaction);
-      return updatedInstance;
+    const { updatedInstance, task, taskExecution } = await openTransaction(
+      async (transaction) => {
+        const updatedInstance = await updateInstanceStatus({
+          instanceId: instance.id,
+          status: InstanceStatuses.IN_PROGRESS,
+          actorId: actor.id,
+          transaction,
+        });
+        const { task, taskExecution } = await taskService.resume(
+          nextNode,
+          updatedInstance,
+          transaction,
+        );
+        return { updatedInstance, task, taskExecution };
+      },
+    );
+
+    return getFormattedDetailOutput({
+      instance: updatedInstance,
+      task,
+      taskExecution,
+      node: nextNode,
+      workflow,
+      workflowVersion,
     });
   },
 
   fail: async (
     instanceId: string,
     details: LogDetailSchema,
-    transaction: Transaction<DB>,
+    transaction: DbTransaction,
   ): Promise<InstanceModel> => {
     return await updateInstanceStatus({
       instanceId,
@@ -401,7 +377,7 @@ export const instanceService = {
   terminate: async (
     instanceId: string,
     details: LogDetailSchema,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<InstanceModel> => {
     return await updateInstanceStatus({
       instanceId,
@@ -415,7 +391,7 @@ export const instanceService = {
     instanceId: string,
     outputVariables: Record<string, unknown>,
     details?: LogDetailSchema,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<InstanceModel> => {
     return await updateInstanceStatus({
       instanceId,
@@ -429,7 +405,7 @@ export const instanceService = {
   pause: async (
     instanceId: string,
     details: LogDetailSchema,
-    transaction?: Transaction<DB>,
+    transaction?: DbTransaction,
   ): Promise<InstanceModel> => {
     return await updateInstanceStatus({
       instanceId,
@@ -444,7 +420,7 @@ export const instanceService = {
     status: InstanceStatus,
     currentVariables: object,
     nextNodeId: string | null,
-    transaction: Transaction<DB>,
+    transaction: DbTransaction,
   ) => {
     return await instanceRepository.updateById(
       instanceId,
@@ -457,107 +433,19 @@ export const instanceService = {
     );
   },
 
-  retry: async (
-    instanceId: string,
+  updateContextForRetry: async (
+    instance: InstanceModel,
+    patchContext: Record<string, unknown>,
     actor: ActorModel,
-    environmentIds: string[],
-    targetTaskId?: string,
-    constantsPatch?: Record<string, unknown>,
+    transaction: DbTransaction,
   ) => {
-    return await db.transaction().execute(async (transaction) => {
-      const instance = await instanceRepository.findByIdAndEnvironmentIds(
-        instanceId,
-        environmentIds,
-        transaction,
+    if (
+      instance.status !== InstanceStatuses.FAILED &&
+      instance.status !== InstanceStatuses.TERMINATED
+    ) {
+      throw new StateTransitionError(
+        `Instance has not failed or terminated. Status is ${instance.status}`,
       );
-      if (!instance) throw new NotFoundError("Instance");
-
-      if (instance.status !== InstanceStatuses.FAILED) {
-        throw new StateTransitionError(
-          `Instance is not FAILED. Status is ${instance.status}`,
-        );
-      }
-
-      let taskToRetry: TaskModel;
-      if (targetTaskId) {
-        const t = await taskRepository.findById(targetTaskId, transaction);
-        if (!t || t.instance_id !== instanceId) throw new NotFoundError("Task");
-        taskToRetry = t;
-      } else {
-        const latestTask = await taskRepository.findLatestByInstanceId(
-          instanceId,
-          transaction,
-        );
-        if (!latestTask)
-          throw new DataIntegrityError("No task found for instance");
-        taskToRetry = latestTask;
-      }
-
-      if (taskToRetry.status !== TaskStatuses.FAILED) {
-        throw new StateTransitionError(
-          `Task is not FAILED. Status is ${taskToRetry.status}`,
-        );
-      }
-
-      const node = await nodeService.getById(taskToRetry.node_id);
-      if (!node) {
-        throw new DataIntegrityError(
-          `Node not found id = ${taskToRetry.node_id}`,
-        );
-      }
-
-      const instanceContext = instance.current_variables
-        ? converterUtils.parseOrThrow(ContextSchema, instance.current_variables)
-        : {
-            constants: converterUtils.jsonValueToObject(
-              instance.input_variables,
-            ),
-            fetchables: {},
-            urls: {},
-            secrets: {},
-          };
-
-      const mergedContext: Context = {
-        ...instanceContext,
-        constants: {
-          ...instanceContext.constants,
-          ...(constantsPatch ?? {}),
-        },
-      };
-
-      const updatedInstance = await updateInstanceStatus({
-        instanceId: instance.id,
-        status: InstanceStatuses.IN_PROGRESS,
-        actorId: actor.id,
-        currentVariables: mergedContext,
-        details: { message: "Retrying failed task" },
-        transaction,
-      });
-
-      await taskService.retry(
-        taskToRetry.id,
-        updatedInstance,
-        node,
-        actor.id,
-        transaction,
-      );
-
-      return updatedInstance;
-    });
-  },
-
-  getRetryConstants: async (
-    instanceId: string,
-    _actor: ActorModel,
-    environmentIds: string[],
-  ): Promise<Record<string, unknown>> => {
-    const instance = await instanceRepository.findByIdAndEnvironmentIds(
-      instanceId,
-      environmentIds,
-    );
-
-    if (!instance) {
-      throw new NotFoundError("Instance");
     }
 
     const instanceContext = instance.current_variables
@@ -569,6 +457,40 @@ export const instanceService = {
           secrets: {},
         };
 
-    return instanceContext.constants;
+    const mergedContext: Context = {
+      ...instanceContext,
+      constants: {
+        ...instanceContext.constants,
+        ...(patchContext ?? {}),
+      },
+    };
+
+    return await updateInstanceStatus({
+      instanceId: instance.id,
+      status: InstanceStatuses.IN_PROGRESS,
+      actorId: actor.id,
+      currentVariables: mergedContext,
+      details: { message: "Retry task" },
+      transaction,
+    });
+  },
+
+  getExecutionSequence: async (
+    instanceId: string,
+    environments: EnvironmentModel[],
+  ): Promise<ExecutionSequenceResponse> => {
+    const executionGraphData =
+      await taskExecutionRepository.findExecutionSequenceDataByInstanceId(
+        instanceId,
+      );
+
+    const { nodes, connections, executions } = executionGraphData;
+
+    return {
+      executionSequence:
+        nodes.length === 0
+          ? []
+          : buildExecutionSequence(nodes, connections, executions),
+    };
   },
 };

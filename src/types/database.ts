@@ -15,9 +15,9 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
 
 export type InstanceControlSignal = "pause" | "terminate";
 
-export type InstanceEntityType = "instance" | "task" | "task_execution" | "user_task_execution";
+export type InstanceEntityType = "instance" | "task" | "task_execution";
 
-export type InstanceEventType = "completed" | "failed" | "pause_requested" | "paused" | "resume_requested" | "resumed" | "retried" | "started" | "terminate_requested" | "terminated";
+export type InstanceEventType = "completed" | "failed" | "pause_requested" | "paused" | "resumed" | "retried" | "started" | "terminate_requested" | "terminated";
 
 export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 

@@ -3,6 +3,7 @@ import type { SecretProviderType } from "../../../types/database.js";
 import type { SecretProviderModel } from "../../../types/models.js";
 import {
   ProviderConfigurationSchemaMap,
+  type NewSecretProvider,
   type SecretProviderConfiguration,
 } from "../../../types/secrets.js";
 import { converterUtils } from "../../../utils/converter.utils.js";
@@ -17,9 +18,9 @@ export abstract class BaseSecretProvider<
 > {
   protected configuration: SecretProviderConfiguration<T>;
 
-  constructor(secretProvider: SecretProviderModel) {
+  constructor(secretProvider: NewSecretProvider) {
     const configurationObject = converterUtils.jsonValueToObject(
-      secretProvider.configuration,
+      secretProvider.configuration ?? {},
     );
     this.configuration = converterUtils.parseOrThrow(
       ProviderConfigurationSchemaMap[

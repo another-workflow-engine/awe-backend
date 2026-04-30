@@ -38,7 +38,6 @@ export const taskExecutionService = {
           task_id: taskId,
           status: TaskStatuses.IN_PROGRESS,
           input_variables: converterUtils.objectToJsonValue(inputVariables),
-          started_on: new Date(),
         },
         trx,
       );

@@ -133,7 +133,6 @@ export const instanceRepository = {
         .select((eb) => eb.fn.count<number>("instance.id").as("count"))
         .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
-        .where("workflow_version.is_deleted", "=", false)
         .where("workflow.is_deleted", "=", false)
         .executeTakeFirst();
 
@@ -164,7 +163,6 @@ export const instanceRepository = {
         .select((eb) => eb.fn.count<number>("instance.id").as("count"))
         .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
-        .where("workflow_version.is_deleted", "=", false)
         .where("workflow.is_deleted", "=", false)
         .where("instance.status", "=", status)
         .executeTakeFirst();
@@ -205,9 +203,7 @@ export const instanceRepository = {
         ])
         .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
-        .where("workflow_version.is_deleted", "=", false)
         .where("workflow.is_deleted", "=", false)
-        .where("environment.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .limit(limit)
         .execute()) as unknown as InstanceListItem[];

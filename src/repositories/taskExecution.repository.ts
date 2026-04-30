@@ -146,7 +146,7 @@ export const taskExecutionRepository = {
             "e.destination_node_id",
           )
           .select((eb) => [
-            eb.ref("e.condition_expression").as("condition_expression"),
+            eb.ref("e.client_id").as("condition_expression"),
             eb.ref("e.source_node_id").as("source_node_id"),
             eb.ref("e.destination_node_id").as("destination_node_id"),
             eb.ref("destination.client_id").as("destination_node_client_id"),
@@ -173,14 +173,16 @@ export const taskExecutionRepository = {
             eb.ref("task_execution.id").as("id"),
             eb.ref("task_execution.task_id").as("task_id"),
             eb.ref("task_execution.status").as("status"),
-            eb.ref("task_execution.started_on").as("started_on"),
+            eb.ref("task_execution.created_on").as("started_on"),
             eb.ref("task_execution.ended_on").as("ended_on"),
             eb.ref("task_execution.created_on").as("created_on"),
             eb.ref("node.id").as("node_id"),
             eb.ref("node.client_id").as("node_client_id"),
             eb.ref("node.type").as("node_type"),
             eb.ref("node.name").as("node_name"),
-            eb.ref("user_task_execution.id").as("user_task_execution_id"),
+            eb
+              .ref("user_task_execution.task_execution_id")
+              .as("user_task_execution_id"),
           ])
           .where("task.instance_id", "=", instanceId)
           .orderBy("task_execution.created_on", "asc")

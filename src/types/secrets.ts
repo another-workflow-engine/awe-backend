@@ -5,6 +5,8 @@ import {
 } from "../schemas/secretProvider.schema.js";
 import { SecretProviderTypes } from "./enums.js";
 import type { SecretProviderType } from "./database.js";
+import type { Insertable } from "kysely";
+import type { SecretProvider as SecretProviderModel } from "./database.js";
 
 export type SecretProvider = z.infer<typeof SecretProviderSchema>;
 
@@ -21,3 +23,5 @@ export const ProviderConfigurationSchemaMap = {
 export type SecretProviderConfiguration<T extends SecretProviderType> = z.infer<
   (typeof ProviderConfigurationSchemaMap)[T]
 >;
+
+export type NewSecretProvider = Insertable<SecretProviderModel>;

@@ -59,14 +59,12 @@ export const InstanceEntityTypes = {
   INSTANCE: "instance",
   TASK: "task",
   TASK_EXECUTION: "task_execution",
-  USER_TASK_EXECUTION: "user_task_execution",
 } as const satisfies Record<string, InstanceEntityType>;
 
 export const LogEventTypes = {
   COMPLETED: "completed",
   FAILED: "failed",
   PAUSE_REQUESTED: "pause_requested",
-  RESUME_REQUESTED: "resume_requested",
   PAUSED: "paused",
   TERMINATED: "terminated",
   RESUMED: "resumed",

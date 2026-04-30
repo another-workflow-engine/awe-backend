@@ -28,7 +28,6 @@ export const workflowVersionRepository = {
       .selectFrom("workflow_version")
       .selectAll()
       .where("id", "=", id)
-      .where("is_deleted", "=", false)
       .executeTakeFirst();
   },
 
@@ -57,7 +56,6 @@ export const workflowVersionRepository = {
         ),
       ])
       .where("workflow_version.id", "=", id)
-      .where("workflow_version.is_deleted", "=", false)
       .where("workflow.is_deleted", "=", false)
       .executeTakeFirst();
 
@@ -82,7 +80,6 @@ export const workflowVersionRepository = {
       .selectFrom("workflow_version")
       .selectAll()
       .where("workflow_id", "=", workflowId)
-      .where("is_deleted", "=", false)
       .where("version", "is not", null)
       .orderBy("modified_on", "desc")
       .limit(1)
@@ -98,7 +95,6 @@ export const workflowVersionRepository = {
         .selectFrom("workflow_version")
         .selectAll()
         .where("workflow_id", "=", id)
-        .where("is_deleted", "=", false)
         .execute();
     } catch (err) {
       throw new RepositoryError(
@@ -121,7 +117,6 @@ export const workflowVersionRepository = {
         .selectFrom("workflow_version")
         .selectAll()
         .where("workflow_id", "=", workflowId)
-        .where("is_deleted", "=", false)
         .orderBy("version", "desc")
         .limit(limit)
         .offset(offset)
@@ -131,7 +126,6 @@ export const workflowVersionRepository = {
         .selectFrom("workflow_version")
         .select((eb) => eb.fn.count<number>("id").as("count"))
         .where("workflow_id", "=", workflowId)
-        .where("is_deleted", "=", false)
         .executeTakeFirstOrThrow();
 
       return {
@@ -157,7 +151,6 @@ export const workflowVersionRepository = {
         .selectAll()
         .where("workflow_id", "=", workflowId)
         .where("version", "=", version)
-        .where("is_deleted", "=", false)
         .executeTakeFirstOrThrow();
     } catch (err) {
       throw new RepositoryError(
@@ -196,7 +189,7 @@ export const workflowVersionRepository = {
       ])
       .where("workflow_version.workflow_id", "=", workflowId)
       .where("workflow_version.status", "=", WorkflowVersionStatuses.ACTIVE)
-      .where("workflow_version.is_deleted", "=", false)
+      .where("workflow.is_deleted", "=", false)
       .where("node.type", "=", NodeTypes.START)
       .limit(1)
       .executeTakeFirst();
@@ -280,7 +273,6 @@ export const workflowVersionRepository = {
         .updateTable("workflow_version")
         .set({ ...data })
         .where("id", "=", id)
-        .where("is_deleted", "=", false)
         .returningAll()
         .executeTakeFirstOrThrow();
     } catch (err) {
@@ -297,7 +289,6 @@ export const workflowVersionRepository = {
       .set({ status: WorkflowVersionStatuses.PUBLISHED })
       .where("workflow_id", "=", workflowId)
       .where("status", "=", WorkflowVersionStatuses.ACTIVE)
-      .where("is_deleted", "=", false)
       .execute();
   },
 
@@ -313,7 +304,6 @@ export const workflowVersionRepository = {
         WorkflowVersionStatuses.DRAFT,
         WorkflowVersionStatuses.VALID,
       ])
-      .where("is_deleted", "=", false)
       .executeTakeFirst();
 
     return result ? result.count > 0 : false;

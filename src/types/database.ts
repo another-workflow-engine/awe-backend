@@ -15,9 +15,9 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
 
 export type InstanceControlSignal = "pause" | "terminate";
 
-export type InstanceEntityType = "instance" | "task" | "task_execution" | "user_task_execution";
+export type InstanceEntityType = "instance" | "task" | "task_execution";
 
-export type InstanceEventType = "completed" | "failed" | "pause_requested" | "paused" | "resume_requested" | "resumed" | "retried" | "started" | "terminate_requested" | "terminated";
+export type InstanceEventType = "completed" | "failed" | "pause_requested" | "paused" | "resumed" | "retried" | "started" | "terminate_requested" | "terminated";
 
 export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
@@ -65,7 +65,6 @@ export interface ApiKey {
 
 export interface Edge {
   client_id: string;
-  condition_expression: string | null;
   created_by: string;
   created_on: Generated<Timestamp>;
   deleted_by: string | null;
@@ -81,10 +80,7 @@ export interface Edge {
 }
 
 export interface Environment {
-  created_on: Generated<Timestamp>;
-  deleted_on: Timestamp | null;
   id: Generated<string>;
-  is_deleted: Generated<boolean>;
   organization_id: string;
   type: EnvironmentType;
 }
@@ -125,13 +121,12 @@ export interface Node {
   deleted_on: Timestamp | null;
   description: string | null;
   id: Generated<string>;
-  input_schema: Json | null;
+  input_schema: Json;
   is_deleted: Generated<boolean>;
-  max_attempts: Generated<number>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
   name: string | null;
-  output_schema: Json | null;
+  output_schema: Json;
   type: NodeType;
   workflow_version_id: string;
   x_coordinate: number | null;
@@ -151,8 +146,8 @@ export interface Organization {
 }
 
 export interface RefreshToken {
-  created_on: Generated<Timestamp | null>;
-  expires_at: Timestamp;
+  created_on: Generated<Timestamp>;
+  expires_on: Timestamp;
   id: Generated<string>;
   organization_id: string | null;
   token: string;
@@ -160,16 +155,16 @@ export interface RefreshToken {
 
 export interface SecretProvider {
   configuration: Json;
-  created_on: Generated<Timestamp | null>;
+  created_on: Generated<Timestamp>;
   id: Generated<string>;
-  label: string | null;
+  label: string;
+  modified_on: Generated<Timestamp>;
   organization_id: string;
   type: SecretProviderType;
-  updated_on: Generated<Timestamp | null>;
 }
 
 export interface SecretReference {
-  created_on: Generated<Timestamp | null>;
+  created_on: Generated<Timestamp>;
   environment_id: string;
   id: Generated<string>;
   label: string;
@@ -191,15 +186,12 @@ export interface TaskExecution {
   id: Generated<string>;
   input_variables: Json | null;
   output_variables: Json | null;
-  started_on: Timestamp | null;
   status: TaskStatus;
   task_id: string;
 }
 
 export interface UserTaskExecution {
   assignee: string | null;
-  created_on: Generated<Timestamp>;
-  id: Generated<string>;
   task_execution_id: string;
   title: string | null;
 }
@@ -222,11 +214,8 @@ export interface Workflow {
 export interface WorkflowVersion {
   created_by: string;
   created_on: Generated<Timestamp>;
-  deleted_by: string | null;
-  deleted_on: Timestamp | null;
   description: string | null;
   id: Generated<string>;
-  is_deleted: Generated<boolean>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
   published_on: Timestamp | null;

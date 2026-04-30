@@ -43,8 +43,6 @@ export type DecisionNodeConfiguration = z.infer<
 >;
 
 export type Node = z.infer<typeof NodeSchema>;
-// //
-// export type NodeConfiguration = Node["configuration"];
 
 export type Edge = z.infer<typeof EdgeSchema>;
 

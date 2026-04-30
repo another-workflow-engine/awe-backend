@@ -152,10 +152,10 @@ export const userTaskService = {
     });
 
     return {
-      id: userTaskExecution.id,
+      id: userTaskExecution.task_execution_id,
       title: userTaskExecution.title,
       assignee: userTaskExecution.assignee,
-      startedAt: taskExecution.started_on,
+      startedAt: taskExecution.created_on,
       status: taskExecution.status,
       requestData,
       responseData,
@@ -194,7 +194,7 @@ export const userTaskService = {
 
     if (taskExecution.status !== TaskStatuses.IN_PROGRESS) {
       throw new StateTransitionError(
-        `Task id=${userTaskExecution.id} is not awaiting user input`,
+        `Task execution id=${userTaskExecution.task_execution_id} is not awaiting user input`,
       );
     }
 

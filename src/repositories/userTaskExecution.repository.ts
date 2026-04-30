@@ -67,13 +67,15 @@ export const userTaskExecutionRepository = {
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
         .select((eb) => [
-          eb.ref("user_task_execution.id").as("user_task_execution_id"),
+          eb
+            .ref("user_task_execution.task_execution_id")
+            .as("user_task_execution_id"),
           eb.ref("user_task_execution.title").as("user_task_execution_title"),
           eb
             .ref("user_task_execution.assignee")
             .as("user_task_execution_assignee"),
           eb
-            .ref("user_task_execution.created_on")
+            .ref("task_execution.created_on")
             .as("user_task_execution_created_on"),
 
           eb.ref("task.instance_id").as("instance_id"),
@@ -159,7 +161,7 @@ export const userTaskExecutionRepository = {
         ),
       ])
       .where("environment.id", "in", environmentIds)
-      .where("user_task_execution.id", "=", id)
+      .where("user_task_execution.task_execution_id", "=", id)
       .executeTakeFirst();
 
     if (!result) {
@@ -247,7 +249,7 @@ export const userTaskExecutionRepository = {
         baseQuery
           .select((expressionBuilder) => [
             expressionBuilder
-              .ref("user_task_execution.id")
+              .ref("user_task_execution.task_execution_id")
               .as("user_task_execution_id"),
 
             expressionBuilder
@@ -259,7 +261,7 @@ export const userTaskExecutionRepository = {
               .as("user_task_execution_assignee"),
 
             expressionBuilder
-              .ref("user_task_execution.created_on")
+              .ref("task_execution.created_on")
               .as("user_task_execution_created_on"),
 
             expressionBuilder.ref("task.instance_id").as("instance_id"),
@@ -272,16 +274,14 @@ export const userTaskExecutionRepository = {
               .ref("workflow_version.id")
               .as("workflow_version_id"),
           ])
-          .orderBy("user_task_execution.created_on", "desc")
+          .orderBy("task_execution.created_on", "desc")
           .limit(limit)
           .offset(offset)
           .execute(),
 
         baseQuery
           .select((expressionBuilder) =>
-            expressionBuilder.fn
-              .count<number>("user_task_execution.id")
-              .as("count"),
+            expressionBuilder.fn.count<number>("task_execution.id").as("count"),
           )
           .executeTakeFirst(),
       ]);

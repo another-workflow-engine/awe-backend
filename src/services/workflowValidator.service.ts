@@ -397,7 +397,6 @@ function toValidationModels(
       source_node_id: edge.sourceNodeId,
       destination_node_id: edge.targetNodeId ?? null,
       rule_id: edge.ruleId ?? null,
-      condition_expression: edge.label ?? null,
       name: edge.label ?? null,
     } as EdgeModel;
   });

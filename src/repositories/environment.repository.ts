@@ -16,7 +16,6 @@ export const environmentRepository = {
       .selectFrom("environment")
       .selectAll()
       .where("type", "=", type)
-      .where("is_deleted", "=", false)
       .execute();
   },
 
@@ -25,7 +24,6 @@ export const environmentRepository = {
       .selectFrom("environment")
       .selectAll()
       .where("id", "=", id)
-      .where("is_deleted", "=", false)
       .executeTakeFirst();
   },
 
@@ -37,7 +35,6 @@ export const environmentRepository = {
       .selectFrom("environment")
       .selectAll()
       .where("organization_id", "=", organizationId)
-      .where("is_deleted", "=", false)
       .execute();
   },
 
@@ -52,7 +49,6 @@ export const environmentRepository = {
       .where("api_key.actor_id", "=", actorId)
       .where("api_key.is_revoked", "=", false)
       .where("api_key.is_deleted", "=", false)
-      .where("environment.is_deleted", "=", false)
       .execute();
   },
 

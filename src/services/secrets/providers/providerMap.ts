@@ -1,11 +1,11 @@
 import type { SecretProviderType } from "../../../types/database.js";
 import { SecretProviderTypes } from "../../../types/enums.js";
-import type { SecretProviderModel } from "../../../types/models.js";
+import type { NewSecretProvider } from "../../../types/secrets.js";
 import type { BaseSecretProvider } from "./BaseSecretProvider.js";
 import { InfisicalSecretProvider } from "./InfisicalSecretProvider.js";
 
 type SecretProviderConstructor = new (
-  secretProvider: SecretProviderModel,
+  secretProvider: NewSecretProvider,
 ) => BaseSecretProvider;
 
 export const providerClassMap: Partial<

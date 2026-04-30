@@ -40,7 +40,7 @@ const generateTokens = async (actor: ActorModel, organizationId: string) => {
   await refreshTokenRepository.insert({
     id: refreshTokenId,
     token: refreshToken,
-    expires_at: expiresAt,
+    expires_on: expiresAt,
     organization_id: organizationId,
   });
   return { accessToken, refreshToken };

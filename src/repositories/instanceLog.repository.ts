@@ -166,15 +166,15 @@ export const instanceLogRepository = {
       if (taskExecutionIds.length > 0) {
         const execRows = await db
           .selectFrom("task_execution")
-          .select([
-            "id",
-            "task_id",
-            "status",
-            "started_on",
-            "ended_on",
-            "input_variables",
-            "output_variables",
-            "created_on",
+          .select((eb) => [
+            eb.ref("id").as("id"),
+            eb.ref("task_id").as("task_id"),
+            eb.ref("status").as("status"),
+            eb.ref("created_on").as("started_on"),
+            eb.ref("ended_on").as("ended_on"),
+            eb.ref("input_variables").as("endedinput_variables_on"),
+            eb.ref("output_variables").as("output_variables"),
+            eb.ref("created_on").as("created_on"),
           ])
           .where("id", "in", taskExecutionIds)
           .execute();

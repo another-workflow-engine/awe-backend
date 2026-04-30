@@ -25,12 +25,9 @@ export const secretProviderService = {
     }
     const provider = new ProviderClass({
       configuration: data.configuration,
-      created_on: null,
-      id: "",
       label: data.label,
       organization_id: organization.id,
       type: data.type,
-      updated_on: null,
     });
 
     const result = await provider.testConnection();

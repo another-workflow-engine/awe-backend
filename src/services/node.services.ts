@@ -51,7 +51,6 @@ export const nodeService = {
         created_by: actor.id,
         description: node.description ?? null,
         is_deleted: false,
-        max_attempts: maxAttempts,
         modified_by: actor.id,
         name: node.label ?? null,
         type: node.type,

@@ -146,8 +146,8 @@ export interface Organization {
 }
 
 export interface RefreshToken {
-  created_on: Generated<Timestamp | null>;
-  expires_at: Timestamp;
+  created_on: Generated<Timestamp>;
+  expires_on: Timestamp;
   id: Generated<string>;
   organization_id: string | null;
   token: string;

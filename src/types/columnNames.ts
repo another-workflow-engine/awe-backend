@@ -18,7 +18,7 @@ export const nodeColumns = ["client_id","configuration","created_by","created_on
 
 export const organizationColumns = ["actor_id","created_on","deleted_on","email","id","is_deleted","modified_on","name","password_hash"] as const satisfies (keyof Organization)[];
 
-export const refreshTokenColumns = ["created_on","expires_at","id","organization_id","token"] as const satisfies (keyof RefreshToken)[];
+export const refreshTokenColumns = ["created_on","expires_on","id","organization_id","token"] as const satisfies (keyof RefreshToken)[];
 
 export const secretProviderColumns = ["configuration","created_on","id","label","organization_id","type","updated_on"] as const satisfies (keyof SecretProvider)[];
 

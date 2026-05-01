@@ -220,6 +220,8 @@ export const instanceService = {
     instanceId: string,
     transaction: DbTransaction,
   ) => {
+    getLogger().debug({ instanceId }, "Locking instance and relations");
+
     return await instanceRepository.getLockedInProgressOrPausedRelationsById(
       instanceId,
       transaction,

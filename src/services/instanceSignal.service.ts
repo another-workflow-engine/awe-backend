@@ -57,7 +57,7 @@ function validateInstanceCanBeSignaledOrThrow(
     instance.control_signal !== controlSignal
   ) {
     throw new StateTransitionError(
-      `Instance is being ${instance.control_signal}ed`,
+      `Instance control signal = ${instance.control_signal}`,
     );
   }
 
@@ -137,14 +137,14 @@ async function updateInstanceControlSignal(
         instance.id,
         taskExecution.id,
         {
-          message: `Task ${controlSignal}ed`,
+          message: `Terminated due to instance ${controlSignal} signal`,
         },
         transaction,
       );
     }
-
+    
     const updatedModels = await engineUtils.processControlSignal({
-      instance,
+      instance: updatedInstance,
       task,
       transaction,
     });

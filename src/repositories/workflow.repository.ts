@@ -1,14 +1,23 @@
 import { db } from "../database.js";
-import type { Workflow } from "../types/database.js";
-import type { Insertable, Updateable } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { DbTransaction, WorkflowModel } from "../types/models.js";
-import type { WorkflowVersionStatus } from "../types/database.js";
+import type {
+  ActorModel,
+  DbTransaction,
+  WorkflowModel,
+  WorkflowVersionModel,
+} from "../types/models.js";
 import type { CreatedSort } from "../types/enums.js";
-import type { WorkflowListItem } from "../types/workflow.js";
-
-type NewWorkflow = Insertable<Workflow>;
-type UpdateWorkflow = Updateable<Workflow>;
+import type {
+  NewWorkflow,
+  UpdateWorkflow,
+  WorkflowListItem,
+} from "../types/workflow.js";
+import { columnMapper } from "./utils/columnMapper.util.js";
+import {
+  actorColumns,
+  workflowColumns,
+  workflowVersionColumns,
+} from "../types/columnNames.js";
 
 export const workflowRepository = {
   findById: async (id: string, transaction?: DbTransaction) => {
@@ -32,6 +41,62 @@ export const workflowRepository = {
       .where("environment_id", "in", environmentIds)
       .where("is_deleted", "=", false)
       .executeTakeFirst();
+  },
+
+  findByIdAndEnvironmentIdsWithRelations: async (
+    workflowId: string,
+    environmentIds: string[],
+  ): Promise<
+    | {
+        workflow: WorkflowModel;
+        latestVersion: WorkflowVersionModel | null;
+        lastModifier: ActorModel;
+      }
+    | undefined
+  > => {
+    if (environmentIds.length === 0) {
+      return;
+    }
+
+    const result = await db
+      .selectFrom("workflow")
+      .innerJoin("actor", "actor.id", "workflow.modified_by")
+      .leftJoinLateral(
+        (eb) =>
+          eb
+            .selectFrom("workflow_version")
+            .selectAll()
+            .whereRef("workflow_version.workflow_id", "=", "workflow.id")
+            .orderBy("workflow_version.modified_on", "desc")
+            .limit(1)
+            .as("workflow_version"),
+        (join) => join.onTrue(),
+      )
+      .select((eb) => [
+        ...columnMapper.prefixedColumns(eb, "workflow", workflowColumns),
+        ...columnMapper.prefixedColumns(
+          eb,
+          "workflow_version",
+          workflowVersionColumns,
+        ),
+        ...columnMapper.prefixedColumns(eb, "actor", actorColumns),
+      ])
+      .where("workflow.id", "=", workflowId)
+      .where("workflow.is_deleted", "=", false)
+      .where("workflow.environment_id", "in", environmentIds)
+      .executeTakeFirst();
+
+    if (!result) {
+      return;
+    }
+
+    return {
+      workflow: columnMapper.extractPrefixed(result, "workflow"),
+      latestVersion: result.workflow_version__id
+        ? columnMapper.extractPrefixed(result, "workflow_version")
+        : null,
+      lastModifier: columnMapper.extractPrefixed(result, "actor"),
+    };
   },
 
   findByBaseWorkflowIdAndEnvironmentId: async (
@@ -63,81 +128,23 @@ export const workflowRepository = {
     }
   },
 
-  updateById: async (
+  updateByIdAndEnvironmentIds: async (
     id: string,
     data: UpdateWorkflow,
-    transaction?: DbTransaction,
-  ) => {
-    try {
-      return await (transaction ?? db)
-        .updateTable("workflow")
-        .set({ ...data })
-        .where("id", "=", id)
-        .where("is_deleted", "=", false)
-        .returningAll()
-        .executeTakeFirstOrThrow();
-    } catch (err) {
-      throw new RepositoryError("Update workflow failed", err);
-    }
-  },
-
-  findByEnvironmentIdsWithLatestVersion: async (
     environmentIds: string[],
-    transaction?: DbTransaction,
-  ): Promise<
-    {
-      workflow: WorkflowModel;
-      status: WorkflowVersionStatus | null;
-      latestWorkflowVersion: number | null;
-    }[]
-  > => {
+  ): Promise<WorkflowModel | undefined> => {
     if (environmentIds.length === 0) {
-      return [];
+      return;
     }
-
-    const dbConn = transaction ?? db;
-
-    const workflows = await dbConn
-      .selectFrom("workflow")
-      .selectAll()
+    
+    return await db
+      .updateTable("workflow")
+      .set(data)
+      .where("id", "=", id)
       .where("environment_id", "in", environmentIds)
       .where("is_deleted", "=", false)
-      .execute();
-
-    const workflowIds = workflows.map((w) => w.id);
-
-    if (workflowIds.length === 0) {
-      return [];
-    }
-
-    const versions = await dbConn
-      .selectFrom("workflow_version")
-      .select(["workflow_id", "version", "status"])
-      .where("workflow_id", "in", workflowIds)
-      .distinctOn("workflow_id")
-      .orderBy("workflow_id")
-      .orderBy("version", "desc")
-      .execute();
-
-    const versionMap = new Map(
-      versions.map((v) => [
-        v.workflow_id,
-        {
-          version: Number(v.version),
-          status: v.status,
-        },
-      ]),
-    );
-
-    return workflows.map((wf) => {
-      const versionInfo = versionMap.get(wf.id);
-
-      return {
-        workflow: wf,
-        status: versionInfo?.status ?? null,
-        latestWorkflowVersion: versionInfo?.version ?? null,
-      };
-    });
+      .returningAll()
+      .executeTakeFirst();
   },
 
   countByEnvironmentIds: async (
@@ -177,20 +184,21 @@ export const workflowRepository = {
       .selectFrom("workflow")
       .innerJoin("environment", "environment.id", "workflow.environment_id")
       .innerJoin("actor", "actor.id", "workflow.modified_by")
-      .leftJoin(
-        db
-          .selectFrom("workflow_version")
-          .select([
-            "workflow_version.id",
-            "workflow_version.workflow_id",
-            "workflow_version.version",
-            "workflow_version.status",
-          ])
-          .distinctOn("workflow_version.workflow_id")
-          .orderBy("workflow_version.workflow_id")
-          .orderBy("workflow_version.modified_on", "desc")
-          .as("wv"),
-        (join) => join.onRef("wv.workflow_id", "=", "workflow.id"),
+      .leftJoinLateral(
+        (eb) =>
+          eb
+            .selectFrom("workflow_version")
+            .select([
+              "workflow_version.id",
+              "workflow_version.workflow_id",
+              "workflow_version.version",
+              "workflow_version.status",
+            ])
+            .whereRef("workflow_version.workflow_id", "=", "workflow.id")
+            .orderBy("workflow_version.modified_on", "desc")
+            .limit(1)
+            .as("latest_version"),
+        (join) => join.onTrue(),
       )
       .select((eb) => [
         eb.ref("workflow.id").as("workflow_id"),
@@ -198,9 +206,9 @@ export const workflowRepository = {
         eb.ref("workflow.description").as("workflow_description"),
         eb.ref("workflow.modified_on").as("workflow_modified_on"),
 
-        eb.ref("wv.id").as("workflow_version_id"),
-        eb.ref("wv.version").as("workflow_version_version"),
-        eb.ref("wv.status").as("workflow_version_status"),
+        eb.ref("latest_version.id").as("workflow_version_id"),
+        eb.ref("latest_version.version").as("workflow_version_version"),
+        eb.ref("latest_version.status").as("workflow_version_status"),
 
         eb.ref("environment.type").as("environment_type"),
         eb.ref("actor.type").as("actor_type"),

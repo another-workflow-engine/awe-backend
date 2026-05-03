@@ -51,15 +51,15 @@ export const paginationUtils = {
   },
 
   getPaginationResponse: (
-    itemCount: number,
+    total: number,
     page: number,
     limit: number,
   ): PaginationResponse => {
     return {
-      total: itemCount,
       page,
       limit,
-      totalPages: Math.ceil(itemCount / limit),
+      total: total,
+      totalPages: Math.ceil(total / limit),
     };
   },
 };

@@ -18,12 +18,12 @@ import { nodeService } from "./node.services.js";
 import {
   WorkflowVersionCreateSchema,
   WorkflowVersionDetailSchema,
-  WorkflowVersionListSchema,
   WorkflowVersionPromoteSchema,
   WorkflowVersionPromoteResponseSchema,
   WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
+  type ListWorkflowVersionsInput,
 } from "../schemas/workflowVersion.schema.js";
 import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
@@ -41,6 +41,8 @@ import { converterUtils } from "../utils/converter.utils.js";
 import { coerce } from "semver";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { openTransaction } from "../utils/database.utils.js";
+import { paginationUtils } from "../utils/pagination.utils.js";
+import { environmentUtils } from "../utils/environment.utils.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 export type StatusPartialUpdateInput = z.infer<
@@ -48,7 +50,6 @@ export type StatusPartialUpdateInput = z.infer<
 >;
 export type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
-export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 export type PromoteVersionInput = z.infer<typeof WorkflowVersionPromoteSchema>;
 export type PromoteVersionOutput = z.infer<
@@ -107,29 +108,37 @@ async function createNodesEdgesAndValid(params: {
 
 export const workflowVersionService = {
   listPaginated: async (
-    data: ListVersionInput,
-    limit: number,
-    offset: number,
-    environmentIds: string[],
+    data: ListWorkflowVersionsInput,
+    environments: EnvironmentModel[],
   ) => {
-    const workflow = await workflowRepository.findByIdAndEnvironmentIds(
-      data.workflowId,
-      environmentIds,
-    );
+    const environmentIds = environmentUtils.getEnvironmentIds(environments);
+
+    const [workflow, { items, total }] = await Promise.all([
+      workflowRepository.findByIdAndEnvironmentIds(
+        data.workflowId,
+        environmentIds,
+      ),
+      workflowVersionRepository.findByWorkflowIdPaginated({
+        workflowId: data.workflowId,
+        limit: data.limit,
+        offset: paginationUtils.getOffset(data.page, data.limit),
+        environmentIds,
+      }),
+    ]);
 
     if (!workflow) {
       throw new NotFoundError("Workflow");
     }
 
-    const versions = await workflowVersionRepository.findByWorkflowIdPaginated(
-      data.workflowId,
-      limit,
-      offset,
+    const pagination = paginationUtils.getPaginationResponse(
+      total,
+      data.page,
+      data.limit,
     );
 
     return {
-      workflow,
-      ...versions,
+      versions: items,
+      pagination,
     };
   },
 
@@ -275,10 +284,12 @@ export const workflowVersionService = {
         throw new NotFoundError("workflow");
       }
 
-      const exists = await workflowVersionRepository.draftOrValidVersionExists(
-        data.workflowId,
-        transaction,
-      );
+      const exists =
+        await workflowVersionRepository.versionsWithStatusExistsByWorkflowId(
+          data.workflowId,
+          [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
+          transaction,
+        );
 
       if (exists) {
         throw new InvalidOperationError(

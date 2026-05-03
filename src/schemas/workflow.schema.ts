@@ -7,35 +7,40 @@ import {
 import { PaginationParamsSchema } from "./pagination.schema.js";
 import { CreatedSort } from "../types/enums.js";
 
-export const WorkflowDefinitionValidateSchema = z.object({
-  nodes: z.array(NodeSchema),
-  edges: z.array(EdgeSchema),
+export const WorkflowListRequestSchema = z.object({
+  ...PaginationParamsSchema.shape,
+  search: z.string().optional(),
+  createdSort: z.enum(CreatedSort).default(CreatedSort.DESCENDING),
+  environmentTypes: EnvironmentQuerySchema.default([]),
 });
 
 export const WorkflowCreateRequestSchema = z.object({
-  name: z.string().max(255),
+  name: z.string().min(1).max(255),
   description: z
     .string()
+    .min(1)
     .optional()
     .transform((val) => val ?? null),
   environment: EnvironmentTypeSchema,
-});
-
-export const WorkflowUpdateRequestSchema = z.object({
-  workflowId: z.uuidv4(),
-  name: z.string().max(255).optional(),
-  description: z.string().optional().nullable(),
 });
 
 export const WorkflowIdSchema = z.object({
   workflowId: z.uuidv4(),
 });
 
-export const WorkflowListRequestSchema = z.object({
-  ...PaginationParamsSchema.shape,
-  search: z.string().optional(),
-  createdSort: z.enum(CreatedSort).default(CreatedSort.DESCENDING),
-  environmentTypes: EnvironmentQuerySchema.default([]),
+export const WorkflowUpdateRequestSchema = z
+  .object({
+    workflowId: z.uuidv4(),
+    name: z.string().min(1).max(255).optional(),
+    description: z.string().min(1).optional().nullable(),
+  })
+  .refine((data) => data.name != null || data.description != null, {
+    message: "Provide at least one non-empty field to update",
+  });
+
+export const WorkflowDefinitionValidateSchema = z.object({
+  nodes: z.array(NodeSchema),
+  edges: z.array(EdgeSchema),
 });
 
 export type ListWorkflowInput = z.infer<typeof WorkflowListRequestSchema>;

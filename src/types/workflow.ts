@@ -19,9 +19,11 @@ import type {
   ActorType,
   EnvironmentType,
   NodeType,
+  Workflow,
   WorkflowVersionStatus,
 } from "./database.js";
 import { NodeTypes } from "./enums.js";
+import type { Insertable, Updateable } from "kysely";
 
 export type StartNodeConfiguration = z.infer<
   typeof StartNodeConfigurationSchema
@@ -83,7 +85,13 @@ export type DecisionNodeDefaultRule = z.infer<typeof DefaultRuleSchema>;
 
 export type BackoffSettings = z.infer<typeof BackoffSchema>;
 
-export type WorkflowListItem = {
+export type LatestVersionDetail = {
+  id: string;
+  version: string | null;
+  status: WorkflowVersionStatus;
+};
+
+export type WorkflowDetail = {
   id: string;
   name: string;
   description: string | null;
@@ -93,9 +101,11 @@ export type WorkflowListItem = {
   modifiedAt: Date;
   modifiedBy: ActorType;
 
-  latestVersion: {
-    id: string;
-    version: string | null;
-    status: WorkflowVersionStatus;
-  } | null;
+  latestVersion: LatestVersionDetail | null;
 };
+
+export type WorkflowListItem = WorkflowDetail;
+
+export type NewWorkflow = Insertable<Workflow>;
+
+export type UpdateWorkflow = Updateable<Workflow>;

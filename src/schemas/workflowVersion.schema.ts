@@ -1,22 +1,22 @@
 import { z } from "zod";
-import { ActorSchema } from "./actor.schema.js";
 import { NodeSchema, EdgeSchema } from "./node.schema.js";
 import {
   EnvironmentTypes,
   VersionIncrementType,
   WorkflowVersionStatuses,
 } from "../types/enums.js";
+import { PaginationParamsSchema } from "./pagination.schema.js";
+
+export const WorkflowVersionListRequestSchema = z.object({
+  ...PaginationParamsSchema.shape,
+  workflowId: z.uuidv4(),
+});
 
 export const WorkflowVersionCreateSchema = z.object({
   workflowId: z.uuidv4(),
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
-});
-
-export const WorkflowVersionListSchema = z.object({
-  workflowId: z.uuidv4(),
-  actor: ActorSchema,
 });
 
 export const WorkflowVersionDetailSchema = z.object({
@@ -61,3 +61,7 @@ export const WorkflowVersionPromoteResponseSchema = z.object({
     EnvironmentTypes.PRODUCTION,
   ]),
 });
+
+export type ListWorkflowVersionsInput = z.infer<
+  typeof WorkflowVersionListRequestSchema
+>;

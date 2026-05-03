@@ -271,7 +271,7 @@ export const taskService = {
     await eventLogService.createTaskLog(
       instance.id,
       task.id,
-      taskStatusToEventMap[taskStatus],
+      LogEventTypes.STARTED,
       undefined,
       undefined,
       transaction,

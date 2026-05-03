@@ -1,5 +1,4 @@
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { ValidationError } from "../errors/ValidationError.js";
 import { environmentRepository } from "../repositories/environment.repository.js";
 import { ActorTypes, EnvironmentTypes } from "../types/enums.js";
 import type {
@@ -7,7 +6,6 @@ import type {
   DbTransaction,
   EnvironmentModel,
 } from "../types/models.js";
-import type { EnvironmentType } from "../types/database.js";
 
 export const environmentService = {
   createAllEnvironments: async (

@@ -132,7 +132,7 @@ export const authService = {
       };
     } catch (err) {
       if (err instanceof jwt.JsonWebTokenError) {
-        throw new AuthError("Invalid access token", err);
+        throw new AuthError("Invalid access token");
       }
 
       throw err;

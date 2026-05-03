@@ -11,9 +11,10 @@ export const errorHandler = (
   __: NextFunction,
 ) => {
   const logger = getLogger();
-  logger.error(err);
 
   if (err instanceof SyntaxError && "body" in err) {
+    logger.debug(err, err.message);
+
     return res.status(400).json({
       success: false,
       message: "Invalid JSON payload",
@@ -22,6 +23,8 @@ export const errorHandler = (
   }
 
   if (err instanceof ValidationError) {
+    logger.debug(err, err.message);
+
     return res.status(err.statusCode).json({
       success: false,
       message: err.message,
@@ -30,6 +33,12 @@ export const errorHandler = (
   }
 
   if (err instanceof AppError) {
+    if (err.statusCode === 500) {
+      logger.error(err, err.message);
+    } else {
+      logger.debug(err, err.message);
+    }
+
     return res.status(err.statusCode).json({
       success: false,
       message: err.message,
@@ -47,6 +56,8 @@ export const errorHandler = (
       details: errorDetails,
     });
   }
+
+  logger.error(err, err.message);
 
   return res.status(500).json({
     success: false,

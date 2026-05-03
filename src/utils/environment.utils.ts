@@ -34,4 +34,16 @@ export const environmentUtils = {
   getEnvironmentIds(environments: EnvironmentModel[]): string[] {
     return environments.map((env) => env.id);
   },
+
+  getFilteredEnvironmentIds(
+    allowedEnvironments: EnvironmentModel[],
+    selectedEnvironmentTypes: EnvironmentType[],
+  ): string[] {
+    const filteredEnvironments = environmentUtils.getFilteredEnvironments(
+      allowedEnvironments,
+      selectedEnvironmentTypes,
+    );
+
+    return this.getEnvironmentIds(filteredEnvironments);
+  },
 };

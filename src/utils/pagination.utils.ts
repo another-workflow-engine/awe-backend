@@ -1,8 +1,5 @@
 import type { Request } from "express";
-import {
-  PaginationParamsSchema,
-  type PaginationMetadata,
-} from "../schemas/pagination.schema.js";
+import { PaginationParamsSchema } from "../schemas/pagination.schema.js";
 
 export type ParsedPagination = {
   page: number;
@@ -10,20 +7,11 @@ export type ParsedPagination = {
   offset: number;
 };
 
-export const calculatePagination = (
-  total: number,
-  page: number,
-  limit: number,
-): PaginationMetadata => {
-  const normalizedTotal = Number(total);
-  const safeTotal = Number.isFinite(normalizedTotal) ? normalizedTotal : 0;
-
-  return {
-    total: safeTotal,
-    page,
-    limit,
-    totalPages: Math.ceil(safeTotal / limit),
-  };
+type PaginationResponse = {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
 
 export const parsePaginationFromRequest = (req: Request): ParsedPagination => {
@@ -43,8 +31,35 @@ export const buildPaginatedResponse = <T>(
   page: number,
   limit: number,
 ) => {
+  const normalizedTotal = Number(total);
+  const safeTotal = Number.isFinite(normalizedTotal) ? normalizedTotal : 0;
+
   return {
     [dataKey]: items,
-    pagination: calculatePagination(total, page, limit),
+    pagination: {
+      total: safeTotal,
+      page,
+      limit,
+      totalPages: Math.ceil(safeTotal / limit),
+    },
   };
+};
+
+export const paginationUtils = {
+  getOffset: (page: number, limit: number): number => {
+    return (page - 1) * limit;
+  },
+
+  getPaginationResponse: (
+    total: number,
+    page: number,
+    limit: number,
+  ): PaginationResponse => {
+    return {
+      page,
+      limit,
+      total: total,
+      totalPages: Math.ceil(total / limit),
+    };
+  },
 };

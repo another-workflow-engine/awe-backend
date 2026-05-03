@@ -1,8 +1,5 @@
-import { sql, type Insertable, type Updateable } from "kysely";
-import type {
-  WorkflowVersion,
-  WorkflowVersionStatus,
-} from "../types/database.js";
+import { sql } from "kysely";
+import type { WorkflowVersionStatus } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
@@ -18,19 +15,12 @@ import {
   workflowColumns,
   workflowVersionColumns,
 } from "../types/columnNames.js";
-
-export type NewWorkflowVersion = Insertable<WorkflowVersion>;
-export type UpdateWorkflowVersion = Updateable<WorkflowVersion>;
+import type {
+  UpdateWorkflowVersion,
+  WorkflowVersionListItem,
+} from "../types/workflowVersion.js";
 
 export const workflowVersionRepository = {
-  findById: async (id: string, transaction?: DbTransaction) => {
-    return await (transaction ?? db)
-      .selectFrom("workflow_version")
-      .selectAll()
-      .where("id", "=", id)
-      .executeTakeFirst();
-  },
-
   findByIdWithWorkflow: async (
     id: string,
   ): Promise<
@@ -86,58 +76,49 @@ export const workflowVersionRepository = {
       .executeTakeFirst();
   },
 
-  findByWorkflowId: async (
-    id: string,
-    transaction?: DbTransaction,
-  ): Promise<WorkflowVersionModel[]> => {
-    try {
-      return await (transaction ?? db)
-        .selectFrom("workflow_version")
-        .selectAll()
-        .where("workflow_id", "=", id)
-        .execute();
-    } catch (err) {
-      throw new RepositoryError(
-        `Workflow versions search for workflowId=${id} failed`,
-        err,
-      );
-    }
-  },
+  findByWorkflowIdPaginated: async (data: {
+    workflowId: string;
+    offset: number;
+    limit: number;
+    environmentIds: string[];
+  }): Promise<{ items: WorkflowVersionListItem[]; total: number }> => {
+    const results = await db
+      .selectFrom("workflow_version")
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .innerJoin("actor", "actor.id", "workflow_version.modified_by")
+      .select((eb) => [
+        eb.ref("workflow_version.id").as("id"),
+        eb.ref("workflow_version.version").as("version"),
+        eb.ref("workflow_version.description").as("description"),
+        eb.ref("workflow_version.status").as("status"),
+        eb.ref("workflow_version.published_on").as("published_on"),
+        eb.ref("workflow_version.modified_on").as("modified_on"),
 
-  findByWorkflowIdPaginated: async (
-    workflowId: string,
-    limit: number,
-    offset: number,
-    transaction?: DbTransaction,
-  ): Promise<{ items: WorkflowVersionModel[]; total: number }> => {
-    try {
-      const dbConn = transaction ?? db;
+        eb.ref("actor.type").as("actor_type"),
 
-      const items = await dbConn
-        .selectFrom("workflow_version")
-        .selectAll()
-        .where("workflow_id", "=", workflowId)
-        .orderBy("version", "desc")
-        .limit(limit)
-        .offset(offset)
-        .execute();
+        eb.fn.countAll().over().as("total_count"),
+      ])
+      .where("workflow.id", "=", data.workflowId)
+      .where("workflow.environment_id", "in", data.environmentIds)
+      .orderBy("version", "desc")
+      .limit(data.limit)
+      .offset(data.offset)
+      .execute();
 
-      const countResult = await dbConn
-        .selectFrom("workflow_version")
-        .select((eb) => eb.fn.count<number>("id").as("count"))
-        .where("workflow_id", "=", workflowId)
-        .executeTakeFirstOrThrow();
-
-      return {
-        items,
-        total: Number(countResult.count),
-      };
-    } catch (err) {
-      throw new RepositoryError(
-        `Workflow versions paginated search failed for workflowId=${workflowId}`,
-        err,
-      );
-    }
+    return {
+      total: results[0] ? Number(results[0].total_count) : 0,
+      items: results.map((res) => {
+        return {
+          id: res.id,
+          version: res.version,
+          description: res.description,
+          status: res.status,
+          publishedAt: res.published_on,
+          modifiedAt: res.modified_on,
+          modifiedBy: res.actor_type,
+        };
+      }),
+    };
   },
 
   findByWorkflowIdAndVersion: async (
@@ -292,20 +273,23 @@ export const workflowVersionRepository = {
       .execute();
   },
 
-  draftOrValidVersionExists: async (
+  versionsWithStatusExistsByWorkflowId: async (
     workflowId: string,
+    statuses: WorkflowVersionStatus[],
     transaction?: DbTransaction,
   ): Promise<boolean> => {
+    if (statuses.length === 0) {
+      return false;
+    }
+
     const result = await (transaction ?? db)
       .selectFrom("workflow_version")
-      .select(sql<number>`count(*)`.as("count"))
+      .select("id")
       .where("workflow_id", "=", workflowId)
-      .where("status", "in", [
-        WorkflowVersionStatuses.DRAFT,
-        WorkflowVersionStatuses.VALID,
-      ])
+      .where("status", "in", statuses)
+      .limit(1)
       .executeTakeFirst();
 
-    return result ? result.count > 0 : false;
+    return !!result;
   },
 };

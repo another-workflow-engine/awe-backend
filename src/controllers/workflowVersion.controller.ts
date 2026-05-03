@@ -3,53 +3,25 @@ import { workflowVersionService } from "../services/workflowVersion.service.js";
 import {
   WorkflowVersionCreateSchema,
   WorkflowVersionDetailSchema,
-  WorkflowVersionListSchema,
+  WorkflowVersionListRequestSchema,
   WorkflowVersionPromoteSchema,
   WorkflowVersionPromoteResponseSchema,
   WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
 } from "../schemas/workflowVersion.schema.js";
-import {
-  buildPaginatedResponse,
-  parsePaginationFromRequest,
-} from "../utils/pagination.utils.js";
 import { WorkflowVersionStatuses } from "../types/enums.js";
-import { environmentUtils } from "../utils/environment.utils.js";
 
 export const workflowVersionController = {
   list: async (req: Request, res: Response) => {
-    const data = WorkflowVersionListSchema.parse({
-      ...req.params,
-      actor: req.context.actor,
-    });
-    const { page, limit, offset } = parsePaginationFromRequest(req);
+    const data = WorkflowVersionListRequestSchema.parse(req.params);
 
-    const { workflow, items, total } =
-      await workflowVersionService.listPaginated(
-        data,
-        limit,
-        offset,
-        environmentUtils.getEnvironmentIds(req.context.environments),
-      );
+    const result = await workflowVersionService.listPaginated(
+      data,
+      req.context.environments,
+    );
 
-    const versions = items.map((version) => ({
-      id: version.id,
-      workflowId: version.workflow_id,
-      versionNumber: version.version,
-      status: version.status,
-      description: version.description,
-      publishedAt: version.published_on,
-      environment: req.context.environments.find(
-        (env) => env.id === workflow.environment_id,
-      )?.type,
-      createdAt: version.created_on,
-      updatedAt: version.modified_on,
-    }));
-
-    return res
-      .status(200)
-      .json(buildPaginatedResponse("versions", versions, total, page, limit));
+    return res.status(200).json(result);
   },
 
   create: async (req: Request, res: Response) => {
@@ -130,7 +102,6 @@ export const workflowVersionController = {
     );
 
     return res.status(200).json({
-      
       valid: result.valid,
       errors: result.errors,
       status: workflowVersion.status,
@@ -155,7 +126,6 @@ export const workflowVersionController = {
       status: workflowVersion.status,
       publishedAt: workflowVersion.published_on,
     });
-    
   },
 
   activate: async (req: Request, res: Response) => {

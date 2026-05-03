@@ -7,7 +7,6 @@ import { InstanceControlSignals, TaskStatuses } from "../types/enums.js";
 import type {
   DbTransaction,
   InstanceModel,
-  NodeModel,
   TaskModel,
 } from "../types/models.js";
 import { EngineError } from "../errors/EngineError.js";
@@ -84,15 +83,13 @@ export const engineUtils = {
         task: taskService.pause,
         instance: instanceService.pause,
         taskMessage: "Instance was paused",
-        instanceMessage: (taskId: string) =>
-          `Paused due to signal. Paused at task id=${taskId}`,
+        instanceMessage: (taskId: string) => `Paused at task id=${taskId}`,
       },
       [InstanceControlSignals.TERMINATE]: {
         task: taskService.terminate,
         instance: instanceService.terminate,
         taskMessage: "Instance was terminated",
-        instanceMessage: (taskId: string) =>
-          `Terminated due to signal. Terminated at task id=${taskId}`,
+        instanceMessage: (taskId: string) => `Terminated at task id=${taskId}`,
       },
     };
 
@@ -156,43 +153,6 @@ export const engineUtils = {
       { error, taskId, instanceId },
       `[Task failed] ${message}`,
     );
-  },
-
-  lockAndExecute: <T>(
-    jobData: QueueJobData,
-    callback: (
-      instance: InstanceModel,
-      task: TaskModel,
-      node: NodeModel,
-      transaction: DbTransaction,
-    ) => Promise<T>,
-  ): Promise<T> => {
-    const { instanceId, nodeId } = jobData;
-    getLogger().info({ job: jobData }, "Locking job models");
-
-    return openTransaction(async (transaction) => {
-      const [{ instance, task, taskExecution }, node] = await Promise.all([
-        instanceService.getLockedInProgressOrPausedRelations(
-          instanceId,
-          transaction,
-        ),
-        nodeService.getByIdOrThrow(nodeId),
-      ]);
-
-      if (!instance || !task) {
-        throw new DataIntegrityError(
-          `Unable to lock data for job data=${jobData}`,
-        );
-      }
-
-      if (taskExecution) {
-        throw new DataIntegrityError(
-          `Task execution id=${taskExecution.id} for job data=${jobData} exists`,
-        );
-      }
-
-      return callback(instance, task, node, transaction);
-    });
   },
 
   completeTask: async (params: {

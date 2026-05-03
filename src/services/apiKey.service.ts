@@ -2,54 +2,68 @@ import Config from "../config.js";
 import { AuthError } from "../errors/AuthError.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { apiKeyRepository } from "../repositories/apiKey.repository.js";
-import { ActorTypes } from "../types/enums.js";
+import { ActorTypes, ApiKeyStatus } from "../types/enums.js";
 import crypto from "node:crypto";
 import argon2 from "argon2";
 import { actorRepository } from "../repositories/actor.repository.js";
-import type {
-  ActorModel,
-  ApiKeyModel,
-  EnvironmentModel,
-} from "../types/models.js";
+import type { ApiKeyModel, EnvironmentModel } from "../types/models.js";
 import type { RequestContext } from "../types/auth.js";
 import type z from "zod";
 import type { CreateApiKeySchema } from "../controllers/apiKey.controller.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { openTransaction } from "../utils/database.utils.js";
+import { environmentUtils } from "../utils/environment.utils.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import type { EnvironmentType } from "../types/database.js";
 
 type CreateApiKey = z.infer<typeof CreateApiKeySchema>;
 
 export const apiKeyService = {
   getAll: async (
-    actor: ActorModel,
+    selectedEnvironmentTypes: EnvironmentType[],
     environments: EnvironmentModel[],
-  ): Promise<ApiKeyModel[]> => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
-      throw new AuthError();
-    }
+  ) => {
+    const environmentIds = environmentUtils.getFilteredEnvironmentIds(
+      environments,
+      selectedEnvironmentTypes,
+    );
 
-    if (environments.length === 0) {
+    if (environmentIds.length === 0) {
       return [];
     }
 
-    return await apiKeyRepository.findByEnvironmentIds(
-      environments.map((env) => env.id),
-    );
+    const apiKeys = await apiKeyRepository.findByEnvironmentIds(environmentIds);
+
+    return apiKeys.map((apiKey) => {
+      const environment = environments.find(
+        (env) => env.id === apiKey.environment_id,
+      );
+      if (!environment) {
+        throw new DataIntegrityError(
+          `No environment for api key id=${apiKey.id}`,
+        );
+      }
+
+      return {
+        id: apiKey.id,
+        label: apiKey.label,
+        environment: environment.type,
+        prefix: apiKey.key_prefix,
+        status: apiKey.is_revoked ? ApiKeyStatus.REVOKED : ApiKeyStatus.ACTIVE,
+        revokedAt: apiKey.revoked_on,
+        createdAt: apiKey.modified_on,
+      };
+    });
   },
 
   createNew: async (
     data: CreateApiKey,
-    actor: ActorModel,
     environments: EnvironmentModel[],
   ): Promise<{
     rawKey: string;
     apiKey: ApiKeyModel;
     environment: EnvironmentModel;
   }> => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
-      throw new AuthError();
-    }
-
     const selectedEnvironment = environments.find(
       (env) => env.type === data.environment,
     );
@@ -98,13 +112,8 @@ export const apiKeyService = {
 
   revoke: async (
     id: string,
-    actor: ActorModel,
     environments: EnvironmentModel[],
   ): Promise<ApiKeyModel> => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
-      throw new AuthError();
-    }
-
     const apiKey = await apiKeyRepository.findById(id);
 
     if (

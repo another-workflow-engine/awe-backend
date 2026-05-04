@@ -1,28 +1,49 @@
-import type { ActorModel, SecretProviderModel } from "../../types/models.js";
-import { organizationRepository } from "../../repositories/organization.repository.js";
-import { NotFoundError } from "../../errors/NotFoundError.js";
-import type { SecretProvider } from "../../types/secrets.js";
+import type {
+  OrganizationModel,
+  SecretProviderModel,
+} from "../../types/models.js";
+import {
+  ProviderConfigurationSchemaMap,
+  type ProviderDetail,
+  type SecretProvider,
+} from "../../types/secrets.js";
 import { secretProviderRepository } from "../../repositories/secretProvider.repository.js";
 import { InvalidOperationError } from "../../errors/InvalidOperationError.js";
 import { converterUtils } from "../../utils/converter.utils.js";
 import { providerClassMap } from "./providers/providerMap.js";
 
+function toProviderDetail(provider: SecretProviderModel): ProviderDetail {
+  return {
+    id: provider.id,
+    label: provider.label,
+    type: provider.type,
+    configuration: converterUtils.parseOrThrow(
+      ProviderConfigurationSchemaMap[provider.type],
+      provider.configuration,
+    ),
+    modifiedAt: provider.modified_on,
+  };
+}
+
 export const secretProviderService = {
+  list: async (organization: OrganizationModel): Promise<ProviderDetail[]> => {
+    const secretProviders = await secretProviderRepository.findByOrganizationId(
+      organization.id,
+    );
+    return secretProviders.map((provider) => toProviderDetail(provider));
+  },
+
   createNew: async (
     data: SecretProvider,
-    actor: ActorModel,
-  ): Promise<SecretProviderModel> => {
-    const organization = await organizationRepository.findByActorId(actor.id);
-    if (!organization) {
-      throw new NotFoundError("organization");
-    }
-
+    organization: OrganizationModel,
+  ): Promise<ProviderDetail> => {
     const ProviderClass = providerClassMap[data.type];
     if (!ProviderClass) {
       throw new InvalidOperationError(
-        `Secret provider type '${data.type}' is not currently implemented`,
+        `Secret provider type '${data.type}' is not implemented`,
       );
     }
+
     const provider = new ProviderClass({
       configuration: data.configuration,
       label: data.label,
@@ -37,20 +58,13 @@ export const secretProviderService = {
       throw new InvalidOperationError(message, result.error);
     }
 
-    return await secretProviderRepository.insert({
+    const secretProvider = await secretProviderRepository.insert({
       label: data.label,
       organization_id: organization.id,
       type: data.type,
       configuration: converterUtils.objectToJsonValue(data.configuration),
     });
-  },
 
-  getByActor: async (actor: ActorModel): Promise<SecretProviderModel[]> => {
-    const organization = await organizationRepository.findByActorId(actor.id);
-    if (!organization) {
-      throw new NotFoundError("organization");
-    }
-
-    return await secretProviderRepository.findByOrganizationId(organization.id);
+    return toProviderDetail(secretProvider);
   },
 };

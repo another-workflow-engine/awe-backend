@@ -15,11 +15,9 @@ export const CreateApiKeySchema = z.object({
 
 export const apiKeyController = {
   list: async (req: Request, res: Response) => {
-    console.log(req.query);
     const selectedEnvironments = EnvironmentQuerySchema.parse(
       req.query.environment,
     );
-    console.log(selectedEnvironments);
 
     const apiKeys = await apiKeyService.getAll(
       selectedEnvironments,

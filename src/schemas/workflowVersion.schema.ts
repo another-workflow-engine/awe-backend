@@ -12,41 +12,29 @@ export const WorkflowVersionListRequestSchema = z.object({
   workflowId: z.uuidv4(),
 });
 
-export const WorkflowVersionCreateSchema = z.object({
+export const WorkflowVersionCreateRequestSchema = z.object({
   workflowId: z.uuidv4(),
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
 });
 
-export const WorkflowVersionDetailSchema = z.object({
+export const WorkflowVersionIdSchema = z.object({
   versionId: z.uuidv4(),
 });
 
-export const WorkflowVersionUpdateStatusSchema = z.object({
-  versionId: z.uuidv4(),
-  status: z.enum([
-    WorkflowVersionStatuses.PUBLISHED,
-    WorkflowVersionStatuses.ACTIVE,
-  ]),
-  incrementType: z
-    .enum(VersionIncrementType)
-    .default(VersionIncrementType.MAJOR),
-});
-
-export const WorkflowVersionValidateSchema = z.object({
-  versionId: z.uuidv4(),
-});
-
-export const WorkflowVersionUpdateSchema = z.object({
+export const WorkflowVersionUpdateRequestSchema = z.object({
   versionId: z.uuidv4(),
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
 });
 
-export const WorkflowVersionPromoteSchema = z.object({
+export const WorkflowVersionUpdateStatusRequestSchema = z.object({
   versionId: z.uuidv4(),
+  incrementType: z
+    .enum(VersionIncrementType)
+    .default(VersionIncrementType.MAJOR),
 });
 
 export const WorkflowVersionPromoteResponseSchema = z.object({
@@ -64,4 +52,20 @@ export const WorkflowVersionPromoteResponseSchema = z.object({
 
 export type ListWorkflowVersionsInput = z.infer<
   typeof WorkflowVersionListRequestSchema
+>;
+
+export type CreateVersionInput = z.infer<
+  typeof WorkflowVersionCreateRequestSchema
+>;
+
+export type UpdateVersionInput = z.infer<
+  typeof WorkflowVersionUpdateRequestSchema
+>;
+
+export type PromoteVersionOutput = z.infer<
+  typeof WorkflowVersionPromoteResponseSchema
+>;
+
+export type StatusPartialUpdateInput = z.infer<
+  typeof WorkflowVersionUpdateStatusRequestSchema
 >;

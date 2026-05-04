@@ -40,7 +40,7 @@ export const StartNodeDataMapSchema = z
 
     if (value.required === false && value.defaultValue === undefined) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         path: ["defaultValue"],
         message: "Optional start input must define defaultValue",
       });
@@ -268,7 +268,7 @@ const EmailRecipientSchema = z.object({
 });
 
 export const EmailNodeConfigurationSchema = z.object({
-  provider: z.string().min(1).default("google_smtp"),
+  provider: z.enum(["google_smtp"]),
   senderExpression: z.string(),
   authUserExpression: z.string(),
   authPassExpression: z.string(),

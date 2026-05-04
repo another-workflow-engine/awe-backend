@@ -3,6 +3,7 @@ import type { WorkflowVersionStatus } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
+  ActorModel,
   DbTransaction,
   NodeModel,
   WorkflowModel,
@@ -11,6 +12,7 @@ import type {
 import { NodeTypes, WorkflowVersionStatuses } from "../types/enums.js";
 import { columnMapper } from "./utils/columnMapper.util.js";
 import {
+  actorColumns,
   nodeColumns,
   workflowColumns,
   workflowVersionColumns,
@@ -27,12 +29,14 @@ export const workflowVersionRepository = {
     | {
         workflowVersion: WorkflowVersionModel;
         workflow: WorkflowModel;
+        modifierActor: ActorModel;
       }
     | undefined
   > => {
     const result = await db
       .selectFrom("workflow_version")
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .innerJoin("actor", "actor.id", "workflow_version.modified_by")
       .select((eb) => [
         ...columnMapper.prefixedColumns<WorkflowVersionModel>(
           eb,
@@ -44,6 +48,7 @@ export const workflowVersionRepository = {
           "workflow",
           workflowColumns,
         ),
+        ...columnMapper.prefixedColumns<ActorModel>(eb, "actor", actorColumns),
       ])
       .where("workflow_version.id", "=", id)
       .where("workflow.is_deleted", "=", false)
@@ -59,14 +64,12 @@ export const workflowVersionRepository = {
         "workflow_version",
       ),
       workflow: columnMapper.extractPrefixed<WorkflowModel>(result, "workflow"),
+      modifierActor: columnMapper.extractPrefixed<ActorModel>(result, "actor"),
     };
   },
 
-  findLatestNonNullVersionByWorkflowId: async (
-    workflowId: string,
-    transaction: DbTransaction,
-  ) => {
-    return await (transaction ?? db)
+  findLatestNonNullVersionByWorkflowId: async (workflowId: string) => {
+    return await db
       .selectFrom("workflow_version")
       .selectAll()
       .where("workflow_id", "=", workflowId)

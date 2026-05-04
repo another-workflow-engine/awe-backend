@@ -16,22 +16,22 @@ import type {
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
 import {
-  WorkflowVersionCreateSchema,
-  WorkflowVersionDetailSchema,
-  WorkflowVersionPromoteSchema,
   WorkflowVersionPromoteResponseSchema,
-  WorkflowVersionUpdateSchema,
-  WorkflowVersionUpdateStatusSchema,
-  WorkflowVersionValidateSchema,
+  type CreateVersionInput,
   type ListWorkflowVersionsInput,
+  type PromoteVersionOutput,
+  type StatusPartialUpdateInput,
+  type UpdateVersionInput,
 } from "../schemas/workflowVersion.schema.js";
-import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import {
   workflowValidatorService,
   type ValidationResult,
 } from "./workflowValidator.service.js";
-import type { EnvironmentType } from "../types/database.js";
+import type {
+  EnvironmentType,
+  WorkflowVersionStatus,
+} from "../types/database.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
@@ -43,18 +43,7 @@ import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { openTransaction } from "../utils/database.utils.js";
 import { paginationUtils } from "../utils/pagination.utils.js";
 import { environmentUtils } from "../utils/environment.utils.js";
-
-export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
-export type StatusPartialUpdateInput = z.infer<
-  typeof WorkflowVersionUpdateStatusSchema
->;
-export type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
-export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
-export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
-export type PromoteVersionInput = z.infer<typeof WorkflowVersionPromoteSchema>;
-export type PromoteVersionOutput = z.infer<
-  typeof WorkflowVersionPromoteResponseSchema
->;
+import type { WorkflowVersionMetaData } from "../types/workflowVersion.js";
 
 const nextPromotionTargetByEnvironment: Record<
   EnvironmentType,
@@ -65,24 +54,23 @@ const nextPromotionTargetByEnvironment: Record<
   [EnvironmentTypes.PRODUCTION]: null,
 };
 
-const getVersionOrThrow = async (
+async function getVersionOrThrow(
   versionId: string,
   environments: EnvironmentModel[],
-) => {
+) {
   const models =
     await workflowVersionRepository.findByIdWithWorkflow(versionId);
 
   if (
     !models ||
-    !models.workflowVersion ||
     !environments.find((env) => env.id === models.workflow.environment_id)
   ) {
     throw new NotFoundError("Workflow version");
   }
   return models;
-};
+}
 
-async function createNodesEdgesAndValid(params: {
+async function createNodesEdgesAndValidate(params: {
   nodes: Node[];
   edges: Edge[];
   actor: ActorModel;
@@ -104,6 +92,28 @@ async function createNodesEdgesAndValid(params: {
   );
 
   return workflowValidatorService.validate(nodeModels, edgeModels);
+}
+
+function toWorkflowVersionMetaData(
+  workflowVersion: WorkflowVersionModel,
+  actor: ActorModel,
+  result: ValidationResult,
+): WorkflowVersionMetaData {
+  return {
+    ...result,
+    workflowVersion: {
+      id: workflowVersion.id,
+      workflow_id: workflowVersion.workflow_id,
+      description: workflowVersion.description,
+      status: workflowVersion.status,
+      version: workflowVersion.version,
+
+      modifiedAt: workflowVersion.modified_on,
+      modifiedBy: actor.type,
+
+      publishedAt: workflowVersion.published_on,
+    },
+  };
 }
 
 export const workflowVersionService = {
@@ -142,15 +152,76 @@ export const workflowVersionService = {
     };
   },
 
-  getActiveVersionByWorkflowIdWithRelations: async (workflowId: string) => {
-    return await workflowVersionRepository.findActiveVersionByWorkflowIdWithRelations(
-      workflowId,
-    );
+  createNew: async (
+    data: CreateVersionInput,
+    actor: ActorModel,
+    environments: EnvironmentModel[],
+    transaction?: DbTransaction,
+  ): Promise<WorkflowVersionMetaData> => {
+    const executeCallback = async (transaction: DbTransaction) => {
+      const workflow = await workflowRepository.findByIdAndEnvironmentIds(
+        data.workflowId,
+        environmentUtils.getEnvironmentIds(environments),
+        transaction,
+      );
+      if (!workflow) {
+        throw new NotFoundError("Workflow");
+      }
+
+      const exists =
+        await workflowVersionRepository.versionsWithStatusExistsByWorkflowId(
+          data.workflowId,
+          [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
+          transaction,
+        );
+
+      if (exists) {
+        throw new InvalidOperationError(
+          "DRAFT version already exists for this workflow.",
+        );
+      }
+
+      let workflowVersion = await workflowVersionRepository.insert(
+        {
+          version: null,
+          description: data.description ?? null,
+          created_by: actor.id,
+          modified_by: actor.id,
+          status: WorkflowVersionStatuses.DRAFT,
+          workflow_id: data.workflowId,
+        },
+        transaction,
+      );
+
+      const result = await createNodesEdgesAndValidate({
+        nodes: data.nodes,
+        edges: data.edges,
+        actor,
+        workflowVersion,
+        transaction,
+      });
+
+      if (result.valid) {
+        workflowVersion = await workflowVersionRepository.updateById(
+          workflowVersion.id,
+          {
+            status: WorkflowVersionStatuses.VALID,
+          },
+          transaction,
+        );
+      }
+
+      return toWorkflowVersionMetaData(workflowVersion, actor, result);
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await openTransaction(executeCallback);
   },
 
-  getDetail: async (data: DetailInput, environments: EnvironmentModel[]) => {
-    const { workflowVersion, workflow } = await getVersionOrThrow(
-      data.versionId,
+  getDetail: async (versionId: string, environments: EnvironmentModel[]) => {
+    const { workflowVersion, modifierActor } = await getVersionOrThrow(
+      versionId,
       environments,
     );
 
@@ -189,14 +260,20 @@ export const workflowVersionService = {
       });
     }
 
-    return { workflow, workflowVersion, nodes, edges, startVariables };
+    return {
+      workflowVersion,
+      nodes,
+      edges,
+      startVariables,
+      modifiedBy: modifierActor.type,
+    };
   },
 
   update: async (
     data: UpdateVersionInput,
     actor: ActorModel,
     environments: EnvironmentModel[],
-  ) => {
+  ): Promise<WorkflowVersionMetaData> => {
     let { workflowVersion } = await getVersionOrThrow(
       data.versionId,
       environments,
@@ -211,22 +288,21 @@ export const workflowVersionService = {
       );
     }
 
-    return openTransaction(async (transaction) => {
-      const existingNodes = await nodeService.getByWorkflowVersion(
-        workflowVersion,
-        transaction,
-      );
+    const existingNodes =
+      await nodeService.getByWorkflowVersion(workflowVersion);
 
+    return openTransaction(async (transaction) => {
       await edgeService.deleteByNodes(existingNodes, transaction);
       await nodeService.deleteByWorkflowVersion(workflowVersion, transaction);
 
-      const result = await createNodesEdgesAndValid({
+      const result = await createNodesEdgesAndValidate({
         nodes: data.nodes,
         edges: data.edges,
         actor,
         workflowVersion,
         transaction,
       });
+
       const status = result.valid
         ? WorkflowVersionStatuses.VALID
         : WorkflowVersionStatuses.DRAFT;
@@ -244,18 +320,24 @@ export const workflowVersionService = {
         transaction,
       );
 
-      return { result, workflowVersion };
+      return toWorkflowVersionMetaData(workflowVersion, actor, result);
     });
   },
 
-  validate: async (data: ValidateInput, environments: EnvironmentModel[]) => {
-    const { workflowVersion } = await getVersionOrThrow(
-      data.versionId,
+  validate: async (
+    versionId: string,
+    environments: EnvironmentModel[],
+  ): Promise<WorkflowVersionMetaData> => {
+    const { workflowVersion, modifierActor } = await getVersionOrThrow(
+      versionId,
       environments,
     );
 
     if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
-      return { result: { valid: true, errors: [] }, workflowVersion };
+      return toWorkflowVersionMetaData(workflowVersion, modifierActor, {
+        valid: true,
+        errors: [],
+      });
     }
 
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
@@ -263,158 +345,93 @@ export const workflowVersionService = {
 
     const result = workflowValidatorService.validate(nodes, edges);
 
-    return { result, workflowVersion };
-  },
-
-  createNew: async (
-    data: CreateVersionInput,
-    actor: ActorModel,
-    environments: EnvironmentModel[],
-    transaction?: DbTransaction,
-  ) => {
-    const executeCallback = async (transaction: DbTransaction) => {
-      const workflow = await workflowRepository.findById(
-        data.workflowId,
-        transaction,
-      );
-      if (
-        !workflow ||
-        !environments.find((env) => env.id === workflow.environment_id)
-      ) {
-        throw new NotFoundError("workflow");
-      }
-
-      const exists =
-        await workflowVersionRepository.versionsWithStatusExistsByWorkflowId(
-          data.workflowId,
-          [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
-          transaction,
-        );
-
-      if (exists) {
-        throw new InvalidOperationError(
-          "DRAFT version already exists for this workflow.",
-        );
-      }
-
-      let workflowVersion = await workflowVersionRepository.insert(
-        {
-          version: null,
-          description: data.description ?? null,
-          created_by: actor.id,
-          modified_by: actor.id,
-          status: WorkflowVersionStatuses.DRAFT,
-          workflow_id: data.workflowId,
-        },
-        transaction,
-      );
-
-      const result = await createNodesEdgesAndValid({
-        nodes: data.nodes,
-        edges: data.edges,
-        actor,
-        workflowVersion,
-        transaction,
-      });
-      if (result.valid) {
-        workflowVersion = await workflowVersionRepository.updateById(
-          workflowVersion.id,
-          {
-            status: WorkflowVersionStatuses.VALID,
-          },
-          transaction,
-        );
-      }
-
-      return { result, workflowVersion };
-    };
-
-    return transaction
-      ? await executeCallback(transaction)
-      : await openTransaction(executeCallback);
+    return toWorkflowVersionMetaData(workflowVersion, modifierActor, result);
   },
 
   changeStatus: async (
     data: StatusPartialUpdateInput,
+    status: WorkflowVersionStatus,
     actor: ActorModel,
     environments: EnvironmentModel[],
-  ) => {
+  ): Promise<WorkflowVersionMetaData> => {
     const { workflowVersion } = await getVersionOrThrow(
       data.versionId,
       environments,
     );
 
     const currentStatus = workflowVersion.status;
-    const newStatus = data.status;
-
     if (currentStatus === WorkflowVersionStatuses.DRAFT) {
       throw new StateTransitionError("Workflow definition is not valid");
     }
 
-    if (currentStatus === newStatus) {
+    if (currentStatus === status) {
       throw new StateTransitionError(`Workflow is in ${currentStatus} state`);
     }
 
+    const updatePayload: Partial<typeof workflowVersion> = {
+      status,
+      modified_on: new Date(),
+      modified_by: actor.id,
+    };
+
+    if (
+      !workflowVersion.published_on &&
+      (status === WorkflowVersionStatuses.PUBLISHED ||
+        status === WorkflowVersionStatuses.ACTIVE)
+    ) {
+      updatePayload.published_on = new Date();
+
+      const previousWorkflowVersion =
+        await workflowVersionRepository.findLatestNonNullVersionByWorkflowId(
+          workflowVersion.workflow_id,
+        );
+
+      const previousVersion = coerce(previousWorkflowVersion?.version ?? "0");
+      if (!previousVersion) {
+        throw new DataIntegrityError(
+          `Invalid semver version=${previousVersion}`,
+        );
+      }
+
+      updatePayload.version = previousVersion.inc(data.incrementType).version;
+    }
+
     return openTransaction(async (transaction) => {
-      // demote active version before activating
-      if (newStatus === WorkflowVersionStatuses.ACTIVE) {
+      // demote existing active version
+      if (status === WorkflowVersionStatuses.ACTIVE) {
         await workflowVersionRepository.demoteActiveVersionToPublished(
           workflowVersion.workflow_id,
           transaction,
         );
       }
 
-      const updatePayload: Partial<typeof workflowVersion> = {
-        status: newStatus,
-        modified_on: new Date(),
-        modified_by: actor.id,
-      };
-
-      if (
-        !workflowVersion.published_on &&
-        (newStatus === WorkflowVersionStatuses.PUBLISHED ||
-          newStatus === WorkflowVersionStatuses.ACTIVE)
-      ) {
-        updatePayload.published_on = new Date();
-
-        const previousWorkflowVersion =
-          await workflowVersionRepository.findLatestNonNullVersionByWorkflowId(
-            workflowVersion.workflow_id,
-            transaction,
-          );
-
-        const previousVersion = coerce(previousWorkflowVersion?.version ?? "0");
-        if (!previousVersion) {
-          throw new DataIntegrityError(
-            `Invalid semver version=${previousVersion}`,
-          );
-        }
-
-        updatePayload.version = previousVersion.inc(data.incrementType).version;
-      }
-
-      return await workflowVersionRepository.updateById(
+      const updatedWorkflowVersion = await workflowVersionRepository.updateById(
         workflowVersion.id,
         updatePayload,
         transaction,
       );
+
+      return toWorkflowVersionMetaData(updatedWorkflowVersion, actor, {
+        valid: true,
+        errors: [],
+      });
     });
   },
 
   clone: async (
-    data: DetailInput,
+    versionId: string,
     actor: ActorModel,
     environments: EnvironmentModel[],
-  ) => {
+  ): Promise<WorkflowVersionMetaData> => {
     const { workflowVersion } = await getVersionOrThrow(
-      data.versionId,
+      versionId,
       environments,
     );
 
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
     const edges = await edgeService.getByNodes(nodes);
 
-    return workflowVersionService.createNew(
+    return await workflowVersionService.createNew(
       {
         workflowId: workflowVersion.workflow_id,
         description: `Clone of version ${workflowVersion.version} - ${workflowVersion.description}`,
@@ -427,7 +444,7 @@ export const workflowVersionService = {
   },
 
   promote: async (
-    data: PromoteVersionInput,
+    versionId: string,
     actor: ActorModel,
     environments: EnvironmentModel[],
   ): Promise<PromoteVersionOutput> => {
@@ -437,7 +454,7 @@ export const workflowVersionService = {
       );
     }
 
-    const models = await getVersionOrThrow(data.versionId, environments);
+    const models = await getVersionOrThrow(versionId, environments);
 
     const sourceWorkflow = models.workflow;
     const sourceWorkflowVersion = models.workflowVersion;
@@ -517,5 +534,11 @@ export const workflowVersionService = {
         targetEnvironment: targetEnvironment.type,
       });
     });
+  },
+
+  getActiveVersionByWorkflowIdWithRelations: async (workflowId: string) => {
+    return await workflowVersionRepository.findActiveVersionByWorkflowIdWithRelations(
+      workflowId,
+    );
   },
 };

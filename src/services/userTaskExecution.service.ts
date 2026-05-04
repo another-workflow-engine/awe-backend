@@ -84,7 +84,15 @@ export const userTaskService = {
       throw new NotFoundError("User task");
     }
 
-    const { userTaskExecution, taskExecution, node, task, instance } = result;
+    const {
+      userTaskExecution,
+      taskExecution,
+      node,
+      task,
+      instance,
+      workflow,
+      workflowVersion,
+    } = result;
 
     const nodeContext = converterUtils.parseOrThrow(
       ContextSchema,
@@ -138,7 +146,12 @@ export const userTaskService = {
       responseData,
       instanceId: instance.id,
       taskId: task.id,
-      workflowVersionId: instance.workflow_version_id,
+      workflow: {
+        id: workflow.id,
+        versionId: workflowVersion.id,
+        version: workflowVersion.version,
+        name: workflow.name,
+      },
       nodeId: node.client_id,
     };
   },

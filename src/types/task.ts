@@ -73,6 +73,11 @@ export type UserTaskDetail = {
   responseData: UserTaskResponseData[];
   instanceId: string;
   taskId: string;
-  workflowVersionId: string;
   nodeId: string;
+  workflow: {
+    id: string;
+    versionId: string;
+    version: string | null;
+    name: string;
+  };
 };

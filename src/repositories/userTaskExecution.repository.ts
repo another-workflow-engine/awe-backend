@@ -10,6 +10,7 @@ import type {
   TaskModel,
   UserTaskExecutionModel,
   WorkflowModel,
+  WorkflowVersionModel,
 } from "../types/models.js";
 import { columnMapper } from "./utils/columnMapper.util.js";
 import {
@@ -18,6 +19,8 @@ import {
   taskColumns,
   taskExecutionColumns,
   userTaskExecutionColumns,
+  workflowColumns,
+  workflowVersionColumns,
 } from "../types/columnNames.js";
 import type { PendingUserTaskListItem } from "../types/task.js";
 
@@ -49,6 +52,8 @@ export const userTaskExecutionRepository = {
         node: NodeModel;
         task: TaskModel;
         instance: InstanceModel;
+        workflow: WorkflowModel;
+        workflowVersion: WorkflowVersionModel;
       }
     | undefined
   > => {
@@ -91,6 +96,16 @@ export const userTaskExecutionRepository = {
           "instance",
           instanceColumns,
         ),
+        ...columnMapper.prefixedColumns<WorkflowModel>(
+          eb,
+          "workflow",
+          workflowColumns,
+        ),
+        ...columnMapper.prefixedColumns<WorkflowVersionModel>(
+          eb,
+          "workflow_version",
+          workflowVersionColumns,
+        ),
       ])
       .where("environment.id", "in", environmentIds)
       .where("user_task_execution.task_execution_id", "=", id)
@@ -116,6 +131,12 @@ export const userTaskExecutionRepository = {
       instance: columnMapper.extractPrefixed<InstanceModel>(result, "instance"),
 
       task: columnMapper.extractPrefixed<TaskModel>(result, "task"),
+
+      workflow: columnMapper.extractPrefixed<WorkflowModel>(result, "workflow"),
+      workflowVersion: columnMapper.extractPrefixed<WorkflowVersionModel>(
+        result,
+        "workflow_version",
+      ),
     };
   },
 

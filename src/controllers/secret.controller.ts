@@ -1,112 +1,37 @@
 import type { Request, Response } from "express";
-import { z } from "zod";
-import { ActorSchema } from "../schemas/actor.schema.js";
 import { secretService } from "../services/secrets/secret.service.js";
-import { EnvironmentTypes } from "../types/enums.js";
-import type { EnvironmentType } from "../types/database.js";
-
-export const CreateNewSecretSchema = z.object({
-  providerId: z.uuidv4(),
-  environment: z.enum(
-    Object.values(EnvironmentTypes) as [EnvironmentType, ...EnvironmentType[]],
-  ),
-  label: z.string(),
-  key: z.string(),
-});
-
-export const ListAllSecretsSchema = z.object({
-  providerId: z.string(),
-  environment: z.enum(
-    Object.values(EnvironmentTypes) as [EnvironmentType, ...EnvironmentType[]],
-  ),
-  actor: ActorSchema,
-});
-
-const mapSecret = (s: {
-  id: string;
-  provider_id: string;
-  label: string;
-  secret_key: string;
-  created_on: Date | string | null;
-  environment?: string;
-}) => ({
-  id: s.id,
-  providerId: s.provider_id,
-  label: s.label,
-  key: s.secret_key,
-  environment: s.environment ?? null,
-  createdAt: s.created_on,
-});
+import {
+  CreateNewSecretRequestSchema,
+  ListSecretRequestSchema,
+} from "../schemas/secret.schema.js";
 
 export const secretController = {
   create: async (req: Request, res: Response) => {
-    const data = CreateNewSecretSchema.parse({
-      ...req.body,
-      label: req.body.key,
-    });
+    const data = CreateNewSecretRequestSchema.parse(req.body);
 
-    const result = await secretService.createNew(data, req.context);
+    const secretDetail = await secretService.createNew(
+      data,
+      req.context.environments,
+    );
 
-    return res.status(201).json({
-      id: result.id,
-      providerId: result.provider_id,
-      environment: data.environment,
-      label: result.label,
-      key: result.secret_key,
-      createdAt: result.created_on,
-    });
+    return res.status(201).json(secretDetail);
   },
 
   list: async (req: Request, res: Response) => {
-    const result = await secretService.list(
-      req.context.environments,
-      req.context,
-    );
+    const data = ListSecretRequestSchema.parse(req.query);
+
+    const secrets = await secretService.list(data, req.context.environments);
+
     return res.status(200).json({
-      secrets: result.map(mapSecret),
+      secrets,
     });
   },
 
-  listByProvider: async (req: Request, res: Response) => {
-    const providerId = req.params.providerId as string;
-    const result = await secretService.listByProvider(
-      providerId,
-      req.context.actor,
-      req.context.environments,
-    );
-    return res.status(200).json({
-      secrets: result.map(mapSecret),
-    });
-  },
   delete: async (req: Request, res: Response) => {
     const secretId = req.params.secretId as string;
-    const deleted = await secretService.delete(secretId, req.context);
 
-    if (!deleted) {
-      return res.status(404).json({
-        error: "Secret not found",
-      });
-    }
+    await secretService.delete(secretId, req.context.environments);
 
-    return res.status(200).json({
-      success: true,
-      message: "Secret deleted successfully",
-    });
-  },
-
-  listAllSecrets: async (req: Request, res: Response) => {
-    const data = ListAllSecretsSchema.parse({
-      ...req.params,
-      ...req.query,
-      actor: req.context.actor,
-    });
-    const result = await secretService.listAllSecrets(
-      data.providerId,
-      data.environment,
-      data.actor,
-    );
-    return res.status(200).json({
-      secrets: result,
-    });
+    return res.status(204).end();
   },
 };

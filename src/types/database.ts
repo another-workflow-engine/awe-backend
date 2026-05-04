@@ -167,7 +167,6 @@ export interface SecretReference {
   created_on: Generated<Timestamp>;
   environment_id: string;
   id: Generated<string>;
-  label: string;
   provider_id: string;
   secret_key: string;
 }

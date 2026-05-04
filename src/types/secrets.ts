@@ -4,7 +4,7 @@ import {
   type SecretProviderSchema,
 } from "../schemas/secretProvider.schema.js";
 import { SecretProviderTypes } from "./enums.js";
-import type { SecretProviderType } from "./database.js";
+import type { EnvironmentType, SecretProviderType } from "./database.js";
 import type { Insertable } from "kysely";
 import type { SecretProvider as SecretProviderModel } from "./database.js";
 
@@ -25,3 +25,24 @@ export type SecretProviderConfiguration<T extends SecretProviderType> = z.infer<
 >;
 
 export type NewSecretProvider = Insertable<SecretProviderModel>;
+
+export type ProviderDetail = {
+  id: string;
+  label: string;
+  type: SecretProviderType;
+  configuration: SecretProviderConfiguration<SecretProviderType>;
+  modifiedAt: Date;
+};
+
+export type SecretDetail = {
+  id: string;
+  environment: EnvironmentType;
+  key: string;
+
+  provider: {
+    id: string;
+    label: string;
+  };
+
+  createdAt: Date;
+};

@@ -96,31 +96,45 @@ export const secretReferenceRepository = {
     }
   },
 
-  findByOrganizationIdAndEnvironmentIds: async (
-    organizationId: string,
-    environmentIds: string[],
-  ) => {
+  findByEnvironmentIds: async (environmentIds: string[]) => {
     if (environmentIds.length === 0) {
       return [];
     }
 
-    return await db
+    const results = await db
       .selectFrom("secret_reference")
       .innerJoin(
-        "environment",
-        "environment.id",
-        "secret_reference.environment_id",
+        "secret_provider",
+        "secret_provider.id",
+        "secret_reference.provider_id",
       )
-      .innerJoin(
-        "organization",
-        "organization.id",
-        "environment.organization_id",
-      )
-      .selectAll("secret_reference")
-      .select("environment.type as environment")
-      .where("organization.id", "=", organizationId)
-      .where("environment.id", "in", environmentIds)
+      .select((eb) => [
+        ...columnMapper.prefixedColumns(
+          eb,
+          "secret_reference",
+          secretReferenceColumns,
+        ),
+        ...columnMapper.prefixedColumns(
+          eb,
+          "secret_provider",
+          secretProviderColumns,
+        ),
+      ])
+      .where("secret_reference.environment_id", "in", environmentIds)
       .execute();
+
+    return results.map((res) => {
+      return {
+        secretReference: columnMapper.extractPrefixed<SecretReferenceModel>(
+          res,
+          "secret_reference",
+        ),
+        secretProvider: columnMapper.extractPrefixed<SecretProviderModel>(
+          res,
+          "secret_provider",
+        ),
+      };
+    });
   },
 
   findByProviderAndActor: async (

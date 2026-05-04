@@ -4,8 +4,8 @@ import { secretProviderService } from "../services/secrets/secretProvider.servic
 
 export const secretProviderController = {
   list: async (req: Request, res: Response) => {
-    const secretProviders = await secretProviderService.getByActor(
-      req.context.actor,
+    const secretProviders = await secretProviderService.list(
+      req.context.organization,
     );
     return res.status(200).json({ secretProviders });
   },
@@ -14,7 +14,7 @@ export const secretProviderController = {
     const data = SecretProviderSchema.parse(req.body);
     const secretProvider = await secretProviderService.createNew(
       data,
-      req.context.actor,
+      req.context.organization,
     );
 
     return res.status(201).json(secretProvider);

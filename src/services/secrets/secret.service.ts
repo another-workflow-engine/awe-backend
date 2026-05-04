@@ -1,6 +1,4 @@
-import { environmentService } from "../environment.services.js";
 import type z from "zod";
-import type { CreateNewSecretSchema } from "../../controllers/secret.controller.js";
 import { secretReferenceRepository } from "../../repositories/secretReference.repository.js";
 import { EngineError } from "../../errors/EngineError.js";
 import { providerClassMap } from "./providers/providerMap.js";
@@ -12,10 +10,17 @@ import type { EnvironmentType } from "../../types/database.js";
 import type {
   EnvironmentModel,
   OrganizationModel,
+  SecretProviderModel,
+  SecretReferenceModel,
 } from "../../types/models.js";
 import type { RequestContext } from "../../types/auth.js";
-
-type CreateNewSecretSchemaType = z.infer<typeof CreateNewSecretSchema>;
+import type {
+  CreateNewSecretInput,
+  ListSecretInput,
+} from "../../schemas/secret.schema.js";
+import type { SecretDetail } from "../../types/secrets.js";
+import { environmentUtils } from "../../utils/environment.utils.js";
+import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 
 function getProviderClass(providerType: string) {
   const ProviderClass =
@@ -58,12 +63,31 @@ function normalizeSecretValue(value: unknown, secretId: string): string {
   return String(value);
 }
 
+function toSecretDetail(
+  secret: SecretReferenceModel,
+  provider: SecretProviderModel,
+  environmentType: EnvironmentType,
+): SecretDetail {
+  return {
+    id: secret.id,
+    environment: environmentType,
+    key: secret.secret_key,
+
+    provider: {
+      id: provider.id,
+      label: provider.label,
+    },
+
+    createdAt: secret.created_on,
+  };
+}
+
 export const secretService = {
   createNew: async (
-    data: CreateNewSecretSchemaType,
-    requestContext: RequestContext,
-  ) => {
-    const environment = requestContext.environments.find((env) => {
+    data: CreateNewSecretInput,
+    environments: EnvironmentModel[],
+  ): Promise<SecretDetail> => {
+    const environment = environments.find((env) => {
       if (env.type === data.environment) {
         return env;
       }
@@ -91,12 +115,61 @@ export const secretService = {
       throw new InvalidOperationError(message, result.error);
     }
 
-    return await secretReferenceRepository.insert({
-      label: data.label,
+    const secretReference = await secretReferenceRepository.insert({
       provider_id: data.providerId,
       environment_id: environment.id,
       secret_key: data.key,
     });
+
+    return toSecretDetail(secretReference, providerModel, environment.type);
+  },
+
+  list: async (
+    data: ListSecretInput,
+    environments: EnvironmentModel[],
+  ): Promise<SecretDetail[]> => {
+    const selectedEnvironmentIds = environmentUtils.getFilteredEnvironmentIds(
+      environments,
+      data.environment,
+    );
+
+    if (selectedEnvironmentIds.length === 0) {
+      return [];
+    }
+
+    const items = await secretReferenceRepository.findByEnvironmentIds(
+      selectedEnvironmentIds,
+    );
+
+    return items.map(({ secretReference, secretProvider }) => {
+      const environment = environments.find(
+        (env) => env.id === secretReference.environment_id,
+      );
+      if (!environment) {
+        throw new DataIntegrityError(
+          `Environment id=${secretReference.environment_id} does not exist within request context`,
+        );
+      }
+
+      return toSecretDetail(secretReference, secretProvider, environment.type);
+    });
+  },
+
+  delete: async (
+    secretId: string,
+    environments: EnvironmentModel[],
+  ): Promise<void> => {
+    const secret = await secretReferenceRepository.findById(secretId);
+    if (
+      !secret ||
+      !environments.find((env) => env.id === secret.environment_id)
+    ) {
+      throw new NotFoundError("Secret");
+    }
+
+    await secretReferenceRepository.deleteById(secretId);
+
+    return;
   },
 
   getByIds: async (secretIds: string[]): Promise<Record<string, string>> => {
@@ -128,78 +201,5 @@ export const secretService = {
     }
 
     return secrets;
-  },
-
-  list: async (
-    environments: EnvironmentModel[],
-    requestContext: RequestContext,
-  ) => {
-    const environmentTypes = environments.map((env) => env.type);
-
-    return await secretReferenceRepository.findByOrganizationIdAndEnvironmentIds(
-      requestContext.organization.id,
-      requestContext.environments.reduce<string[]>((acc, env) => {
-        if (env.id && environmentTypes.includes(env.type)) {
-          acc.push(env.id);
-        }
-        return acc;
-      }, []),
-    );
-  },
-
-  listByProvider: async (
-    providerId: string,
-    actor: z.infer<typeof ActorSchema>,
-    environments: EnvironmentModel[],
-  ) => {
-    return await secretReferenceRepository.findByProviderAndActor(
-      providerId,
-      actor.id,
-      environments.map((env) => env.id),
-    );
-  },
-
-  delete: async (
-    secretId: string,
-    requestContext: RequestContext,
-  ): Promise<boolean> => {
-    const secret = await secretReferenceRepository.findById(secretId);
-    if (!secret) {
-      throw new NotFoundError("Secret");
-    }
-
-    const userSecrets =
-      await secretReferenceRepository.findByOrganizationIdAndEnvironmentIds(
-        requestContext.organization.id,
-        requestContext.environments.map((env) => env.id),
-      );
-    if (!userSecrets.some((s) => s.id === secretId)) {
-      throw new InvalidOperationError(
-        "You do not have permission to delete this secret",
-      );
-    }
-
-    return await secretReferenceRepository.deleteById(secretId);
-  },
-
-  listAllSecrets: async (
-    providerId: string,
-    environment: EnvironmentType,
-    actor: z.infer<typeof ActorSchema>,
-  ) => {
-    const providerModel = await secretProviderRepository.findById(providerId);
-    if (!providerModel) {
-      throw new NotFoundError("Secret provider");
-    }
-
-    const ProviderClass = getProviderClass(providerModel.type);
-    const providerInstance = new ProviderClass(providerModel);
-    const result = await providerInstance.listAllSecrets();
-
-    if (!result) {
-      throw new InvalidOperationError("Failed to fetch secrets from provider");
-    }
-
-    return result;
   },
 };

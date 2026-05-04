@@ -1,58 +1,60 @@
-import { InstanceStatuses } from "../types/enums.js";
-import type { ActorModel, EnvironmentModel } from "../types/models.js";
+import { InstanceStatuses, TaskStatuses } from "../types/enums.js";
+import type { EnvironmentModel } from "../types/models.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
 import { instanceRepository } from "../repositories/instance.repository.js";
-import { userTaskService } from "./userTaskExecution.service.js";
 import { environmentUtils } from "../utils/environment.utils.js";
+import type { EnvironmentType } from "../types/database.js";
+import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 
 export type DashboardOverview = {
-  stats: {
-    workflows: number;
-    instances: number;
-    running: number;
-    pending: number;
-  };
-  instances: Awaited<
-    ReturnType<typeof instanceRepository.findWithPagination>
-  >["items"];
-  tasks: Awaited<
-    ReturnType<typeof userTaskService.getPendingPaginated>
-  >["items"];
+  totalWorkflows: number;
+  totalInstances: number;
+  totalRunningInstances: number;
+  totalPendingUserTasks: number;
 };
 
 export const dashboardService = {
   getOverview: async (
-    actor: ActorModel,
+    selectedEnvironmentTypes: EnvironmentType[],
     environments: EnvironmentModel[],
   ): Promise<DashboardOverview> => {
-    const environmentIds = environmentUtils.getEnvironmentIds(environments);
+    const environmentIds = environmentUtils.getFilteredEnvironmentIds(
+      environments,
+      selectedEnvironmentTypes,
+    );
+
+    if (environmentIds.length === 0) {
+      return {
+        totalWorkflows: 0,
+        totalInstances: 0,
+        totalRunningInstances: 0,
+        totalPendingUserTasks: 0,
+      };
+    }
 
     const [
-      workflowTotal,
-      instanceResult,
-      pendingTaskResult,
-      instanceTotal,
-      runningTotal,
+      totalWorkflows,
+      totalRunningInstances,
+      totalInstances,
+      totalPendingUserTasks,
     ] = await Promise.all([
       workflowRepository.countByEnvironmentIds(environmentIds),
-      instanceRepository.findRecentByEnvironmentIds(environmentIds, 5),
-      userTaskService.getPendingPaginated(actor, undefined, environments, 5, 0),
-      instanceRepository.countByEnvironmentIds(environmentIds),
       instanceRepository.countByEnvironmentIdsAndStatus(
         environmentIds,
         InstanceStatuses.IN_PROGRESS,
       ),
+      instanceRepository.countByEnvironmentIds(environmentIds),
+      userTaskExecutionRepository.countByEnvironmentIdsAndStatus(
+        environmentIds,
+        TaskStatuses.IN_PROGRESS,
+      ),
     ]);
 
     return {
-      stats: {
-        workflows: workflowTotal,
-        instances: instanceTotal,
-        running: runningTotal,
-        pending: pendingTaskResult.total,
-      },
-      instances: instanceResult,
-      tasks: pendingTaskResult.items,
+      totalWorkflows,
+      totalRunningInstances,
+      totalInstances,
+      totalPendingUserTasks,
     };
   },
 };

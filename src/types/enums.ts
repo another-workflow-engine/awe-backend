@@ -131,3 +131,12 @@ export enum CreatedSort {
   ASCENDING = "asc",
   DESCENDING = "desc",
 }
+
+export enum FieldUiType {
+  TEXT = "text",
+  TEXTAREA = "textarea",
+  NUMBER = "number",
+  DROPDOWN = "dropdown",
+  CHECKBOX = "checkbox",
+  DATE_PICKER = "date-picker",
+}

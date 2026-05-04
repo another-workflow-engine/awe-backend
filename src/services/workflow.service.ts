@@ -58,7 +58,7 @@ export const workflowService = {
         createdSort: data.createdSort,
         environmentIds: environmentUtils.getFilteredEnvironmentIds(
           environments,
-          data.environmentTypes,
+          data.environment,
         ),
       });
 

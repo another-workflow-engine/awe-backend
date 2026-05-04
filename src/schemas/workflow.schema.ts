@@ -11,7 +11,7 @@ export const WorkflowListRequestSchema = z.object({
   ...PaginationParamsSchema.shape,
   search: z.string().optional(),
   createdSort: z.enum(CreatedSort).default(CreatedSort.DESCENDING),
-  environmentTypes: EnvironmentQuerySchema.default([]),
+  environment: EnvironmentQuerySchema,
 });
 
 export const WorkflowCreateRequestSchema = z.object({

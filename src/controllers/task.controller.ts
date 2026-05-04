@@ -1,10 +1,13 @@
 import type { Request, Response } from "express";
 import { taskService } from "../services/task.service.js";
-import { TaskParamsSchema, TaskRetrySchema } from "../schemas/task.schema.js";
+import {
+  TaskIdSchema,
+  TaskRetryRequestSchema,
+} from "../schemas/task.schema.js";
 
 export const taskController = {
   get: async (req: Request, res: Response) => {
-    const { taskId } = TaskParamsSchema.parse(req.params);
+    const { taskId } = TaskIdSchema.parse(req.params);
 
     const detail = await taskService.getDetail(
       taskId,
@@ -15,7 +18,7 @@ export const taskController = {
   },
 
   retry: async (req: Request, res: Response) => {
-    const data = TaskRetrySchema.parse({ ...req.params, ...req.body });
+    const data = TaskRetryRequestSchema.parse({ ...req.params, ...req.body });
 
     const task = await taskService.retry(
       data,

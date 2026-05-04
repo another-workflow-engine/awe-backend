@@ -7,21 +7,19 @@ import type {
   InstanceModel,
   NodeModel,
   TaskExecutionModel,
+  TaskModel,
   UserTaskExecutionModel,
   WorkflowModel,
 } from "../types/models.js";
-import type {
-  PendingUserTaskList,
-  WorkflowDetailsForUserTask,
-} from "../types/userTask.js";
 import { columnMapper } from "./utils/columnMapper.util.js";
 import {
   instanceColumns,
   nodeColumns,
+  taskColumns,
   taskExecutionColumns,
   userTaskExecutionColumns,
-  workflowColumns,
 } from "../types/columnNames.js";
+import type { PendingUserTaskListItem } from "../types/task.js";
 
 type NewUserTaskExecution = Insertable<UserTaskExecution>;
 
@@ -41,78 +39,16 @@ export const userTaskExecutionRepository = {
     }
   },
 
-  findByEnvironmentIdsAndStatus: async (
-    environmentIds: string[],
-    status: TaskStatus,
-    transaction?: DbTransaction,
-  ): Promise<PendingUserTaskList[]> => {
-    if (environmentIds.length === 0) {
-      return [];
-    }
-
-    try {
-      const result = await (transaction ?? db)
-        .selectFrom("user_task_execution")
-        .innerJoin(
-          "task_execution",
-          "task_execution.id",
-          "user_task_execution.task_execution_id",
-        )
-        .innerJoin("task", "task.id", "task_execution.task_id")
-        .innerJoin("instance", "instance.id", "task.instance_id")
-        .innerJoin(
-          "workflow_version",
-          "workflow_version.id",
-          "instance.workflow_version_id",
-        )
-        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .select((eb) => [
-          eb
-            .ref("user_task_execution.task_execution_id")
-            .as("user_task_execution_id"),
-          eb.ref("user_task_execution.title").as("user_task_execution_title"),
-          eb
-            .ref("user_task_execution.assignee")
-            .as("user_task_execution_assignee"),
-          eb
-            .ref("task_execution.created_on")
-            .as("user_task_execution_created_on"),
-
-          eb.ref("task.instance_id").as("instance_id"),
-          eb.ref("workflow.id").as("workflow_id"),
-          eb.ref("workflow.name").as("workflow_name"),
-          eb.ref("workflow_version.id").as("workflow_version_id"),
-        ])
-        .where("task_execution.status", "=", status)
-        .where("workflow.environment_id", "in", environmentIds)
-        .execute();
-
-      return result.map((row) => ({
-        id: row.user_task_execution_id,
-        title: row.user_task_execution_title,
-        assignee: row.user_task_execution_assignee,
-        createdAt: row.user_task_execution_created_on,
-        workflow: {
-          instanceId: row.instance_id,
-          versionId: row.workflow_version_id,
-          name: row.workflow_name,
-        },
-      }));
-    } catch (err) {
-      throw new RepositoryError("Find all pending user tasks failed", err);
-    }
-  },
-
   findByIdAndEnvironmentIdsWithRelations: async (
     id: string,
     environmentIds: string[],
-    transaction?: DbTransaction,
   ): Promise<
     | {
         userTaskExecution: UserTaskExecutionModel;
         taskExecution: TaskExecutionModel;
         node: NodeModel;
-        workflow: WorkflowDetailsForUserTask;
+        task: TaskModel;
+        instance: InstanceModel;
       }
     | undefined
   > => {
@@ -120,7 +56,7 @@ export const userTaskExecutionRepository = {
       return;
     }
 
-    const result = await (transaction ?? db)
+    const result = await db
       .selectFrom("user_task_execution")
       .innerJoin(
         "task_execution",
@@ -138,6 +74,7 @@ export const userTaskExecutionRepository = {
       .innerJoin("environment", "environment.id", "workflow.environment_id")
       .innerJoin("node", "node.id", "task.node_id")
       .select((eb) => [
+        ...columnMapper.prefixedColumns<TaskModel>(eb, "task", taskColumns),
         ...columnMapper.prefixedColumns<UserTaskExecutionModel>(
           eb,
           "user_task_execution",
@@ -154,11 +91,6 @@ export const userTaskExecutionRepository = {
           "instance",
           instanceColumns,
         ),
-        ...columnMapper.prefixedColumns<WorkflowModel>(
-          eb,
-          "workflow",
-          workflowColumns,
-        ),
       ])
       .where("environment.id", "in", environmentIds)
       .where("user_task_execution.task_execution_id", "=", id)
@@ -167,15 +99,6 @@ export const userTaskExecutionRepository = {
     if (!result) {
       return;
     }
-
-    const instance = columnMapper.extractPrefixed<InstanceModel>(
-      result,
-      "instance",
-    );
-    const workflow = columnMapper.extractPrefixed<WorkflowModel>(
-      result,
-      "workflow",
-    );
 
     return {
       userTaskExecution: columnMapper.extractPrefixed<UserTaskExecutionModel>(
@@ -190,26 +113,23 @@ export const userTaskExecutionRepository = {
 
       node: columnMapper.extractPrefixed<NodeModel>(result, "node"),
 
-      workflow: {
-        instanceId: instance.id,
-        versionId: instance.workflow_version_id,
-        name: workflow.name,
-      },
+      instance: columnMapper.extractPrefixed<InstanceModel>(result, "instance"),
+
+      task: columnMapper.extractPrefixed<TaskModel>(result, "task"),
     };
   },
 
-  findByEnvironmentIdsAndStatusPaginated: async (
-    environmentIds: string[],
-    status: TaskStatus,
-    assignee: string | undefined,
-    limit: number,
-    offset: number,
-    transaction?: DbTransaction,
-  ): Promise<{
-    items: PendingUserTaskList[];
+  findByEnvironmentIdsAndStatusPaginated: async (data: {
+    limit: number;
+    offset: number;
+    assignee: string | undefined;
+    status: TaskStatus;
+    environmentIds: string[];
+  }): Promise<{
+    items: PendingUserTaskListItem[];
     total: number;
   }> => {
-    if (environmentIds.length === 0) {
+    if (data.environmentIds.length === 0) {
       return {
         items: [],
         total: 0,
@@ -217,9 +137,7 @@ export const userTaskExecutionRepository = {
     }
 
     try {
-      const executor = transaction ?? db;
-
-      let baseQuery = executor
+      let query = db
         .selectFrom("user_task_execution")
         .innerJoin(
           "task_execution",
@@ -234,74 +152,53 @@ export const userTaskExecutionRepository = {
           "instance.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .where("task_execution.status", "=", status)
-        .where("workflow.environment_id", "in", environmentIds);
+        .innerJoin("node", "node.id", "task.node_id")
+        .select((eb) => [
+          eb
+            .ref("user_task_execution.task_execution_id")
+            .as("task_execution_id"),
+          eb.ref("user_task_execution.title").as("user_task_title"),
+          eb.ref("user_task_execution.assignee").as("user_task_assignee"),
+          eb.ref("task_execution.created_on").as("user_task_created_on"),
+          eb.ref("task.instance_id").as("instance_id"),
+          eb.ref("task.id").as("task_id"),
+          eb.ref("instance.workflow_version_id").as("workflow_version_id"),
+          eb.ref("node.client_id").as("node_client_id"),
+          eb.fn.countAll().over().as("total_count"),
+        ])
+        .where("task_execution.status", "=", data.status)
+        .where("workflow.environment_id", "in", data.environmentIds);
 
-      if (assignee) {
-        baseQuery = baseQuery.where(
+      if (data.assignee) {
+        query = query.where(
           "user_task_execution.assignee",
           "like",
-          `%${assignee}%`,
+          `%${data.assignee}%`,
         );
       }
+      const results = await query.execute();
 
-      const [items, countResult] = await Promise.all([
-        baseQuery
-          .select((expressionBuilder) => [
-            expressionBuilder
-              .ref("user_task_execution.task_execution_id")
-              .as("user_task_execution_id"),
-
-            expressionBuilder
-              .ref("user_task_execution.title")
-              .as("user_task_execution_title"),
-
-            expressionBuilder
-              .ref("user_task_execution.assignee")
-              .as("user_task_execution_assignee"),
-
-            expressionBuilder
-              .ref("task_execution.created_on")
-              .as("user_task_execution_created_on"),
-
-            expressionBuilder.ref("task.instance_id").as("instance_id"),
-
-            expressionBuilder.ref("workflow.id").as("workflow_id"),
-
-            expressionBuilder.ref("workflow.name").as("workflow_name"),
-
-            expressionBuilder
-              .ref("workflow_version.id")
-              .as("workflow_version_id"),
-          ])
-          .orderBy("task_execution.created_on", "desc")
-          .limit(limit)
-          .offset(offset)
-          .execute(),
-
-        baseQuery
-          .select((expressionBuilder) =>
-            expressionBuilder.fn.count<number>("task_execution.id").as("count"),
-          )
-          .executeTakeFirst(),
-      ]);
-
-      const formattedItems = items.map((row) => ({
-        id: row.user_task_execution_id,
-        title: row.user_task_execution_title,
-        assignee: row.user_task_execution_assignee,
-        createdAt: row.user_task_execution_created_on,
-
-        workflow: {
-          instanceId: row.instance_id,
-          name: row.workflow_name,
-          versionId: row.workflow_version_id,
-        },
-      }));
+      if (results.length === 0) {
+        return {
+          items: [],
+          total: 0,
+        };
+      }
 
       return {
-        items: formattedItems,
-        total: countResult ? Number(countResult.count) : 0,
+        total: results[0] ? Number(results[0].total_count) : 0,
+        items: results.map((res) => {
+          return {
+            id: res.task_execution_id,
+            title: res.user_task_title,
+            assignee: res.user_task_assignee,
+            createdAt: res.user_task_created_on,
+            instanceId: res.instance_id,
+            taskId: res.task_id,
+            workflowVersionId: res.workflow_version_id,
+            nodeId: res.node_client_id,
+          };
+        }),
       };
     } catch (err) {
       throw new RepositoryError(
@@ -309,5 +206,32 @@ export const userTaskExecutionRepository = {
         err,
       );
     }
+  },
+
+  countByEnvironmentIdsAndStatus: async (
+    environmentIds: string[],
+    status: TaskStatus,
+  ): Promise<number> => {
+    if (environmentIds.length === 0) {
+      return 0;
+    }
+
+    const result = await db
+      .selectFrom("task")
+      .innerJoin("instance", "instance.id", "task.instance_id")
+      .innerJoin(
+        "workflow_version",
+        "workflow_version.id",
+        "instance.workflow_version_id",
+      )
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .select((eb) => eb.fn.count<number>("instance.id").as("count"))
+      .where("workflow.environment_id", "in", environmentIds)
+      .where("instance.is_deleted", "=", false)
+      .where("workflow.is_deleted", "=", false)
+      .where("task.status", "=", status)
+      .executeTakeFirst();
+
+    return result ? Number(result.count) : 0;
   },
 };

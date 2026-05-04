@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { dashboardService } from "../services/dashboard.service.js";
 import { z } from "zod";
 import { organizationService } from "../services/organization.services.js";
+import { EnvironmentQuerySchema } from "../schemas/environment.schema.js";
 
 const RegisterOrganizationInput = z.object({
   name: z.string().max(255),
@@ -37,8 +38,12 @@ export const organizationController = {
   },
 
   dashboard: async (req: Request, res: Response) => {
+    const selectedEnvironmentTypes = EnvironmentQuerySchema.parse(
+      req.query.environment,
+    );
+
     const overview = await dashboardService.getOverview(
-      req.context.actor,
+      selectedEnvironmentTypes,
       req.context.environments,
     );
 

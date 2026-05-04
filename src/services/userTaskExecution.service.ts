@@ -22,7 +22,6 @@ import type {
 } from "../types/models.js";
 import { contextUtils } from "../utils/context.utils.js";
 import { environmentService } from "./environment.services.js";
-import type { PendingUserTaskList } from "../types/userTask.js";
 import { taskService } from "./task.service.js";
 import { taskExecutionService } from "./taskExecution.service.js";
 import { engineUtils } from "../utils/engine.utils.js";
@@ -30,94 +29,62 @@ import { ContextSchema } from "../schemas/context.schema.js";
 import type { UserNodeConfiguration } from "../types/workflow.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { environmentUtils } from "../utils/environment.utils.js";
+import type { PendingUserTaskListInput } from "../schemas/task.schema.js";
+import { paginationUtils } from "../utils/pagination.utils.js";
+import type {
+  PendingUserTaskListItem,
+  UserTaskDetail,
+  UserTaskResponseData,
+} from "../types/task.js";
 
 export const userTaskService = {
-  create: async (params: {
-    jobData: QueueJobData;
-    nodeConfiguration: UserNodeConfiguration;
-    taskContext: Context;
-    transaction: DbTransaction;
-  }) => {
-    const { jobData, nodeConfiguration, taskContext, transaction } = params;
-    const { instanceId, taskId } = jobData;
-
-    const taskExecution = await taskExecutionService.create(
-      instanceId,
-      taskId,
-      taskContext,
-      transaction,
-    );
-
-    const assignee = nodeConfiguration.assignee
-      ? contextUtils.getFeelEvaluatedValue(
-          nodeConfiguration.assignee,
-          await contextUtils.evaluateContext(taskContext),
-          FeelDataType.STRING,
-        )
-      : null;
-    const title = nodeConfiguration.title ?? null;
-
-    const userTaskExecution = await userTaskExecutionRepository.insert(
-      {
-        task_execution_id: taskExecution.id,
-        assignee,
-        title,
-      },
-      transaction,
-    );
-
-    return { taskExecution, userTaskExecution };
-  },
-
   getPendingPaginated: async (
-    actor: ActorModel,
-    asignee: string | undefined,
+    data: PendingUserTaskListInput,
     environments: EnvironmentModel[],
-    limit: number,
-    offset: number,
-  ): Promise<{
-    items: PendingUserTaskList[];
-    total: number;
-  }> => {
-    const environmentIds = environmentUtils.getEnvironmentIds(environments);
-
-    const filteredEnvironmentIds =
-      environmentIds.length > 0
-        ? environmentIds
-        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
-
-    return await userTaskExecutionRepository.findByEnvironmentIdsAndStatusPaginated(
-      filteredEnvironmentIds,
-      TaskStatuses.IN_PROGRESS,
-      asignee,
-      limit,
-      offset,
+  ) => {
+    const environmentIds = environmentUtils.getFilteredEnvironmentIds(
+      environments,
+      data.environment,
     );
+
+    const { items, total } =
+      await userTaskExecutionRepository.findByEnvironmentIdsAndStatusPaginated({
+        environmentIds,
+        status: TaskStatuses.IN_PROGRESS,
+        assignee: data.assignee,
+        limit: data.limit,
+        offset: paginationUtils.getOffset(data.page, data.limit),
+      });
+
+    const pagination = paginationUtils.getPaginationResponse(
+      total,
+      data.page,
+      data.limit,
+    );
+
+    return {
+      userTasks: items,
+      pagination,
+    };
   },
 
   get: async (
     id: string,
-    actor: ActorModel,
     environments: EnvironmentModel[],
-  ) => {
+  ): Promise<UserTaskDetail> => {
     const environmentIds = environmentUtils.getEnvironmentIds(environments);
-
-    const filteredEnvironmentIds =
-      environmentIds.length > 0
-        ? environmentIds
-        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
 
     const result =
       await userTaskExecutionRepository.findByIdAndEnvironmentIdsWithRelations(
         id,
-        filteredEnvironmentIds,
+        environmentIds,
       );
 
     if (!result) {
       throw new NotFoundError("User task");
     }
 
-    const { userTaskExecution, taskExecution, node, workflow } = result;
+    const { userTaskExecution, taskExecution, node, task, instance } = result;
 
     const nodeContext = converterUtils.parseOrThrow(
       ContextSchema,
@@ -138,69 +105,67 @@ export const userTaskService = {
       );
     });
 
-    const responseData = configuration.responseMap.map((data) => {
-      return {
-        fieldId: data.fieldId,
-        label: data.label,
-        type: data.type,
-        dataType: data.type,
-        required: data.required,
-        defaultValue: data.defaultValue,
-        uiType: data.uiType,
-        options: data.options,
-      };
-    });
+    const responseData: UserTaskResponseData[] = configuration.responseMap.map(
+      (data) => {
+        return {
+          fieldId: data.fieldId,
+          label: data.label,
+          dataType: data.type,
+          required: data.required,
+          defaultValue: data.defaultValue,
+          uiType: data.uiType,
+          options: data.options?.map((option) => {
+            return {
+              label: option.label,
+              value: contextUtils.getFeelEvaluatedValue(
+                option.valueExpression,
+                evaluatedContext,
+              ),
+            };
+          }),
+        };
+      },
+    );
 
     return {
       id: userTaskExecution.task_execution_id,
       title: userTaskExecution.title,
       assignee: userTaskExecution.assignee,
       startedAt: taskExecution.created_on,
+      endedAt: taskExecution.ended_on,
       status: taskExecution.status,
       requestData,
       responseData,
-      workflow,
+      instanceId: instance.id,
+      taskId: task.id,
+      workflowVersionId: instance.workflow_version_id,
+      nodeId: node.client_id,
     };
   },
 
   completeUserTask: async (
     id: string,
     userInput: Record<string, unknown>,
-    actor: ActorModel,
     environments: EnvironmentModel[],
-  ): Promise<{
-    userTaskExecution: UserTaskExecutionModel;
-    taskExecution: TaskExecutionModel;
-  }> => {
+  ): Promise<UserTaskDetail> => {
     const environmentIds = environmentUtils.getEnvironmentIds(environments);
-
-    const filteredEnvironmentIds =
-      environmentIds.length > 0
-        ? environmentIds
-        : (await environmentService.getAllByActor(actor)).map((env) => env.id);
 
     const models =
       await userTaskExecutionRepository.findByIdAndEnvironmentIdsWithRelations(
         id,
-        filteredEnvironmentIds,
+        environmentIds,
       );
 
     if (!models) {
       throw new NotFoundError("User task");
     }
 
-    const { userTaskExecution, taskExecution, node, workflow } = models;
-    const task = await taskService.getByIdOrThrow(taskExecution.task_id);
+    const { userTaskExecution, taskExecution, node, task, instance } = models;
 
     if (taskExecution.status !== TaskStatuses.IN_PROGRESS) {
       throw new StateTransitionError(
         `Task execution id=${userTaskExecution.task_execution_id} is not awaiting user input`,
       );
-    }
-
-    const instance = await instanceRepository.findById(workflow.instanceId);
-    if (!instance) {
-      throw new NotFoundError(`Instance`);
     }
 
     if (instance.status !== InstanceStatuses.IN_PROGRESS) {
@@ -271,6 +236,43 @@ export const userTaskService = {
       );
     }
 
-    return { taskExecution: updatedTaskExecution, userTaskExecution };
+    return await userTaskService.get(id, environments);
+  },
+
+  create: async (params: {
+    jobData: QueueJobData;
+    nodeConfiguration: UserNodeConfiguration;
+    taskContext: Context;
+    transaction: DbTransaction;
+  }) => {
+    const { jobData, nodeConfiguration, taskContext, transaction } = params;
+    const { instanceId, taskId } = jobData;
+
+    const taskExecution = await taskExecutionService.create(
+      instanceId,
+      taskId,
+      taskContext,
+      transaction,
+    );
+
+    const assignee = nodeConfiguration.assignee
+      ? contextUtils.getFeelEvaluatedValue(
+          nodeConfiguration.assignee,
+          await contextUtils.evaluateContext(taskContext),
+          FeelDataType.STRING,
+        )
+      : null;
+    const title = nodeConfiguration.title ?? null;
+
+    const userTaskExecution = await userTaskExecutionRepository.insert(
+      {
+        task_execution_id: taskExecution.id,
+        assignee,
+        title,
+      },
+      transaction,
+    );
+
+    return { taskExecution, userTaskExecution };
   },
 };

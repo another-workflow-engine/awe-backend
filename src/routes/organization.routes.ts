@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { organizationController } from "../controllers/organization.controller.js";
 import { authenticateRequest } from "../middlewares/auth.middleware.js";
-import { environmentUtils } from "../utils/environment.utils.js";
 import { allowActorTypes } from "../middlewares/requireRoles.middleware.js";
 import { ActorTypes } from "../types/enums.js";
 
@@ -12,17 +11,11 @@ organizationRouter.post(
   organizationController.register,
 );
 
-organizationRouter.get("/dashboard", authenticateRequest, async (req, res) => {
-  const selectedTypes = environmentUtils.parseEnvironmentsFromQueryString(
-    req.query.environment,
-  );
-  if (selectedTypes.length > 0) {
-    req.context.environments = req.context.environments.filter((env) =>
-      selectedTypes.includes(env.type),
-    );
-  }
-  return organizationController.dashboard(req, res);
-});
+organizationRouter.get(
+  "/dashboard",
+  authenticateRequest,
+  organizationController.dashboard,
+);
 
 organizationRouter.get(
   "/me",

@@ -6,6 +6,7 @@ import {
   TimeUnit,
   Runtime,
   ScriptExecutionService,
+  FieldUiType,
 } from "../types/enums.js";
 import { HttpMethodSchema } from "../types/http.js";
 
@@ -94,16 +95,7 @@ export const UserNodeConfigurationSchema = z.object({
         required: z.boolean().default(true),
         defaultValue: z.unknown().optional(),
 
-        uiType: z
-          .enum([
-            "text",
-            "textarea",
-            "number",
-            "dropdown",
-            "checkbox",
-            "date-picker",
-          ])
-          .optional(),
+        uiType: z.enum(FieldUiType).optional(),
 
         options: z
           .array(

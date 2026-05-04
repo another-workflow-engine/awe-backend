@@ -1,13 +1,8 @@
 import type { Insertable, Updateable } from "kysely";
-import type {
-  InstanceStatus,
-  NodeType,
-  Task,
-  TaskExecution,
-  TaskStatus,
-} from "./database.js";
+import type { NodeType, Task, TaskExecution, TaskStatus } from "./database.js";
 import type { Context } from "./engine.js";
 import type { NodeConfiguration } from "./workflow.js";
+import type { FeelDataType, FieldUiType } from "./enums.js";
 
 export type NewTask = Insertable<Task>;
 export type UpdateTask = Updateable<Task>;
@@ -46,20 +41,38 @@ export type TaskDetail = {
   executions: TaskDetailExecution[];
 };
 
-export type TaskRetryDetail = {
+export type PendingUserTaskListItem = {
   id: string;
-  executionId: string | null;
-  status: TaskStatus;
-  inputVariables: Context;
+  title: string | null;
+  assignee: string | null;
   createdAt: Date;
+  instanceId: string;
+  taskId: string;
+  workflowVersionId: string;
+  nodeId: string;
+};
 
-  instance: {
-    id: string;
-    status: InstanceStatus;
-  };
+export type UserTaskResponseData = {
+  fieldId: string;
+  label: string;
+  dataType: FeelDataType;
+  required: boolean;
+  defaultValue: unknown | undefined;
+  uiType: FieldUiType | undefined;
+  options: { label: string | undefined; value: unknown }[] | undefined;
+};
 
-  node: {
-    id: string;
-    type: NodeType;
-  };
+export type UserTaskDetail = {
+  id: string;
+  title: string | null;
+  assignee: string | null;
+  startedAt: Date;
+  endedAt: Date | null;
+  status: TaskStatus;
+  requestData: Record<string, unknown>;
+  responseData: UserTaskResponseData[];
+  instanceId: string;
+  taskId: string;
+  workflowVersionId: string;
+  nodeId: string;
 };

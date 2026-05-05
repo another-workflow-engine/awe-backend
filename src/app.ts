@@ -5,7 +5,10 @@ import Config from "./config.js";
 import { responseFormatter } from "./middlewares/responseFormatter.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { NotFoundError } from "./errors/NotFoundError.js";
-import { requestLogFormatter, requestLoggerMiddleware } from "./middlewares/requestLogger.middleware.js";
+import {
+  requestLogFormatter,
+  requestLoggerMiddleware,
+} from "./middlewares/requestLogger.middleware.js";
 
 const app = express();
 

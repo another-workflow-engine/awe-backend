@@ -16,6 +16,7 @@ import { getLogger } from "../logger.js";
 import { statusUtils } from "./status.utils.js";
 import { taskCompletionHandler } from "./taskCompletion.handler.js";
 import { openTransaction } from "./database.utils.js";
+import { taskExecutionService } from "../services/taskExecution.service.js";
 
 async function dispatchNextNode(params: {
   instance: InstanceModel;
@@ -155,6 +156,46 @@ export const engineUtils = {
     );
   },
 
+  onExecutionFailure: async (params: {
+    instanceId: string;
+    taskId: string;
+    message: string;
+    error: unknown;
+    executionResult: ExecutorResult;
+  }) => {
+    const { instanceId, taskId, message, error, executionResult } = params;
+
+    await openTransaction(async (transaction) => {
+      await taskExecutionService.fail(
+        instanceId,
+        executionResult.executionId,
+        {
+          message: executionResult.errorMessage ?? "Unkown error",
+          error: executionResult.error,
+        },
+        transaction,
+      );
+
+      await taskService.fail(
+        instanceId,
+        taskId,
+        { message, error },
+        transaction,
+      );
+
+      await instanceService.fail(
+        instanceId,
+        { message: "Task failed" },
+        transaction,
+      );
+    });
+
+    getLogger().error(
+      { error, taskId, instanceId },
+      `[Task failed] ${message}`,
+    );
+  },
+
   completeTask: async (params: {
     jobData: QueueJobData;
     executionResult: ExecutorResult;
@@ -207,11 +248,12 @@ export const engineUtils = {
         );
       });
     }).catch(async (error) => {
-      await engineUtils.onTaskFailure({
+      await engineUtils.onExecutionFailure({
         instanceId: jobData.instanceId,
         taskId: jobData.taskId,
         message: "Failed to update instance",
         error,
+        executionResult,
       });
     });
   },

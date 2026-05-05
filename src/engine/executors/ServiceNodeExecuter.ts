@@ -71,12 +71,18 @@ export class ServiceNodeExecutor extends Executor<typeof NodeTypes.SERVICE> {
       );
       this.setByJsonPath(requestBody, dataMap.jsonPath, value);
     }
+    let response;
 
-    const response = await httpService.request(this.configuration.method, url, {
-      headers,
-      ...(this.configuration.body !== undefined ? { body: requestBody } : {}),
-      ...(signal ? { signal } : {}),
-    });
+    try {
+      response = await httpService.request(this.configuration.method, url, {
+        headers,
+        ...(this.configuration.body !== undefined ? { body: requestBody } : {}),
+        ...(signal ? { signal } : {}),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return this.getFailedResult(message);
+    }
 
     for (const dataMap of this.configuration.responseMap ?? []) {
       const value = contextUtils.getByJsonPath(response.data, dataMap.jsonPath);

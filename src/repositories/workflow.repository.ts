@@ -136,7 +136,7 @@ export const workflowRepository = {
     if (environmentIds.length === 0) {
       return;
     }
-    
+
     return await db
       .updateTable("workflow")
       .set(data)
@@ -248,7 +248,7 @@ export const workflowRepository = {
           modifiedBy: res.actor_type,
 
           latestVersion:
-            id && version && status ? { id, version, status } : null,
+            id && status ? { id, version, status } : null,
         };
       }),
     };

@@ -10,4 +10,10 @@ secretProviderRouter.use(authenticateRequest);
 secretProviderRouter.use(allowActorTypes(ActorTypes.ORGANIZATION_ACCOUNT));
 
 secretProviderRouter.get("/", secretProviderController.list);
+
 secretProviderRouter.post("/", secretProviderController.create);
+
+secretProviderRouter.get(
+  "/:providerId/secrets",
+  secretProviderController.listSecrets,
+);

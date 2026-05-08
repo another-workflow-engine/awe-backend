@@ -3,24 +3,21 @@ import type {
   SecretProviderModel,
 } from "../../types/models.js";
 import {
-  ProviderConfigurationSchemaMap,
   type ProviderDetail,
   type SecretProvider,
 } from "../../types/secrets.js";
 import { secretProviderRepository } from "../../repositories/secretProvider.repository.js";
 import { InvalidOperationError } from "../../errors/InvalidOperationError.js";
 import { converterUtils } from "../../utils/converter.utils.js";
-import { providerClassMap } from "./providers/providerMap.js";
+import { NotFoundError } from "../../errors/NotFoundError.js";
+import { getProvider, getProviderConfiguration } from "./providers/utils.js";
 
 function toProviderDetail(provider: SecretProviderModel): ProviderDetail {
   return {
     id: provider.id,
     label: provider.label,
     type: provider.type,
-    configuration: converterUtils.parseOrThrow(
-      ProviderConfigurationSchemaMap[provider.type],
-      provider.configuration,
-    ),
+    configuration: getProviderConfiguration(provider),
     modifiedAt: provider.modified_on,
   };
 }
@@ -37,18 +34,16 @@ export const secretProviderService = {
     data: SecretProvider,
     organization: OrganizationModel,
   ): Promise<ProviderDetail> => {
-    const ProviderClass = providerClassMap[data.type];
-    if (!ProviderClass) {
-      throw new InvalidOperationError(
-        `Secret provider type '${data.type}' is not implemented`,
-      );
-    }
-
-    const provider = new ProviderClass({
-      configuration: data.configuration,
+    const provider = getProvider({
       label: data.label,
-      organization_id: organization.id,
       type: data.type,
+      configuration: converterUtils.objectToJsonValue(data.configuration),
+
+      organization_id: organization.id,
+
+      id: "",
+      created_on: new Date(),
+      modified_on: new Date(),
     });
 
     const result = await provider.testConnection();
@@ -66,5 +61,19 @@ export const secretProviderService = {
     });
 
     return toProviderDetail(secretProvider);
+  },
+
+  listSecretKeys: async (
+    providerId: string,
+    organization: OrganizationModel,
+  ): Promise<string[]> => {
+    const provider = await secretProviderRepository.findById(providerId);
+
+    if (!provider || provider.organization_id !== organization.id) {
+      throw new NotFoundError("Secret Provider");
+    }
+
+    const providerInstance = getProvider(provider);
+    return await providerInstance.listAllSecretKeys();
   },
 };

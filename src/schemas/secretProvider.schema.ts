@@ -20,3 +20,7 @@ export const SecretProviderSchema = z
       label: z.string(),
     }),
   );
+
+export const SecretProviderIdParamsSchema = z.object({
+  providerId: z.uuidv4(),
+});

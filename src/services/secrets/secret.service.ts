@@ -1,19 +1,14 @@
-import type z from "zod";
 import { secretReferenceRepository } from "../../repositories/secretReference.repository.js";
 import { EngineError } from "../../errors/EngineError.js";
-import { providerClassMap } from "./providers/providerMap.js";
 import { secretProviderRepository } from "../../repositories/secretProvider.repository.js";
 import { NotFoundError } from "../../errors/NotFoundError.js";
 import { InvalidOperationError } from "../../errors/InvalidOperationError.js";
-import { ActorSchema } from "../../schemas/actor.schema.js";
 import type { EnvironmentType } from "../../types/database.js";
 import type {
   EnvironmentModel,
-  OrganizationModel,
   SecretProviderModel,
   SecretReferenceModel,
 } from "../../types/models.js";
-import type { RequestContext } from "../../types/auth.js";
 import type {
   CreateNewSecretInput,
   ListSecretInput,
@@ -21,19 +16,7 @@ import type {
 import type { SecretDetail } from "../../types/secrets.js";
 import { environmentUtils } from "../../utils/environment.utils.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
-
-function getProviderClass(providerType: string) {
-  const ProviderClass =
-    providerClassMap[providerType as keyof typeof providerClassMap];
-
-  if (!ProviderClass) {
-    throw new EngineError(
-      `Secret provider type '${providerType}' is not currently implemented`,
-    );
-  }
-
-  return ProviderClass;
-}
+import { getProvider } from "./providers/utils.js";
 
 function normalizeSecretValue(value: unknown, secretId: string): string {
   if (typeof value === "string") {
@@ -106,9 +89,8 @@ export const secretService = {
       throw new NotFoundError("Secret provider");
     }
 
-    const ProviderClass = getProviderClass(providerModel.type);
-    const providerInstance = new ProviderClass(providerModel);
-    const result = await providerInstance.testSecretExists(data.key);
+    const provider = getProvider(providerModel);
+    const result = await provider.testSecretExists(data.key);
 
     if (!result.success) {
       const message = result.error ? result.error.message : "Unkown error";
@@ -183,8 +165,7 @@ export const secretService = {
     const secrets: Record<string, string> = {};
 
     for (const [provider, references] of referenceMap) {
-      const ProviderClass = getProviderClass(provider.type);
-      const providerInstance = new ProviderClass(provider);
+      const providerInstance = getProvider(provider);
 
       const keys = references.map((r) => r.secret_key);
       const valueMap = await providerInstance.fetchSecrets(keys);

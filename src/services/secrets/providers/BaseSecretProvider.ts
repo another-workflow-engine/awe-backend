@@ -1,12 +1,11 @@
 import type z from "zod";
 import type { SecretProviderType } from "../../../types/database.js";
-import type { SecretProviderModel } from "../../../types/models.js";
 import {
   ProviderConfigurationSchemaMap,
-  type NewSecretProvider,
   type SecretProviderConfiguration,
 } from "../../../types/secrets.js";
 import { converterUtils } from "../../../utils/converter.utils.js";
+import type { SecretProviderModel } from "../../../types/models.js";
 
 export type ProviderTestResult = {
   success: boolean;
@@ -18,7 +17,7 @@ export abstract class BaseSecretProvider<
 > {
   protected configuration: SecretProviderConfiguration<T>;
 
-  constructor(secretProvider: NewSecretProvider) {
+  constructor(secretProvider: SecretProviderModel) {
     const configurationObject = converterUtils.jsonValueToObject(
       secretProvider.configuration ?? {},
     );
@@ -32,5 +31,5 @@ export abstract class BaseSecretProvider<
   abstract testConnection(): Promise<ProviderTestResult>;
   abstract testSecretExists(secretKey: string): Promise<ProviderTestResult>;
   abstract fetchSecrets(secretKeys: string[]): Promise<Record<string, string>>;
-  abstract listAllSecrets(): Promise<string[]>;
+  abstract listAllSecretKeys(): Promise<string[]>;
 }

@@ -71,7 +71,7 @@ export class InfisicalSecretProvider extends BaseSecretProvider<
     );
   }
 
-  async listAllSecrets(): Promise<string[]> {
+  async listAllSecretKeys(): Promise<string[]> {
     const client = await this.login();
 
     const response = await client.secrets().listSecrets({

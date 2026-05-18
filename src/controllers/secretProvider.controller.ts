@@ -4,6 +4,8 @@ import {
   SecretProviderSchema,
 } from "../schemas/secretProvider.schema.js";
 import { secretProviderService } from "../services/secrets/secretProvider.service.js";
+import { secretService } from "../services/secrets/secret.service.js";
+import type { SecretReferenceModel } from "../types/models.js";
 
 export const secretProviderController = {
   list: async (req: Request, res: Response) => {
@@ -23,14 +25,23 @@ export const secretProviderController = {
     return res.status(201).json(secretProvider);
   },
 
-  listSecrets: async (req: Request, res: Response) => {
+  listSecrets: async (req: Request, res: Response) =>  {
     const { providerId } = SecretProviderIdParamsSchema.parse(req.params);
 
-    const secrets = await secretProviderService.listSecretKeys(
-      providerId,
-      req.context.organization,
-    );
 
-    return res.status(200).json({ secrets });
+    const [existingKeys, secrets] = await Promise.all([
+      secretService.getSecretKeysByProviderId(providerId),
+      secretProviderService.listSecretKeys(
+        providerId,
+        req.context.organization
+      )
+    ]);
+
+    const result = secrets.map((secret) => ({
+      secret,
+      referenceId: existingKeys.find((existing) => existing.secret_key === secret)?.id || null,
+    }));
+
+    return res.status(200).json({ secrets: result });
   },
 };

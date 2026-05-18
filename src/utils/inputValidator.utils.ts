@@ -33,16 +33,6 @@ export function validateDataType(
   expectedType: FeelDataType,
   fieldName: string,
 ): InputValidationResult {
-  if (expectedType === FeelDataType.NULL) {
-    if (value === null || value === undefined) {
-      return { valid: true, value: null };
-    }
-    return {
-      valid: false,
-      error: `Field '${fieldName}' must be null`,
-    };
-  }
-
   if (value === null || value === undefined) {
     return { valid: true, value };
   }

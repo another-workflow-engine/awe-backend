@@ -87,7 +87,6 @@ export enum FeelDataType {
   DATETIME = "date-time",
   LIST = "list",
   OBJECT = "object",
-  NULL = "null",
 }
 
 export enum TimeUnit {

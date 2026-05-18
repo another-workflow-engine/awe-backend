@@ -121,6 +121,7 @@ export const secretService = {
 
     const items = await secretReferenceRepository.findByEnvironmentIds(
       selectedEnvironmentIds,
+      data.providerId
     );
 
     return items.map(({ secretReference, secretProvider }) => {
@@ -182,5 +183,13 @@ export const secretService = {
     }
 
     return secrets;
+  },
+
+  getSecretKeysByProviderId: async (providerId: string): Promise<Omit<SecretReferenceModel, "provider_id" | "environment_id" | "created_on">[]> => {
+    const provider = await secretProviderRepository.findById(providerId);
+    if (!provider) {
+      throw new NotFoundError("Secret provider");
+    }
+    return await secretReferenceRepository.findKeysByProviderId(providerId);
   },
 };

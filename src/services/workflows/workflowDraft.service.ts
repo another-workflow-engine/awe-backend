@@ -238,12 +238,14 @@ export const workflowDraftService = {
       startVariables,
       ...(data.include === "definition"
         ? {
-            nodes: nodeModels.map((node) =>
-              nodeSchemaService.getNodeSchema(node),
-            ),
-            edges: edgeModels.map((edge) =>
-              edgeService.toEdgeSchema(edge, nodeModels),
-            ),
+            definition: {
+              nodes: nodeModels.map((node) =>
+                nodeSchemaService.getNodeSchema(node),
+              ),
+              edges: edgeModels.map((edge) =>
+                edgeService.toEdgeSchema(edge, nodeModels),
+              ),
+            },
           }
         : {}),
     };

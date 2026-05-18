@@ -27,6 +27,15 @@ export const secretReferenceRepository = {
       .executeTakeFirst();
   },
 
+  findKeysByProviderId: async (providerId: string): Promise<Omit<SecretReferenceModel, "provider_id" | "environment_id" | "created_on">[]> => {
+    const results = await db
+      .selectFrom("secret_reference")
+      .select(["id", "secret_key"])
+      .where("provider_id", "=", providerId)
+      .execute();
+    return results;
+  },
+
   findByIdsWithProviders: async (
     ids: string[],
   ): Promise<Map<SecretProviderModel, SecretReferenceModel[]>> => {
@@ -96,12 +105,12 @@ export const secretReferenceRepository = {
     }
   },
 
-  findByEnvironmentIds: async (environmentIds: string[]) => {
+  findByEnvironmentIds: async (environmentIds: string[], providerId?: string) => {
     if (environmentIds.length === 0) {
       return [];
     }
 
-    const results = await db
+    let query = db
       .selectFrom("secret_reference")
       .innerJoin(
         "secret_provider",
@@ -121,7 +130,13 @@ export const secretReferenceRepository = {
         ),
       ])
       .where("secret_reference.environment_id", "in", environmentIds)
-      .execute();
+    
+    if (providerId) {
+      query = query.where("secret_reference.provider_id", "=", providerId);
+    }
+
+    const results = await query.execute();
+    
 
     return results.map((res) => {
       return {

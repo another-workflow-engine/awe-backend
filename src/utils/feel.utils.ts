@@ -146,7 +146,6 @@ export type FeelDataTypeMap = {
   [FeelDataType.DATETIME]: string;
   [FeelDataType.LIST]: unknown[];
   [FeelDataType.OBJECT]: Record<string, unknown>;
-  [FeelDataType.NULL]: null;
 };
 
 export function isValidFeelType(value: unknown, type: FeelDataType): boolean {
@@ -176,8 +175,5 @@ export function isValidFeelType(value: unknown, type: FeelDataType): boolean {
       return (
         typeof value === "object" && value !== null && !Array.isArray(value)
       );
-
-    case FeelDataType.NULL:
-      return value === null || value === undefined;
   }
 }

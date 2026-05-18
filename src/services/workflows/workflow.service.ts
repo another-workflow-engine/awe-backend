@@ -146,7 +146,7 @@ export const workflowService = {
       deleted_by: actor.id,
     };
 
-    openTransaction(async (transaction) => {
+    await openTransaction(async (transaction) => {
       const [updatedWorkflow] = await Promise.all([
         workflowRepository.updateByIdAndOrganizationId(
           workflowId,

@@ -470,6 +470,7 @@ export const workflowDraftService = {
 
       description: updatedDraft.description,
       status: updatedDraft.status,
+      version: updatedDraft.version,
 
       modifiedAt: updatedDraft.modified_on,
       modifiedBy: actor.type,
@@ -523,7 +524,7 @@ export const workflowDraftService = {
       throw new NotFoundError("Workflow Draft");
     }
 
-    openTransaction(async (transaction) => {
+    await openTransaction(async (transaction) => {
       const nodeModels = await nodeService.getByWorkflowVersionId(
         draftMeta.id,
         transaction,

@@ -36,7 +36,10 @@ export const workflowDraftController = {
   },
 
   get: async (req: Request, res: Response) => {
-    const data = DraftDetailRequestSchema.parse(req.params);
+    const data = DraftDetailRequestSchema.parse({
+      ...req.params,
+      ...req.query,
+    });
 
     const result = await workflowDraftService.getDetail(
       data,
@@ -81,7 +84,7 @@ export const workflowDraftController = {
       req.context.organization,
     );
 
-    res.status(204);
+    return res.status(204).end();
   },
 
   publish: async (req: Request, res: Response) => {
